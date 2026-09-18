@@ -30,11 +30,67 @@ WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
 
-from src.db import init_db, upsert_post, get_existing_post_identifiers
+from src.db import init_db, upsert_post, get_existing_post_identifiers, update_post_status
 from src.experience_extractor import extract_experience
+from src.chatgpt_service import clean_and_truncate_reason
 
 INFOPARK_JOBS_URL = "https://infopark.in/companies-job"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+# ---------------------------------------------------------------------------
+# Pre-screen Rules — Role-title keyword patterns for known-irrelevant roles.
+# Checked at scrape time so ChatGPT never processes these.
+# Each entry: (reason_label, [list of keyword patterns])
+# A match on ANY keyword in a rule causes immediate REJECTED status.
+# ---------------------------------------------------------------------------
+PRE_SCREEN_RULES = [
+    ("Marketing role",     ["digital marketing", "performance marketing", "growth marketing",
+                             "marketing executive", "marketing specialist", "marketing manager",
+                             "marketing team lead", "marketing apprenticeship", "marketing intern",
+                             "affiliate marketing", "brand", "content marketing"]),
+    ("SEO role",           ["seo executive", "seo analyst", "seo specialist", "seo manager",
+                             "seo lead", "ai search", "agentic growth", "search engine optimization"]),
+    ("Sales / BD role",    ["business development", "sales development", "inside sales",
+                             "it sales", "sales executive", "sales specialist", "sales manager",
+                             "sales intern", "telecaller", "growth and sales", "sdr"]),
+    ("HR role",            ["hr executive", "hr recruiter", "hr intern", "human resource",
+                             "talent acquisition", "recruitment", "recruiter"]),
+    ("QA / Testing role",  ["qa engineer", "qa lead", "qa automation", "quality assurance",
+                             "qa trainee", "qa intern", "etl tester", "software qa",
+                             "quality control", "qa qc"]),
+    ("Design role",        ["digital designer", "visual designer", "ux writer", "ui designer",
+                             "graphic designer", "product designer"]),
+    ("Content / Writing",  ["content writer", "content writing", "content specialist",
+                             "copywriter", "technical writer", "ux writer"]),
+    ("Finance / Accounts", ["accountant", "accounting", "finance", "sage50", "procurement",
+                             "purchase executive"]),
+    ("Legal role",         ["legal content", "llb", "paralegal", "lawyer"]),
+    ("Non-IT / Ops",       ["hvac", "mechanical engineer", "civil engineer", "gps technician",
+                             "reliability monitoring", "floor manager", "registered nurse",
+                             "nurse", "medical", "healthcare", "nursing"]),
+    ("Support / Helpdesk", ["service desk", "it service desk", "helpdesk", "support engineer",
+                             "customer support"]),
+    ("Odoo / SAP specialist", ["odoo", "sap plm", "sap pdm", "sap consultant",
+                               "dynamics 365", "ms dynamics"]),
+    ("WordPress specialist", ["wordpress developer", "wordpress specialist"]),
+    ("Training / Course ad", ["it freshers", "digital marketing / it freshers",
+                               "shopify & hubspot", "technomaster", "training institute"]),
+]
+
+
+def pre_screen_role(title: str, full_jd: str = "") -> Optional[str]:
+    """
+    Check if a job title matches known-irrelevant role categories.
+    Returns a concise rejection reason string if irrelevant, or None if OK to process.
+    Matching is case-insensitive on the job title.
+    """
+    title_lower = title.lower().strip()
+    for reason, keywords in PRE_SCREEN_RULES:
+        for kw in keywords:
+            if kw in title_lower:
+                return clean_and_truncate_reason(reason)
+    return None
+
 
 # Create SSL context that allows connecting even with self-signed certificate chains
 SSL_CONTEXT = ssl.create_default_context()
@@ -316,7 +372,24 @@ def scrape_infopark_jobs(
                 "category": category,
             }
 
-            # 5. Persist to PostgreSQL
+            # 5. Pre-screen by role title before ChatGPT (saves API/browser time)
+            prescreened_reason = pre_screen_role(title, full_jd)
+            if prescreened_reason:
+                # Save as REJECTED immediately — skip ChatGPT entirely
+                post_record["category"] = category  # keep category for ref
+                try:
+                    post_id, inserted = upsert_post(post_record, skip_if_exists=True)
+                    if post_id:
+                        update_post_status(post_id, "REJECTED", rejection_reason=prescreened_reason)
+                        existing_identifiers.add(clean_url)
+                        existing_identifiers.add(detail_url)
+                        existing_identifiers.add(sig)
+                    print(f"  🚫 [Pre-Screened / Rejected] {company} | {title} | ❌ {prescreened_reason}")
+                except Exception as db_err:
+                    print(f"  (Warning: DB save error during pre-screen: {db_err})")
+                continue
+
+            # 6. Persist to PostgreSQL (suitable role — queued for ChatGPT)
             try:
                 post_id, inserted = upsert_post(post_record, skip_if_exists=True)
                 if inserted:
