@@ -1,0 +1,8 @@
+{
+  "resume_path": "resumes/sample_resume.pdf",
+  "search_query": "Full stack developer",
+  "headless": false,
+  "chatgpt_url": "https://chatgpt.com/g/g-p-example/c/example-chat-id",
+  "pacing_min_seconds": 6,
+  "pacing_max_seconds": 12
+}

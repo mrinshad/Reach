@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Local configuration and personal documents
+config.json
+resumes/*.pdf
+!resumes/.gitkeep
+
+# Temporary media, scratch files, and logs
+scratch/
+.tempmediaStorage/
+*.log
+
+# Browser user data & profiles
+firefox_profile/
+.cache/
+
+# OS metadata
+.DS_Store
+Thumbs.db
