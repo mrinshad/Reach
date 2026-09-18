@@ -22,6 +22,7 @@ from src.db import (
     get_posts_paginated,
     get_post_by_id,
     get_stats,
+    get_analytics_summary,
     update_post_status,
     update_post_email,
     mark_post_sent,
@@ -186,6 +187,17 @@ def api_get_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analytics")
+def api_get_analytics(days: Optional[int] = Query(30, ge=0, le=365)):
+    """Return aggregated analytics for dashboard charts (applied trend, scraping inflow, status breakdown, etc.)."""
+    try:
+        data = get_analytics_summary(days=days)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/api/posts")

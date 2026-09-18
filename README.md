@@ -44,6 +44,19 @@
   - `🗑️ Spam / Duplicate`
 - Stored permanently in `posts.rejection_reason` and viewable across the application.
 
+### 6. 💎 Zero Token Wastage & Pure Crawling (No Third-Party APIs)
+- **100% Free & Unlimited**: Zero OpenAI or Anthropic API token billing, zero proxy network bills, and zero third-party scraping subscriptions.
+- **Pure Browser Crawling**: Uses headed/headless Playwright Firefox for direct, high-fidelity crawling on LinkedIn, Infopark, and other job portals.
+- **Automated Web ChatGPT**: Directly orchestrates your existing logged-in ChatGPT conversation or Custom GPT in the browser. You get state-of-the-art AI generation with custom conversational memory without paying a cent in API tokens.
+
+### 7. 📊 Real-Time Analytics & Trends Dashboard
+- **Jobs Applied Each Day**: Smooth interactive line graph tracking daily application velocity over time.
+- **Scraping Inflow Activity**: Daily volume comparisons of newly discovered leads.
+- **Application Status Distribution**: Donut charts detailing conversion stages (`Applied / Sent`, `Drafts Ready`, `Discovered`, `Screened Out`).
+- **Scraping Sources Breakdown**: Relative performance of LinkedIn vs Infopark vs Manual entry.
+- **Cancellation & Spam Analysis**: Visual frequency ranking of rejection reasons (unsuitable criteria, scams, irrelevant tech stack).
+- **Timeframe Filtering**: Instantly toggle between `7 Days`, `14 Days`, `30 Days`, and `All Time` with database-first aggregation.
+
 ---
 
 ## 🏗️ Architecture
@@ -135,6 +148,107 @@ On first launch, Reach automatically creates both the `posts` and `settings` tab
 
 ---
 
+## 🔐 Session Authentication & ChatGPT Setup Guide
+
+Reach operates through **pure browser session automation** without requiring paid third-party APIs or exposing personal tokens. Follow these two quick one-time setup steps:
+
+### Step 1: One-Time Browser Authentication (LinkedIn & Gmail)
+
+Reach stores persistent session cookies locally in your private Firefox profile at `~/.playwright_firefox_profile`. Log into your LinkedIn and Gmail accounts once:
+
+```bash
+# Launch headed Firefox to log into LinkedIn & Gmail
+python3 -c "
+from playwright.sync_api import sync_playwright
+import os
+
+profile_dir = os.path.expanduser('~/.playwright_firefox_profile')
+with sync_playwright() as p:
+    browser = p.firefox.launch_persistent_context(user_data_dir=profile_dir, headless=False)
+    page = browser.new_page()
+    page.goto('https://www.linkedin.com/login')
+    print('👉 Please log into LinkedIn and Gmail in the opened browser window.')
+    input('Press Enter in this terminal after you have logged in: ')
+    browser.close()
+    print('✓ Browser session saved successfully.')
+"
+```
+Once authenticated, your session cookies remain cached in your local profile, enabling autonomous crawling and Gmail draft preparation.
+
+---
+
+### Step 2: Set Up & Train Your ChatGPT Chat / Custom GPT
+
+To achieve high-quality cold email generation, automated suitability screening, and zero token costs, train a persistent ChatGPT conversation thread or Custom GPT.
+
+#### 1. Open ChatGPT
+Navigate to [chatgpt.com](https://chatgpt.com) and start a new chat (or create a Custom GPT).
+
+#### 2. Provide the General-Purpose Behavior Prompt
+Paste the following exact system instructions:
+
+```text
+Act as a job-application assistant. Whenever I send a job description or recruiter post, first determine whether it is relevant.
+
+🟢 Suitable job → Write a concise application email directly, tailored to the role. Never invent experience. Handle skill/experience gaps honestly without making them the focus.
+
+🟡 Unwanted role → If the role is in a category I’ve indicated I don’t want (e.g. QA, support, operations, etc.), don’t apply for that role. Instead, write a short email explaining that my background is better aligned with my preferred areas and ask whether they have relevant current/upcoming openings.
+
+🔴 Clearly unsuitable → Output exactly:
+UNSUITABLE_JD - ❌ Not suitable — {reason}
+
+Use this for hard eligibility/location/work-authorization restrictions, clearly excessive experience requirements, explicit eligibility restrictions, completely unrelated roles, or consultant/vendor hotlists that are marketing available consultants rather than actually hiring candidates.
+
+For consultant/hotlist posts, distinguish between an actual job opening and a recruiter/vendor looking for clients or referrals. Treat the latter as unsuitable.
+
+For international/US roles, never assume or invent work authorization, location, or eligibility. If the role has a possible remote/local alternative, mention that appropriately.
+
+Email style: concise, natural, professional, confident, and human. Avoid generic/AI-sounding or overly corporate language, desperation, excessive flattery, and unnecessary detail. Tailor the email to the JD and highlight genuinely relevant experience.
+
+Always include:
+To:
+Subject:
+Email body
+
+Regards,
+[Candidate name]
+[Phone]
+[Email]
+
+Use actual blank lines between paragraphs. By default, when a JD is provided, generate the email without asking what the user wants. Only generate a cover letter when explicitly requested.
+
+For unwanted but potentially relevant companies, redirect toward the candidate’s preferred job categories rather than simply rejecting the company. For example, ask about Frontend, Backend, Full Stack, DevOps, Cloud, Software Engineering, or other preferred technical roles.
+
+Do not add explanations outside the requested output unless the user asks for them.
+```
+
+#### 3. Provide Your Candidate Profile Details
+Directly alongside or following the prompt above, supply your personal profile using this structured checklist:
+
+```text
+Candidate knowledge to learn:
+
+- Professional background: current role, previous roles, total years of experience, and main areas of expertise.
+- Technical skills: strongest/current technologies, frameworks, databases, cloud/DevOps tools, and any technologies with only previous/basic experience.
+- Major projects: important projects, responsibilities, domains, and technologies actually used.
+- Preferred roles: the types of jobs the candidate wants to apply for.
+- Unwanted roles: roles the candidate does not want, such as QA, support, sales, etc.
+- Location & relocation: current country/city and whether they are willing to relocate.
+- Work authorization: visa/work authorization status, especially for international/US roles.
+- Employment preferences: remote, hybrid, onsite, full-time, contract, etc.
+- Career direction: what kind of work the candidate wants to move toward and what they want to avoid.
+- Application writing preferences: preferred tone, length, structure, and anything they specifically dislike in application emails.
+- Hard constraints: experience limits, location restrictions, salary expectations, notice period, education/eligibility requirements, or other conditions that can make a job unsuitable.
+```
+
+#### 4. Save the Conversation Link in Reach
+1. Copy the full browser URL of this ChatGPT conversation thread (e.g., `https://chatgpt.com/c/your-chat-id` or `https://chatgpt.com/g/g-your-custom-gpt`).
+2. In Reach, click the ⚙️ **Settings** icon in the navbar.
+3. Paste the URL into **ChatGPT Custom GPT Chat Link** and click **Save Settings**.
+4. The URL is saved permanently in your PostgreSQL `settings` table and used automatically for all batch email generation.
+
+---
+
 ## 🖥️ Running the Application
 
 Start the local server:
@@ -208,6 +322,7 @@ reach-job-automation/
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Live connectivity status for LinkedIn, ChatGPT, Gmail, Infopark, and PostgreSQL |
 | `GET` | `/api/stats` | Counters for Discovered, Pending, Drafts Ready, and Others |
+| `GET` | `/api/analytics` | Aggregated analytics & timeline metrics for dashboard graphs & KPIs |
 | `GET` | `/api/scrapers` | List of registered website scrapers (`linkedin`, `infopark`, etc.) |
 | `POST` | `/api/scrape` | Trigger scraper background task by source (`{"source": "linkedin"}`) |
 | `GET` | `/api/posts` | Paginated & filtered job posts (`status`, `gen_status`, `source`, `min_exp`, etc.) |

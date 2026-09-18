@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <!-- Clean Top Navigation Bar -->
@@ -125,6 +126,9 @@
       </button>
       <button class="tab-item" id="btnTabSent" onclick="switchTab('tabSent')">
         <span>Others<span class="tab-extra"> / History</span></span> <span class="badge-count" id="countSent">0</span>
+      </button>
+      <button class="tab-item" id="btnTabAnalytics" onclick="switchTab('tabAnalytics')">
+        <span>📊 Analytics<span class="tab-extra"> & Trends</span></span>
       </button>
     </div>
 
@@ -382,6 +386,164 @@
             <div class="page-buttons" id="sentPageButtons">
               <!-- Rendered dynamically -->
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: Analytics Dashboard -->
+    <div class="tab-panel hidden" id="tabAnalytics">
+      <!-- Analytics Header Toolbar -->
+      <div class="analytics-toolbar">
+        <div class="analytics-title-group">
+          <h2 class="analytics-title">Outreach & Scraping Analytics</h2>
+          <p class="analytics-subtitle">Real-time database intelligence, application velocity, and crawler metrics</p>
+        </div>
+
+        <div class="analytics-actions">
+          <div class="timeframe-pills" id="timeframePills">
+            <button class="pill" data-days="7" onclick="setAnalyticsTimeframe(7)">7 Days</button>
+            <button class="pill" data-days="14" onclick="setAnalyticsTimeframe(14)">14 Days</button>
+            <button class="pill active" data-days="30" onclick="setAnalyticsTimeframe(30)">30 Days</button>
+            <button class="pill" data-days="0" onclick="setAnalyticsTimeframe(0)">All Time</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadAnalytics(state.analyticsDays)" title="Refresh Analytics">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Top KPI Cards Grid -->
+      <div class="analytics-kpi-grid">
+        <div class="kpi-card glow-emerald">
+          <div class="kpi-header">
+            <span class="kpi-label">Jobs Applied (Outreach)</span>
+            <span class="kpi-icon">🚀</span>
+          </div>
+          <div class="kpi-value" id="kpiApplied">0</div>
+          <div class="kpi-footer">
+            <span class="kpi-badge badge-green" id="kpiConversionRate">0.0% conversion</span>
+            <span class="kpi-note">from scraped leads</span>
+          </div>
+        </div>
+
+        <div class="kpi-card glow-sky">
+          <div class="kpi-header">
+            <span class="kpi-label">Total JDs Scraped</span>
+            <span class="kpi-icon">🕸️</span>
+          </div>
+          <div class="kpi-value" id="kpiScraped">0</div>
+          <div class="kpi-footer">
+            <span class="kpi-badge badge-blue" id="kpiEmailRate">0.0% emails found</span>
+            <span class="kpi-note" id="kpiDirectEmails">0 outreach ready</span>
+          </div>
+        </div>
+
+        <div class="kpi-card glow-indigo">
+          <div class="kpi-header">
+            <span class="kpi-label">AI Drafts Generated</span>
+            <span class="kpi-icon">🤖</span>
+          </div>
+          <div class="kpi-value" id="kpiDrafted">0</div>
+          <div class="kpi-footer">
+            <span class="kpi-badge badge-purple" id="kpiDraftReady">0 ready to send</span>
+            <span class="kpi-note" id="kpiPendingGen">0 pending AI</span>
+          </div>
+        </div>
+
+        <div class="kpi-card glow-rose">
+          <div class="kpi-header">
+            <span class="kpi-label">Screened Out & Spam</span>
+            <span class="kpi-icon">🛡️</span>
+          </div>
+          <div class="kpi-value" id="kpiRejected">0</div>
+          <div class="kpi-footer">
+            <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 potential spam</span>
+            <span class="kpi-note">screened criteria</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Primary Charts Row (Line & Bar) -->
+      <div class="analytics-grid-two">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">📈 Jobs Applied Each Day</h3>
+              <p class="chart-subtitle">Direct cold email applications sent over time</p>
+            </div>
+            <span class="chart-badge" id="chartAppliedTotalBadge">0 Applications</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartDailyApplied"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">⚡ Scraping & Discovery Inflow</h3>
+              <p class="chart-subtitle">New job opportunities discovered per day</p>
+            </div>
+            <span class="chart-badge" id="chartScrapedTotalBadge">0 Discovered</span>
+          </div>
+          <div class="chart-container">
+            <canvas id="chartDailyScraped"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Secondary Charts Row (Donut Distributions & Sources) -->
+      <div class="analytics-grid-three">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">🎯 Application Status Breakdown</h3>
+              <p class="chart-subtitle">Current distribution across the funnel</p>
+            </div>
+          </div>
+          <div class="chart-container-donut">
+            <canvas id="chartStatusBreakdown"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">🌐 Scraping Sources</h3>
+              <p class="chart-subtitle">Performance by crawling origin</p>
+            </div>
+          </div>
+          <div class="chart-container-donut">
+            <canvas id="chartSourceBreakdown"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">🎓 Experience Demographics</h3>
+              <p class="chart-subtitle">Experience requirements of discovered jobs</p>
+            </div>
+          </div>
+          <div class="chart-container-donut">
+            <canvas id="chartExperienceBreakdown"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tertiary Section: Cancellation Reasons Breakdown -->
+      <div class="analytics-grid-single">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <h3 class="chart-title">🛑 Cancellation & Screening Reasons</h3>
+              <p class="chart-subtitle">Why jobs were marked unsuitable, scam, or cancelled</p>
+            </div>
+          </div>
+          <div class="chart-container-horizontal">
+            <canvas id="chartRejectionReasons"></canvas>
           </div>
         </div>
       </div>
