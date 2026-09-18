@@ -622,7 +622,8 @@ async function fetchDiscoveredPosts() {
     if (countDiscEl) countDiscEl.textContent = state.total;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL' && state.genStatusFilter !== 'PENDING') || state.categoryFilter !== 'EMAIL_OUTREACH';
+    // Clear Filters button: visible whenever any filter is not 'ALL'
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL';
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -881,18 +882,19 @@ function handleSearchKeyUp(e) {
 }
 
 function clearDiscoveredFilters() {
+  // Reset ALL filters to 'ALL' (show everything)
   state.expFilter = 'ALL';
   document.querySelectorAll('#expPills .pill').forEach((pill) => {
     pill.classList.toggle('active', pill.dataset.exp === 'ALL');
   });
 
-  state.categoryFilter = 'EMAIL_OUTREACH';
+  state.categoryFilter = 'ALL';
   const catSel = document.getElementById('selectCategory');
-  if (catSel) catSel.value = 'EMAIL_OUTREACH';
+  if (catSel) catSel.value = 'ALL';
 
-  state.genStatusFilter = 'PENDING';
+  state.genStatusFilter = 'ALL';
   const genSel = document.getElementById('selectGenStatus');
-  if (genSel) genSel.value = 'PENDING';
+  if (genSel) genSel.value = 'ALL';
 
   state.sourceFilter = 'ALL';
   const srcSel = document.getElementById('selectSource');
@@ -2427,10 +2429,16 @@ function renderRejectionReasonsChart(reasons) {
     state.charts.rejectionReasons.destroy();
   }
   const cleanReasons = (reasons && reasons.length > 0) ? reasons : [{ reason: 'No cancellations recorded', count: 0 }];
+
+  // Truncate Y-axis labels to max 30 chars for display; full text shown in tooltip
+  const truncLabel = (s) => s.length > 30 ? s.slice(0, 27).trimEnd() + '...' : s;
+  const fullLabels = cleanReasons.map(r => r.reason);
+  const displayLabels = fullLabels.map(truncLabel);
+
   state.charts.rejectionReasons = new Chart(canvas, {
     type: 'bar',
     data: {
-      labels: cleanReasons.map(r => r.reason),
+      labels: displayLabels,
       datasets: [{
         label: 'Screened / Cancelled Count',
         data: cleanReasons.map(r => r.count),
@@ -2442,6 +2450,14 @@ function renderRejectionReasonsChart(reasons) {
     options: {
       ...chartDefaultOptions,
       indexAxis: 'y',
+      plugins: {
+        ...((chartDefaultOptions.plugins) || {}),
+        tooltip: {
+          callbacks: {
+            title: (items) => fullLabels[items[0].dataIndex] || displayLabels[items[0].dataIndex],
+          }
+        }
+      },
       scales: {
         x: {
           beginAtZero: true,

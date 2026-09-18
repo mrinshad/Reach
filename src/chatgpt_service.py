@@ -90,29 +90,43 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
     return subject, body
 
 
+def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8) -> str:
+    """
+    Strip boilerplate prefixes and truncate to a concise label.
+    e.g. "Not suitable — This is an HR role requiring an MBA/MHRM..." -> "HR role requiring an MBA/MHRM..."
+    """
+    if not text:
+        return "Not suitable"
+    t = text.strip()
+    # Strip UNSUITABLE_JD / ❌ prefix
+    t = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", t, flags=re.IGNORECASE).strip()
+    # Strip "Not suitable — " / "Not suitable - " prefix variants
+    t = re.sub(r"^(?:Not suitable|Unsuitable(?:\s*JD)?)\s*[-—:]+\s*", "", t, flags=re.IGNORECASE).strip()
+    if not t:
+        return "Not suitable"
+
+    words = t.split()
+    if len(words) > max_words or len(t) > max_chars:
+        # Take up to max_words and also respect max_chars
+        truncated = " ".join(words[:max_words])
+        if len(truncated) > max_chars - 3:
+            truncated = truncated[: max_chars - 3].rstrip()
+            if " " in truncated:
+                truncated = truncated.rsplit(" ", 1)[0]
+        return truncated.rstrip(".,;:-—") + "..."
+    return t
+
+
 def extract_unsuitable_reason(raw_text: str) -> str:
     """
-    Extract clean reason string from an unsuitable JD response, e.g.:
-    "UNSUITABLE_JD - ❌ Not suitable — {reason}" -> "Not suitable — {reason}"
-    "❌ Not suitable — Female candidates only" -> "Not suitable — Female candidates only"
+    Extract clean, concise reason string from an unsuitable JD response, e.g.:
+    "UNSUITABLE_JD - ❌ Not suitable — {reason}" -> concise truncated reason
+    "❌ Not suitable — Female candidates only" -> "Female candidates only"
     """
     if not raw_text:
-        return "Not suitable (Unspecified reason)"
+        return "Not suitable"
     first_line = raw_text.strip().splitlines()[0].strip()
-
-    # Match "UNSUITABLE_JD - ❌ Not suitable — {reason}" or variants
-    match = re.search(
-        r"(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?Not suitable\s*[-—:]+\s*(.+)",
-        first_line,
-        re.IGNORECASE,
-    )
-    if match:
-        reason = match.group(1).strip()
-        return f"Not suitable — {reason}"
-
-    # Secondary check: If line has ❌ or starts with UNSUITABLE_JD
-    cleaned = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", first_line).strip()
-    return cleaned if cleaned else "Not suitable"
+    return clean_and_truncate_reason(first_line)
 
 
 

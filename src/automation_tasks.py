@@ -75,6 +75,10 @@ class TaskManager:
                 self.state["logs"] = self.state["logs"][-150:]
             print(entry)
 
+    def set_current_step(self, step: str):
+        with self._lock:
+            self.state["current_step"] = step
+
     def update_progress(self, completed: int, current_step: str = ""):
         with self._lock:
             self.state["completed_items"] = completed

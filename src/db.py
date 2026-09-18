@@ -651,11 +651,14 @@ def get_post_by_id(post_id: str, db_url: str = DEFAULT_DB_URL) -> Optional[Dict[
 def update_post_status(
     post_id: str,
     new_status: str,
-    rejection_reason: Optional[str] = None,
+    rejection_reason: Optional[str] = None,  # will be sanitized/truncated before saving
     db_url: str = DEFAULT_DB_URL
 ):
     """Update post workflow status with optional cancellation/rejection reason."""
     if rejection_reason is not None:
+        # Sanitize/truncate before saving so DB always has concise labels
+        from src.chatgpt_service import clean_and_truncate_reason
+        rejection_reason = clean_and_truncate_reason(rejection_reason)
         sql = "UPDATE posts SET status = %s, rejection_reason = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;"
         params = (new_status, rejection_reason, post_id)
     else:
@@ -970,7 +973,7 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
             """)
             source_breakdown = [dict(r) for r in cur.fetchall()]
 
-            # 6. Rejection / Spam Reasons Breakdown
+            # 6. Rejection / Spam Reasons Breakdown (no LIMIT — show all reasons)
             cur.execute("""
                 SELECT 
                     COALESCE(NULLIF(TRIM(rejection_reason), ''), 'Not Specified') AS reason,
@@ -978,8 +981,7 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                 FROM posts
                 WHERE status = 'REJECTED'
                 GROUP BY 1
-                ORDER BY count DESC
-                LIMIT 10;
+                ORDER BY count DESC;
             """)
             rejection_reasons = [dict(r) for r in cur.fetchall()]
 
