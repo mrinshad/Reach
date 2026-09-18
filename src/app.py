@@ -22,6 +22,7 @@ from src.db import (
     get_posts_paginated,
     get_post_by_id,
     get_stats,
+    get_analytics_summary,
     update_post_status,
     update_post_email,
     mark_post_sent,
@@ -36,6 +37,8 @@ from src.automation_tasks import (
     task_manager,
     run_chatgpt_batch,
     run_open_gmail_draft,
+    run_send_single_draft,
+    run_send_batch_drafts,
     run_infopark_scraper,
     run_linkedin_scraper,
     get_registered_scrapers,
@@ -59,6 +62,10 @@ class UpdateEmailPayload(BaseModel):
 
 
 class GenerateBatchPayload(BaseModel):
+    post_ids: List[str]
+
+
+class SendBatchPayload(BaseModel):
     post_ids: List[str]
 
 
@@ -186,6 +193,17 @@ def api_get_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/analytics")
+def api_get_analytics(days: Optional[int] = Query(30, ge=0, le=365)):
+    """Return aggregated analytics for dashboard charts (applied trend, scraping inflow, status breakdown, etc.)."""
+    try:
+        data = get_analytics_summary(days=days)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/api/posts")
@@ -351,6 +369,34 @@ def api_open_gmail(post_id: str):
     thread = threading.Thread(target=run_open_gmail_draft, args=(post_id,), daemon=True)
     thread.start()
     return {"success": True, "message": "Opening Gmail compose in headed Firefox..."}
+
+
+@app.post("/api/send-direct/{post_id}")
+def api_send_direct(post_id: str):
+    """Trigger direct email sending in Gmail without manual interaction."""
+    current_state = task_manager.get_state()
+    if current_state["status"] == "running":
+        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
+
+    thread = threading.Thread(target=run_send_single_draft, args=(post_id,), daemon=True)
+    thread.start()
+    return {"success": True, "message": "Directly sending application email via Gmail..."}
+
+
+@app.post("/api/send-batch")
+def api_send_batch(payload: SendBatchPayload):
+    """Trigger multi-draft batch email sending in Gmail directly."""
+    if not payload.post_ids:
+        raise HTTPException(status_code=400, detail="No post IDs provided for batch sending.")
+
+    current_state = task_manager.get_state()
+    if current_state["status"] == "running":
+        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
+
+    thread = threading.Thread(target=run_send_batch_drafts, args=(payload.post_ids,), daemon=True)
+    thread.start()
+    return {"success": True, "message": f"Started direct sending for {len(payload.post_ids)} applications."}
+
 
 
 @app.post("/api/scrape/infopark")

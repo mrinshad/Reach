@@ -3,7 +3,7 @@
  */
 
 const state = {
-  activeTab: 'tabDiscovered',
+  activeTab: 'tabAnalytics',
   expFilter: 'ALL',
   categoryFilter: 'EMAIL_OUTREACH',
   genStatusFilter: 'PENDING',
@@ -18,6 +18,7 @@ const state = {
   total: 0,
   posts: [],
   selectedIds: new Set(),
+  selectedDraftIds: new Set(),
   reviewPosts: [],
   activeReviewPost: null,
   sentPosts: [],
@@ -30,6 +31,9 @@ const state = {
   healthTimer: null,
   showLogs: false,
   awaitingSentPost: null,
+  analyticsDays: 30,
+  analyticsData: null,
+  charts: {},
 };
 
 // --- Custom Dialog System (Replaces Native Alert & Confirm) ---
@@ -299,6 +303,29 @@ function showAlert(title, message, options = {}) {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+  const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
+  const hashToTab = {
+    '#analytics': 'tabAnalytics',
+    '#discovered': 'tabDiscovered',
+    '#review': 'tabReview',
+    '#sent': 'tabSent',
+    '#others': 'tabSent',
+  };
+
+  let startTab = 'tabAnalytics';
+  const hash = (window.location.hash || '').toLowerCase();
+  if (hash && hashToTab[hash]) {
+    startTab = hashToTab[hash];
+  } else {
+    try {
+      const saved = localStorage.getItem('reach_active_tab');
+      if (saved && validTabs.includes(saved)) {
+        startTab = saved;
+      }
+    } catch (_) {}
+  }
+
+  switchTab(startTab);
   loadDashboardData();
   fetchHealth();
   fetchScrapers();
@@ -310,13 +337,36 @@ document.addEventListener('DOMContentLoaded', () => {
 function switchTab(tabId) {
   state.activeTab = tabId;
 
-  document.getElementById('btnTabDiscovered').classList.toggle('active', tabId === 'tabDiscovered');
-  document.getElementById('btnTabReview').classList.toggle('active', tabId === 'tabReview');
-  document.getElementById('btnTabSent').classList.toggle('active', tabId === 'tabSent');
+  try {
+    localStorage.setItem('reach_active_tab', tabId);
+    const tabToHash = {
+      tabAnalytics: '#analytics',
+      tabDiscovered: '#discovered',
+      tabReview: '#review',
+      tabSent: '#sent',
+    };
+    if (tabToHash[tabId] && window.location.hash !== tabToHash[tabId]) {
+      history.replaceState(null, '', tabToHash[tabId]);
+    }
+  } catch (_) {}
 
-  document.getElementById('tabDiscovered').classList.toggle('hidden', tabId !== 'tabDiscovered');
-  document.getElementById('tabReview').classList.toggle('hidden', tabId !== 'tabReview');
-  document.getElementById('tabSent').classList.toggle('hidden', tabId !== 'tabSent');
+  const btnDiscovered = document.getElementById('btnTabDiscovered');
+  if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
+  const btnReview = document.getElementById('btnTabReview');
+  if (btnReview) btnReview.classList.toggle('active', tabId === 'tabReview');
+  const btnSent = document.getElementById('btnTabSent');
+  if (btnSent) btnSent.classList.toggle('active', tabId === 'tabSent');
+  const btnAnalytics = document.getElementById('btnTabAnalytics');
+  if (btnAnalytics) btnAnalytics.classList.toggle('active', tabId === 'tabAnalytics');
+
+  const panelDiscovered = document.getElementById('tabDiscovered');
+  if (panelDiscovered) panelDiscovered.classList.toggle('hidden', tabId !== 'tabDiscovered');
+  const panelReview = document.getElementById('tabReview');
+  if (panelReview) panelReview.classList.toggle('hidden', tabId !== 'tabReview');
+  const panelSent = document.getElementById('tabSent');
+  if (panelSent) panelSent.classList.toggle('hidden', tabId !== 'tabSent');
+  const panelAnalytics = document.getElementById('tabAnalytics');
+  if (panelAnalytics) panelAnalytics.classList.toggle('hidden', tabId !== 'tabAnalytics');
 
   fetchStats();
 
@@ -326,6 +376,8 @@ function switchTab(tabId) {
     fetchReviewPosts();
   } else if (tabId === 'tabSent') {
     fetchSentPosts();
+  } else if (tabId === 'tabAnalytics') {
+    loadAnalytics(state.analyticsDays || 30);
   }
 }
 
@@ -387,6 +439,8 @@ async function loadDashboardData() {
     await fetchReviewPosts();
   } else if (state.activeTab === 'tabSent') {
     await fetchSentPosts();
+  } else if (state.activeTab === 'tabAnalytics') {
+    await loadAnalytics(state.analyticsDays || 30);
   }
 }
 
@@ -396,23 +450,49 @@ async function fetchStats() {
     if (!res.ok) return;
     const stats = await res.json();
 
-    const discoveredTotal = stats.discovered_total !== undefined ? stats.discovered_total : stats.total_posts || 0;
-    const pendingGen = stats.pending_generation || 0;
+    const discoveredTotal = stats.discovered_total !== undefined ? stats.discovered_total : (stats.total_posts || 0);
     const draftsReady = stats.emails_generated || 0;
-    const othersCount = stats.others_total !== undefined ? stats.others_total : ((stats.applications_sent || 0) + (stats.rejected_total || 0));
-
-    document.getElementById('statDiscovered').textContent = discoveredTotal;
-    document.getElementById('statPending').textContent = pendingGen;
-    document.getElementById('statGenerated').textContent = draftsReady;
-    document.getElementById('statSent').textContent = othersCount;
-
-    document.getElementById('countDiscovered').textContent = discoveredTotal;
-    document.getElementById('countReview').textContent = draftsReady;
-    document.getElementById('countSent').textContent = othersCount;
-
     const sentCount = stats.applications_sent || 0;
-    const cancelledCount = stats.rejected_total || 0;
+    const outreachReady = stats.email_outreach_total || 0;
+    const totalSourced = stats.total_posts || 0;
+    const othersCount = stats.others_total !== undefined ? stats.others_total : (sentCount + (stats.rejected_total || 0));
 
+    // Top Metrics Summary Bar
+    const elApplied = document.getElementById('statApplied');
+    if (elApplied) elApplied.textContent = sentCount;
+
+    const elGenerated = document.getElementById('statGenerated');
+    if (elGenerated) elGenerated.textContent = draftsReady;
+
+    const elOutreach = document.getElementById('statOutreach');
+    if (elOutreach) elOutreach.textContent = outreachReady;
+
+    const elTotalSourced = document.getElementById('statTotalSourced');
+    if (elTotalSourced) elTotalSourced.textContent = totalSourced;
+
+    // Backward compatibility for legacy elements if present
+    const elDiscovered = document.getElementById('statDiscovered');
+    if (elDiscovered) elDiscovered.textContent = discoveredTotal;
+    const elPending = document.getElementById('statPending');
+    if (elPending) elPending.textContent = stats.pending_generation || 0;
+    const elSent = document.getElementById('statSent');
+    if (elSent) elSent.textContent = othersCount;
+
+    // Tab Header Count Badges
+    const countDiscEl = document.getElementById('countDiscovered');
+    if (countDiscEl && state.activeTab !== 'tabDiscovered') {
+      countDiscEl.textContent = discoveredTotal;
+    }
+
+    const countRevEl = document.getElementById('countReview');
+    if (countRevEl) countRevEl.textContent = draftsReady;
+
+    const countSentEl = document.getElementById('countSent');
+    if (countSentEl && state.activeTab !== 'tabSent') {
+      countSentEl.textContent = othersCount;
+    }
+
+    const cancelledCount = stats.rejected_total || 0;
     const elOthersAll = document.getElementById('countOthersAll');
     if (elOthersAll) elOthersAll.textContent = othersCount;
 
@@ -424,6 +504,32 @@ async function fetchStats() {
   } catch (err) {
     console.error('Error fetching stats:', err);
   }
+}
+
+function filterSentApplications() {
+  switchTab('tabSent');
+  setOthersFilter('SENT');
+}
+
+function filterOutreachReady() {
+  switchTab('tabDiscovered');
+  const catSelect = document.getElementById('selectCategory');
+  if (catSelect) catSelect.value = 'EMAIL_OUTREACH';
+  state.categoryFilter = 'EMAIL_OUTREACH';
+  const genSelect = document.getElementById('selectGenStatus');
+  if (genSelect) {
+    genSelect.value = 'ALL';
+    state.genStatusFilter = 'ALL';
+  }
+  const srcSelect = document.getElementById('selectSource');
+  if (srcSelect) {
+    srcSelect.value = 'ALL';
+    state.sourceFilter = 'ALL';
+  }
+  const searchInput = document.getElementById('inputSearch');
+  if (searchInput) searchInput.value = '';
+  state.searchQuery = '';
+  setExpFilter('ALL');
 }
 
 async function fetchSettings() {
@@ -511,6 +617,25 @@ async function fetchDiscoveredPosts() {
 
     state.posts = data.posts || [];
     state.total = data.total || 0;
+
+    const countDiscEl = document.getElementById('countDiscovered');
+    if (countDiscEl) countDiscEl.textContent = state.total;
+
+    const discBadge = document.getElementById('discoveredResultsBadge');
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL' && state.genStatusFilter !== 'PENDING') || state.categoryFilter !== 'EMAIL_OUTREACH';
+    if (discBadge) {
+      if (isFiltered) {
+        discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
+        discBadge.classList.remove('hidden');
+      } else {
+        discBadge.classList.add('hidden');
+      }
+    }
+
+    const clearDiscBtn = document.getElementById('btnClearDiscoveredFilters');
+    if (clearDiscBtn) {
+      clearDiscBtn.classList.toggle('hidden', !isFiltered);
+    }
 
     renderPostsTable();
     renderPagination();
@@ -755,6 +880,32 @@ function handleSearchKeyUp(e) {
   }
 }
 
+function clearDiscoveredFilters() {
+  state.expFilter = 'ALL';
+  document.querySelectorAll('#expPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.exp === 'ALL');
+  });
+
+  state.categoryFilter = 'EMAIL_OUTREACH';
+  const catSel = document.getElementById('selectCategory');
+  if (catSel) catSel.value = 'EMAIL_OUTREACH';
+
+  state.genStatusFilter = 'PENDING';
+  const genSel = document.getElementById('selectGenStatus');
+  if (genSel) genSel.value = 'PENDING';
+
+  state.sourceFilter = 'ALL';
+  const srcSel = document.getElementById('selectSource');
+  if (srcSel) srcSel.value = 'ALL';
+
+  state.searchQuery = '';
+  const searchInput = document.getElementById('inputSearch');
+  if (searchInput) searchInput.value = '';
+
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
 function filterPendingGeneration() {
   switchTab('tabDiscovered');
   document.getElementById('selectCategory').value = 'EMAIL_OUTREACH';
@@ -860,9 +1011,13 @@ async function fetchReviewPosts() {
     state.reviewPosts = data.posts || [];
 
     document.getElementById('reviewQueueCount').textContent = String(state.reviewPosts.length);
+    const countReviewEl = document.getElementById('countReview');
+    if (countReviewEl) countReviewEl.textContent = String(state.reviewPosts.length);
     container.innerHTML = '';
 
     if (state.reviewPosts.length === 0) {
+      state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
       const emptyMsg = state.searchReview
         ? `No drafts matching "${escapeHtml(state.searchReview)}" found.`
         : 'No emails generated yet. Generate emails or click Move to Review on Discovered Posts!';
@@ -876,17 +1031,28 @@ async function fetchReviewPosts() {
       const item = document.createElement('div');
       item.className = 'queue-item' + (state.activeReviewPost && state.activeReviewPost.id === post.id ? ' active' : '');
       item.id = `queue-item-${post.id}`;
-      item.onclick = () => selectReviewPost(post);
+      item.onclick = (e) => {
+        if (e.target.closest('.draft-checkbox')) return;
+        selectReviewPost(post);
+      };
 
       const email = (post.contact_emails && post.contact_emails[0]) || 'No email';
+      const isChecked = state.selectedDraftIds.has(post.id);
 
       item.innerHTML = `
-        <span class="queue-author">${escapeHtml(post.author_name)}</span>
-        <span class="queue-email">✉ ${escapeHtml(email)}</span>
+        <div class="queue-item-inner">
+          <input type="checkbox" class="draft-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectDraft('${post.id}')" title="Select for batch send" />
+          <div class="queue-item-content">
+            <span class="queue-author">${escapeHtml(post.author_name)}</span>
+            <span class="queue-email">✉ ${escapeHtml(email)}</span>
+          </div>
+        </div>
       `;
 
       container.appendChild(item);
     });
+
+    updateSelectedDraftsUI();
 
     if (!state.activeReviewPost && state.reviewPosts.length > 0) {
       selectReviewPost(state.reviewPosts[0]);
@@ -976,6 +1142,160 @@ async function saveActiveDraftEdits() {
     }
   } catch (err) {
     showAlert('Save Error', err.message);
+  }
+}
+
+// --- Batch & Direct Sending Functions ---
+
+function toggleSelectDraft(postId) {
+  if (state.selectedDraftIds.has(postId)) {
+    state.selectedDraftIds.delete(postId);
+  } else {
+    state.selectedDraftIds.add(postId);
+  }
+  updateSelectedDraftsUI();
+}
+
+function toggleSelectAllDrafts(checked) {
+  if (checked) {
+    state.reviewPosts.forEach(p => state.selectedDraftIds.add(p.id));
+  } else {
+    state.selectedDraftIds.clear();
+  }
+  updateSelectedDraftsUI();
+}
+
+function updateSelectedDraftsUI() {
+  const count = state.selectedDraftIds.size;
+  const countEl = document.getElementById('selectedDraftsCount');
+  const btnBatch = document.getElementById('btnSendBatchDrafts');
+  const checkAll = document.getElementById('selectAllDraftsCheckbox');
+
+  if (countEl) countEl.textContent = String(count);
+  if (btnBatch) {
+    btnBatch.classList.toggle('hidden', count === 0);
+  }
+  if (checkAll) {
+    checkAll.checked = state.reviewPosts.length > 0 && count === state.reviewPosts.length;
+    checkAll.indeterminate = count > 0 && count < state.reviewPosts.length;
+  }
+
+  document.querySelectorAll('.draft-checkbox').forEach(cb => {
+    cb.checked = state.selectedDraftIds.has(cb.value);
+  });
+}
+
+async function sendActiveDraftDirectly() {
+  if (!state.activeReviewPost) return;
+
+  const recipient = (state.activeReviewPost.contact_emails && state.activeReviewPost.contact_emails[0]) || state.activeReviewPost.author_name;
+  const confirmed = await showConfirm(
+    '🚀 Direct Send Application',
+    `Send application email directly to ${recipient} via Gmail without manual interaction? Your active resume will be attached and this post will be moved to Sent history.`,
+    { confirmText: 'Send Directly' }
+  );
+  if (!confirmed) return;
+
+  await saveActiveDraftEdits();
+
+  try {
+    const res = await fetch(`/api/send-direct/${state.activeReviewPost.id}`, { method: 'POST' });
+    if (res.ok) {
+      showToast('🚀 Sending email directly via Gmail...', 'info');
+      state.selectedDraftIds.delete(state.activeReviewPost.id);
+      updateSelectedDraftsUI();
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Send Direct Error', err.detail || 'Cannot send email directly.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function sendBatchSelectedDrafts() {
+  const ids = Array.from(state.selectedDraftIds);
+  if (ids.length === 0) {
+    showToast('Please select at least one draft to send.', 'warn');
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    '🚀 Batch Direct Send',
+    `Send ${ids.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
+    { confirmText: `Send ${ids.length} Emails` }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/send-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids })
+    });
+    if (res.ok) {
+      showToast(`🚀 Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Batch Send Error', err.detail || 'Cannot initiate batch send.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+// --- 1-Click Copy Actions for JD and Draft ---
+
+async function copyJobDescription() {
+  const textEl = document.getElementById('reviewFullText');
+  const text = textEl ? textEl.textContent : '';
+  if (!text) {
+    showToast('No job description text to copy.', 'warn');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('btnCopyJd');
+    if (btn) {
+      btn.classList.add('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy JD</span>`;
+      }, 1800);
+    }
+    showToast('✓ Job description copied to clipboard', 'success');
+  } catch (err) {
+    showAlert('Copy Failed', err.message);
+  }
+}
+
+async function copyEmailDraft() {
+  const subject = (document.getElementById('draftSubject')?.value || '').trim();
+  const body = (document.getElementById('draftBody')?.value || '').trim();
+  if (!subject && !body) {
+    showToast('No draft content to copy.', 'warn');
+    return;
+  }
+  const fullDraftText = `Subject: ${subject}\n\n${body}`;
+  try {
+    await navigator.clipboard.writeText(fullDraftText);
+    const btn = document.getElementById('btnCopyDraft');
+    if (btn) {
+      btn.classList.add('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy Email</span>`;
+      }, 1800);
+    }
+    showToast('✓ Email draft copied to clipboard', 'success');
+  } catch (err) {
+    showAlert('Copy Failed', err.message);
   }
 }
 
@@ -1214,6 +1534,20 @@ function handleSearchSentKeyUp(e) {
   }
 }
 
+function clearSentFilters() {
+  state.othersFilter = 'ALL';
+  document.querySelectorAll('#othersPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.others === 'ALL');
+  });
+
+  state.searchSent = '';
+  const searchInput = document.getElementById('inputSearchSent');
+  if (searchInput) searchInput.value = '';
+
+  state.sentPage = 1;
+  fetchSentPosts();
+}
+
 async function fetchSentPosts() {
   const tbody = document.getElementById('sentTableBody');
   tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
@@ -1234,6 +1568,25 @@ async function fetchSentPosts() {
     const data = await res.json();
     state.sentPosts = data.posts || [];
     state.sentTotal = data.total !== undefined ? data.total : (data.posts ? data.posts.length : 0);
+
+    const countSentEl = document.getElementById('countSent');
+    if (countSentEl) countSentEl.textContent = state.sentTotal;
+
+    const sentBadge = document.getElementById('sentResultsBadge');
+    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '');
+    if (sentBadge) {
+      if (isSentFiltered) {
+        sentBadge.textContent = `${state.sentTotal} result${state.sentTotal === 1 ? '' : 's'}`;
+        sentBadge.classList.remove('hidden');
+      } else {
+        sentBadge.classList.add('hidden');
+      }
+    }
+
+    const clearSentBtn = document.getElementById('btnClearSentFilters');
+    if (clearSentBtn) {
+      clearSentBtn.classList.toggle('hidden', !isSentFiltered);
+    }
 
     tbody.innerHTML = '';
     if (state.sentPosts.length === 0) {
@@ -1841,3 +2194,318 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+// ==========================================================================
+// Analytics & Trend Graph Engine
+// ==========================================================================
+
+const chartDefaultOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      labels: {
+        color: '#94a3b8',
+        font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '500' }
+      }
+    },
+    tooltip: {
+      backgroundColor: '#0f172a',
+      titleColor: '#f8fafc',
+      bodyColor: '#cbd5e1',
+      borderColor: 'rgba(255, 255, 255, 0.12)',
+      borderWidth: 1,
+      padding: 10,
+      boxPadding: 4,
+      usePointStyle: true,
+    }
+  }
+};
+
+function renderDailyAppliedChart(timeline) {
+  const canvas = document.getElementById('chartDailyApplied');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.dailyApplied) {
+    state.charts.dailyApplied.destroy();
+  }
+  const ctx = canvas.getContext('2d');
+  
+  const gradient = ctx.createLinearGradient(0, 0, 0, 260);
+  gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+  gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
+  state.charts.dailyApplied = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeline.map(d => d.label),
+      datasets: [{
+        label: 'Applications Applied',
+        data: timeline.map(d => d.count),
+        borderColor: '#10b981',
+        backgroundColor: gradient,
+        borderWidth: 2.5,
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#10b981',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 1.5,
+        pointRadius: timeline.length > 30 ? 2 : 4,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      scales: {
+        x: {
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#94a3b8', font: { size: 10 }, precision: 0 }
+        }
+      }
+    }
+  });
+}
+
+function renderDailyScrapedChart(timeline) {
+  const canvas = document.getElementById('chartDailyScraped');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.dailyScraped) {
+    state.charts.dailyScraped.destroy();
+  }
+  const ctx = canvas.getContext('2d');
+
+  state.charts.dailyScraped = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: timeline.map(d => d.label),
+      datasets: [{
+        label: 'JDs Discovered',
+        data: timeline.map(d => d.count),
+        backgroundColor: 'rgba(14, 165, 233, 0.75)',
+        hoverBackgroundColor: '#38bdf8',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#94a3b8', font: { size: 10 }, precision: 0 }
+        }
+      }
+    }
+  });
+}
+
+function renderStatusBreakdownChart(statuses) {
+  const canvas = document.getElementById('chartStatusBreakdown');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.statusBreakdown) {
+    state.charts.statusBreakdown.destroy();
+  }
+  state.charts.statusBreakdown = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: statuses.map(s => s.label),
+      datasets: [{
+        data: statuses.map(s => s.count),
+        backgroundColor: statuses.map(s => s.color),
+        borderColor: '#0f172a',
+        borderWidth: 2,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      cutout: '66%',
+      plugins: {
+        ...chartDefaultOptions.plugins,
+        legend: {
+          position: 'right',
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            color: '#cbd5e1',
+            font: { size: 11 }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderSourceBreakdownChart(sources) {
+  const canvas = document.getElementById('chartSourceBreakdown');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.sourceBreakdown) {
+    state.charts.sourceBreakdown.destroy();
+  }
+  const colors = ['#0ea5e9', '#6366f1', '#10b981', '#f59e0b'];
+  state.charts.sourceBreakdown = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: sources.map(s => s.source),
+      datasets: [{
+        data: sources.map(s => s.total_scraped),
+        backgroundColor: colors.slice(0, sources.length),
+        borderColor: '#0f172a',
+        borderWidth: 2,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      cutout: '66%',
+      plugins: {
+        ...chartDefaultOptions.plugins,
+        legend: {
+          position: 'right',
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            color: '#cbd5e1',
+            font: { size: 11 }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderExperienceBreakdownChart(experiences) {
+  const canvas = document.getElementById('chartExperienceBreakdown');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.experienceBreakdown) {
+    state.charts.experienceBreakdown.destroy();
+  }
+  const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#64748b'];
+  state.charts.experienceBreakdown = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: experiences.map(e => e.exp_tier),
+      datasets: [{
+        data: experiences.map(e => e.count),
+        backgroundColor: colors.slice(0, experiences.length),
+        borderColor: '#0f172a',
+        borderWidth: 2,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      cutout: '66%',
+      plugins: {
+        ...chartDefaultOptions.plugins,
+        legend: {
+          position: 'right',
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            color: '#cbd5e1',
+            font: { size: 11 }
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderRejectionReasonsChart(reasons) {
+  const canvas = document.getElementById('chartRejectionReasons');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.rejectionReasons) {
+    state.charts.rejectionReasons.destroy();
+  }
+  const cleanReasons = (reasons && reasons.length > 0) ? reasons : [{ reason: 'No cancellations recorded', count: 0 }];
+  state.charts.rejectionReasons = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: cleanReasons.map(r => r.reason),
+      datasets: [{
+        label: 'Screened / Cancelled Count',
+        data: cleanReasons.map(r => r.count),
+        backgroundColor: 'rgba(244, 63, 94, 0.75)',
+        hoverBackgroundColor: '#fb7185',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      ...chartDefaultOptions,
+      indexAxis: 'y',
+      scales: {
+        x: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#94a3b8', font: { size: 10 }, precision: 0 }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#cbd5e1', font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+async function loadAnalytics(days = 30) {
+  state.analyticsDays = days;
+  const param = (days && days > 0) ? `days=${days}` : `days=0`;
+  try {
+    const res = await fetch(`/api/analytics?${param}`);
+    if (!res.ok) throw new Error('Failed to fetch analytics data');
+    const data = await res.json();
+    state.analyticsData = data;
+
+    // Update KPI metrics
+    if (data.summary) {
+      document.getElementById('kpiApplied').textContent = data.summary.total_sent || 0;
+      document.getElementById('kpiConversionRate').textContent = `${data.summary.sent_conversion_pct || 0}% conversion`;
+      document.getElementById('kpiScraped').textContent = data.summary.total_scraped || 0;
+      document.getElementById('kpiEmailRate').textContent = `${data.summary.email_rate_pct || 0}% emails found`;
+      document.getElementById('kpiDirectEmails').textContent = `${data.summary.with_emails || 0} outreach ready`;
+      document.getElementById('kpiDrafted').textContent = data.summary.total_drafted || 0;
+      document.getElementById('kpiDraftReady').textContent = `${data.summary.total_drafted || 0} ready to send`;
+      document.getElementById('kpiPendingGen').textContent = `${data.summary.pending_review || 0} pending AI`;
+      document.getElementById('kpiRejected').textContent = data.summary.total_rejected || 0;
+      document.getElementById('kpiSpamFlagged').textContent = `${data.summary.potential_spam_total || 0} potential spam`;
+    }
+
+    // Update timeline badges
+    const totalAppliedInPeriod = (data.timeline_applied || []).reduce((acc, curr) => acc + curr.count, 0);
+    const totalScrapedInPeriod = (data.timeline_scraped || []).reduce((acc, curr) => acc + curr.count, 0);
+    const badgeApplied = document.getElementById('chartAppliedTotalBadge');
+    if (badgeApplied) badgeApplied.textContent = `${totalAppliedInPeriod} Applications`;
+    const badgeScraped = document.getElementById('chartScrapedTotalBadge');
+    if (badgeScraped) badgeScraped.textContent = `${totalScrapedInPeriod} Discovered`;
+
+    // Render Charts
+    renderDailyAppliedChart(data.timeline_applied || []);
+    renderDailyScrapedChart(data.timeline_scraped || []);
+    renderStatusBreakdownChart(data.status_breakdown || []);
+    renderSourceBreakdownChart(data.source_breakdown || []);
+    renderExperienceBreakdownChart(data.experience_breakdown || []);
+    renderRejectionReasonsChart(data.rejection_reasons || []);
+  } catch (err) {
+    console.error('Analytics load error:', err);
+  }
+}
+
+function setAnalyticsTimeframe(days) {
+  state.analyticsDays = days;
+  const pills = document.querySelectorAll('#timeframePills .pill');
+  pills.forEach(p => {
+    p.classList.toggle('active', parseInt(p.getAttribute('data-days')) === days);
+  });
+  loadAnalytics(days);
+}
+
