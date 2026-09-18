@@ -3,7 +3,7 @@
  */
 
 const state = {
-  activeTab: 'tabDiscovered',
+  activeTab: 'tabAnalytics',
   expFilter: 'ALL',
   categoryFilter: 'EMAIL_OUTREACH',
   genStatusFilter: 'PENDING',
@@ -18,6 +18,7 @@ const state = {
   total: 0,
   posts: [],
   selectedIds: new Set(),
+  selectedDraftIds: new Set(),
   reviewPosts: [],
   activeReviewPost: null,
   sentPosts: [],
@@ -302,6 +303,29 @@ function showAlert(title, message, options = {}) {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+  const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
+  const hashToTab = {
+    '#analytics': 'tabAnalytics',
+    '#discovered': 'tabDiscovered',
+    '#review': 'tabReview',
+    '#sent': 'tabSent',
+    '#others': 'tabSent',
+  };
+
+  let startTab = 'tabAnalytics';
+  const hash = (window.location.hash || '').toLowerCase();
+  if (hash && hashToTab[hash]) {
+    startTab = hashToTab[hash];
+  } else {
+    try {
+      const saved = localStorage.getItem('reach_active_tab');
+      if (saved && validTabs.includes(saved)) {
+        startTab = saved;
+      }
+    } catch (_) {}
+  }
+
+  switchTab(startTab);
   loadDashboardData();
   fetchHealth();
   fetchScrapers();
@@ -313,15 +337,34 @@ document.addEventListener('DOMContentLoaded', () => {
 function switchTab(tabId) {
   state.activeTab = tabId;
 
-  document.getElementById('btnTabDiscovered').classList.toggle('active', tabId === 'tabDiscovered');
-  document.getElementById('btnTabReview').classList.toggle('active', tabId === 'tabReview');
-  document.getElementById('btnTabSent').classList.toggle('active', tabId === 'tabSent');
+  try {
+    localStorage.setItem('reach_active_tab', tabId);
+    const tabToHash = {
+      tabAnalytics: '#analytics',
+      tabDiscovered: '#discovered',
+      tabReview: '#review',
+      tabSent: '#sent',
+    };
+    if (tabToHash[tabId] && window.location.hash !== tabToHash[tabId]) {
+      history.replaceState(null, '', tabToHash[tabId]);
+    }
+  } catch (_) {}
+
+  const btnDiscovered = document.getElementById('btnTabDiscovered');
+  if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
+  const btnReview = document.getElementById('btnTabReview');
+  if (btnReview) btnReview.classList.toggle('active', tabId === 'tabReview');
+  const btnSent = document.getElementById('btnTabSent');
+  if (btnSent) btnSent.classList.toggle('active', tabId === 'tabSent');
   const btnAnalytics = document.getElementById('btnTabAnalytics');
   if (btnAnalytics) btnAnalytics.classList.toggle('active', tabId === 'tabAnalytics');
 
-  document.getElementById('tabDiscovered').classList.toggle('hidden', tabId !== 'tabDiscovered');
-  document.getElementById('tabReview').classList.toggle('hidden', tabId !== 'tabReview');
-  document.getElementById('tabSent').classList.toggle('hidden', tabId !== 'tabSent');
+  const panelDiscovered = document.getElementById('tabDiscovered');
+  if (panelDiscovered) panelDiscovered.classList.toggle('hidden', tabId !== 'tabDiscovered');
+  const panelReview = document.getElementById('tabReview');
+  if (panelReview) panelReview.classList.toggle('hidden', tabId !== 'tabReview');
+  const panelSent = document.getElementById('tabSent');
+  if (panelSent) panelSent.classList.toggle('hidden', tabId !== 'tabSent');
   const panelAnalytics = document.getElementById('tabAnalytics');
   if (panelAnalytics) panelAnalytics.classList.toggle('hidden', tabId !== 'tabAnalytics');
 
@@ -396,6 +439,8 @@ async function loadDashboardData() {
     await fetchReviewPosts();
   } else if (state.activeTab === 'tabSent') {
     await fetchSentPosts();
+  } else if (state.activeTab === 'tabAnalytics') {
+    await loadAnalytics(state.analyticsDays || 30);
   }
 }
 
@@ -405,23 +450,49 @@ async function fetchStats() {
     if (!res.ok) return;
     const stats = await res.json();
 
-    const discoveredTotal = stats.discovered_total !== undefined ? stats.discovered_total : stats.total_posts || 0;
-    const pendingGen = stats.pending_generation || 0;
+    const discoveredTotal = stats.discovered_total !== undefined ? stats.discovered_total : (stats.total_posts || 0);
     const draftsReady = stats.emails_generated || 0;
-    const othersCount = stats.others_total !== undefined ? stats.others_total : ((stats.applications_sent || 0) + (stats.rejected_total || 0));
-
-    document.getElementById('statDiscovered').textContent = discoveredTotal;
-    document.getElementById('statPending').textContent = pendingGen;
-    document.getElementById('statGenerated').textContent = draftsReady;
-    document.getElementById('statSent').textContent = othersCount;
-
-    document.getElementById('countDiscovered').textContent = discoveredTotal;
-    document.getElementById('countReview').textContent = draftsReady;
-    document.getElementById('countSent').textContent = othersCount;
-
     const sentCount = stats.applications_sent || 0;
-    const cancelledCount = stats.rejected_total || 0;
+    const outreachReady = stats.email_outreach_total || 0;
+    const totalSourced = stats.total_posts || 0;
+    const othersCount = stats.others_total !== undefined ? stats.others_total : (sentCount + (stats.rejected_total || 0));
 
+    // Top Metrics Summary Bar
+    const elApplied = document.getElementById('statApplied');
+    if (elApplied) elApplied.textContent = sentCount;
+
+    const elGenerated = document.getElementById('statGenerated');
+    if (elGenerated) elGenerated.textContent = draftsReady;
+
+    const elOutreach = document.getElementById('statOutreach');
+    if (elOutreach) elOutreach.textContent = outreachReady;
+
+    const elTotalSourced = document.getElementById('statTotalSourced');
+    if (elTotalSourced) elTotalSourced.textContent = totalSourced;
+
+    // Backward compatibility for legacy elements if present
+    const elDiscovered = document.getElementById('statDiscovered');
+    if (elDiscovered) elDiscovered.textContent = discoveredTotal;
+    const elPending = document.getElementById('statPending');
+    if (elPending) elPending.textContent = stats.pending_generation || 0;
+    const elSent = document.getElementById('statSent');
+    if (elSent) elSent.textContent = othersCount;
+
+    // Tab Header Count Badges
+    const countDiscEl = document.getElementById('countDiscovered');
+    if (countDiscEl && state.activeTab !== 'tabDiscovered') {
+      countDiscEl.textContent = discoveredTotal;
+    }
+
+    const countRevEl = document.getElementById('countReview');
+    if (countRevEl) countRevEl.textContent = draftsReady;
+
+    const countSentEl = document.getElementById('countSent');
+    if (countSentEl && state.activeTab !== 'tabSent') {
+      countSentEl.textContent = othersCount;
+    }
+
+    const cancelledCount = stats.rejected_total || 0;
     const elOthersAll = document.getElementById('countOthersAll');
     if (elOthersAll) elOthersAll.textContent = othersCount;
 
@@ -433,6 +504,32 @@ async function fetchStats() {
   } catch (err) {
     console.error('Error fetching stats:', err);
   }
+}
+
+function filterSentApplications() {
+  switchTab('tabSent');
+  setOthersFilter('SENT');
+}
+
+function filterOutreachReady() {
+  switchTab('tabDiscovered');
+  const catSelect = document.getElementById('selectCategory');
+  if (catSelect) catSelect.value = 'EMAIL_OUTREACH';
+  state.categoryFilter = 'EMAIL_OUTREACH';
+  const genSelect = document.getElementById('selectGenStatus');
+  if (genSelect) {
+    genSelect.value = 'ALL';
+    state.genStatusFilter = 'ALL';
+  }
+  const srcSelect = document.getElementById('selectSource');
+  if (srcSelect) {
+    srcSelect.value = 'ALL';
+    state.sourceFilter = 'ALL';
+  }
+  const searchInput = document.getElementById('inputSearch');
+  if (searchInput) searchInput.value = '';
+  state.searchQuery = '';
+  setExpFilter('ALL');
 }
 
 async function fetchSettings() {
@@ -520,6 +617,20 @@ async function fetchDiscoveredPosts() {
 
     state.posts = data.posts || [];
     state.total = data.total || 0;
+
+    const countDiscEl = document.getElementById('countDiscovered');
+    if (countDiscEl) countDiscEl.textContent = state.total;
+
+    const discBadge = document.getElementById('discoveredResultsBadge');
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'EMAIL_OUTREACH';
+    if (discBadge) {
+      if (isFiltered) {
+        discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
+        discBadge.classList.remove('hidden');
+      } else {
+        discBadge.classList.add('hidden');
+      }
+    }
 
     renderPostsTable();
     renderPagination();
@@ -869,9 +980,13 @@ async function fetchReviewPosts() {
     state.reviewPosts = data.posts || [];
 
     document.getElementById('reviewQueueCount').textContent = String(state.reviewPosts.length);
+    const countReviewEl = document.getElementById('countReview');
+    if (countReviewEl) countReviewEl.textContent = String(state.reviewPosts.length);
     container.innerHTML = '';
 
     if (state.reviewPosts.length === 0) {
+      state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
       const emptyMsg = state.searchReview
         ? `No drafts matching "${escapeHtml(state.searchReview)}" found.`
         : 'No emails generated yet. Generate emails or click Move to Review on Discovered Posts!';
@@ -885,17 +1000,28 @@ async function fetchReviewPosts() {
       const item = document.createElement('div');
       item.className = 'queue-item' + (state.activeReviewPost && state.activeReviewPost.id === post.id ? ' active' : '');
       item.id = `queue-item-${post.id}`;
-      item.onclick = () => selectReviewPost(post);
+      item.onclick = (e) => {
+        if (e.target.closest('.draft-checkbox')) return;
+        selectReviewPost(post);
+      };
 
       const email = (post.contact_emails && post.contact_emails[0]) || 'No email';
+      const isChecked = state.selectedDraftIds.has(post.id);
 
       item.innerHTML = `
-        <span class="queue-author">${escapeHtml(post.author_name)}</span>
-        <span class="queue-email">✉ ${escapeHtml(email)}</span>
+        <div class="queue-item-inner">
+          <input type="checkbox" class="draft-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectDraft('${post.id}')" title="Select for batch send" />
+          <div class="queue-item-content">
+            <span class="queue-author">${escapeHtml(post.author_name)}</span>
+            <span class="queue-email">✉ ${escapeHtml(email)}</span>
+          </div>
+        </div>
       `;
 
       container.appendChild(item);
     });
+
+    updateSelectedDraftsUI();
 
     if (!state.activeReviewPost && state.reviewPosts.length > 0) {
       selectReviewPost(state.reviewPosts[0]);
@@ -985,6 +1111,160 @@ async function saveActiveDraftEdits() {
     }
   } catch (err) {
     showAlert('Save Error', err.message);
+  }
+}
+
+// --- Batch & Direct Sending Functions ---
+
+function toggleSelectDraft(postId) {
+  if (state.selectedDraftIds.has(postId)) {
+    state.selectedDraftIds.delete(postId);
+  } else {
+    state.selectedDraftIds.add(postId);
+  }
+  updateSelectedDraftsUI();
+}
+
+function toggleSelectAllDrafts(checked) {
+  if (checked) {
+    state.reviewPosts.forEach(p => state.selectedDraftIds.add(p.id));
+  } else {
+    state.selectedDraftIds.clear();
+  }
+  updateSelectedDraftsUI();
+}
+
+function updateSelectedDraftsUI() {
+  const count = state.selectedDraftIds.size;
+  const countEl = document.getElementById('selectedDraftsCount');
+  const btnBatch = document.getElementById('btnSendBatchDrafts');
+  const checkAll = document.getElementById('selectAllDraftsCheckbox');
+
+  if (countEl) countEl.textContent = String(count);
+  if (btnBatch) {
+    btnBatch.classList.toggle('hidden', count === 0);
+  }
+  if (checkAll) {
+    checkAll.checked = state.reviewPosts.length > 0 && count === state.reviewPosts.length;
+    checkAll.indeterminate = count > 0 && count < state.reviewPosts.length;
+  }
+
+  document.querySelectorAll('.draft-checkbox').forEach(cb => {
+    cb.checked = state.selectedDraftIds.has(cb.value);
+  });
+}
+
+async function sendActiveDraftDirectly() {
+  if (!state.activeReviewPost) return;
+
+  const recipient = (state.activeReviewPost.contact_emails && state.activeReviewPost.contact_emails[0]) || state.activeReviewPost.author_name;
+  const confirmed = await showConfirm(
+    '🚀 Direct Send Application',
+    `Send application email directly to ${recipient} via Gmail without manual interaction? Your active resume will be attached and this post will be moved to Sent history.`,
+    { confirmText: 'Send Directly' }
+  );
+  if (!confirmed) return;
+
+  await saveActiveDraftEdits();
+
+  try {
+    const res = await fetch(`/api/send-direct/${state.activeReviewPost.id}`, { method: 'POST' });
+    if (res.ok) {
+      showToast('🚀 Sending email directly via Gmail...', 'info');
+      state.selectedDraftIds.delete(state.activeReviewPost.id);
+      updateSelectedDraftsUI();
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Send Direct Error', err.detail || 'Cannot send email directly.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function sendBatchSelectedDrafts() {
+  const ids = Array.from(state.selectedDraftIds);
+  if (ids.length === 0) {
+    showToast('Please select at least one draft to send.', 'warn');
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    '🚀 Batch Direct Send',
+    `Send ${ids.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
+    { confirmText: `Send ${ids.length} Emails` }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/send-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids })
+    });
+    if (res.ok) {
+      showToast(`🚀 Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Batch Send Error', err.detail || 'Cannot initiate batch send.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+// --- 1-Click Copy Actions for JD and Draft ---
+
+async function copyJobDescription() {
+  const textEl = document.getElementById('reviewFullText');
+  const text = textEl ? textEl.textContent : '';
+  if (!text) {
+    showToast('No job description text to copy.', 'warn');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('btnCopyJd');
+    if (btn) {
+      btn.classList.add('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy JD</span>`;
+      }, 1800);
+    }
+    showToast('✓ Job description copied to clipboard', 'success');
+  } catch (err) {
+    showAlert('Copy Failed', err.message);
+  }
+}
+
+async function copyEmailDraft() {
+  const subject = (document.getElementById('draftSubject')?.value || '').trim();
+  const body = (document.getElementById('draftBody')?.value || '').trim();
+  if (!subject && !body) {
+    showToast('No draft content to copy.', 'warn');
+    return;
+  }
+  const fullDraftText = `Subject: ${subject}\n\n${body}`;
+  try {
+    await navigator.clipboard.writeText(fullDraftText);
+    const btn = document.getElementById('btnCopyDraft');
+    if (btn) {
+      btn.classList.add('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> <span>Copied!</span>`;
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> <span>Copy Email</span>`;
+      }, 1800);
+    }
+    showToast('✓ Email draft copied to clipboard', 'success');
+  } catch (err) {
+    showAlert('Copy Failed', err.message);
   }
 }
 
@@ -1243,6 +1523,20 @@ async function fetchSentPosts() {
     const data = await res.json();
     state.sentPosts = data.posts || [];
     state.sentTotal = data.total !== undefined ? data.total : (data.posts ? data.posts.length : 0);
+
+    const countSentEl = document.getElementById('countSent');
+    if (countSentEl) countSentEl.textContent = state.sentTotal;
+
+    const sentBadge = document.getElementById('sentResultsBadge');
+    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '');
+    if (sentBadge) {
+      if (isSentFiltered) {
+        sentBadge.textContent = `${state.sentTotal} result${state.sentTotal === 1 ? '' : 's'}`;
+        sentBadge.classList.remove('hidden');
+      } else {
+        sentBadge.classList.add('hidden');
+      }
+    }
 
     tbody.innerHTML = '';
     if (state.sentPosts.length === 0) {

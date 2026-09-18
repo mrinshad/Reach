@@ -49,7 +49,16 @@
 - **Pure Browser Crawling**: Uses headed/headless Playwright Firefox for direct, high-fidelity crawling on LinkedIn, Infopark, and other job portals.
 - **Automated Web ChatGPT**: Directly orchestrates your existing logged-in ChatGPT conversation or Custom GPT in the browser. You get state-of-the-art AI generation with custom conversational memory without paying a cent in API tokens.
 
-### 7. 📊 Real-Time Analytics & Trends Dashboard
+### 7. 🚀 Direct & 1-Click Batch Email Outreach (No Manual Clicking)
+- **Direct Dispatch**: Send email applications directly through Gmail in the browser without manual clicking — your active resume is automatically attached and the email is dispatched via Gmail shortcuts/buttons.
+- **Multi-Draft Batch Sending**: Check multiple drafts in Review & Drafts or click "Select All" to dispatch emails across multiple candidates in a single browser session with polite randomized delays (4–8s) to safeguard email reputation.
+- **Manual Review When Needed**: The `👁️ Open in Gmail` option remains available for any custom inspection.
+- **1-Click Copy**: Built-in copy buttons on top-right corners of both the Job Description (JD) and Outreach Email Draft for instant clipboard copy.
+
+### 8. 📊 Real-Time Analytics & Trends Dashboard (Default Home)
+- **Analytics as Home**: Launch directly into rich visualizations of your outreach pipeline, lead conversion, and scraping activity.
+- **Tab State Persistence**: Navigating between tabs or reloading the page preserves your exact active tab via `localStorage` and hash routing.
+- **Accurate Real-Time Metrics**: High-impact top summary bar tracking `🚀 Applied`, `✉️ Drafts Ready`, `🎯 Outreach Ready`, and `🕸️ Total Sourced`, with dynamic filter count badges on Discovered and Sent tables.
 - **Jobs Applied Each Day**: Smooth interactive line graph tracking daily application velocity over time.
 - **Scraping Inflow Activity**: Daily volume comparisons of newly discovered leads.
 - **Application Status Distribution**: Donut charts detailing conversion stages (`Applied / Sent`, `Drafts Ready`, `Discovered`, `Screened Out`).
@@ -333,6 +342,8 @@ reach-job-automation/
 | `POST` | `/api/posts/{id}/mark-sent`| Mark application as sent with timestamp |
 | `POST` | `/api/generate-batch` | Trigger ChatGPT email generation for selected post IDs |
 | `POST` | `/api/open-gmail/{id}` | Launch headed Firefox with pre-filled Gmail compose & resume attached |
+| `POST` | `/api/send-direct/{id}` | Direct email dispatch via Gmail with attached resume without manual clicking |
+| `POST` | `/api/send-batch` | 1-click batch direct dispatch of selected applications in a single browser session |
 | `GET` | `/api/settings` | Retrieve active application configuration (DB + config.json) |
 | `POST` | `/api/settings` | Update settings and persist `chatgpt_url` & `search_query` in PostgreSQL |
 

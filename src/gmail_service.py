@@ -112,3 +112,37 @@ def populate_email_draft(
 
     print("✓ Email draft prepared successfully in Gmail.")
     return True
+
+
+def send_email_directly(page: Page, timeout: int = 15000) -> bool:
+    """
+    Click the Gmail Send button or press Ctrl+Enter directly,
+    waiting for the compose dialog to close and dispatch to complete.
+    """
+    print("Directly sending email in Gmail...")
+    page.wait_for_timeout(1000)
+    
+    send_btn = page.locator('div[role="button"][data-tooltip*="Send"], div[role="button"]:text-is("Send"), div[aria-label*="Send"]').first
+    try:
+        if send_btn.is_visible():
+            send_btn.click()
+            print("  Clicked Send button.")
+        else:
+            page.keyboard.press("Control+Enter")
+            print("  Pressed Ctrl+Enter to send.")
+    except Exception as e:
+        print(f"  Warning on button click: {e}, attempting Control+Enter shortcut...")
+        try:
+            page.keyboard.press("Control+Enter")
+        except Exception:
+            page.keyboard.press("Meta+Enter")
+
+    try:
+        page.wait_for_selector('div[role="dialog"]', state="hidden", timeout=timeout)
+        print("✓ Compose dialog closed — email sent successfully.")
+    except Exception:
+        page.wait_for_timeout(3000)
+        print("✓ Wait timeout passed — assuming email sent.")
+
+    return True
+

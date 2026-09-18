@@ -31,6 +31,7 @@ from src.chatgpt_service import (
 from src.gmail_service import (
     navigate_to_gmail,
     populate_email_draft,
+    send_email_directly,
 )
 from src.config import load_config
 
@@ -276,6 +277,163 @@ def run_open_gmail_draft(post_id: str):
 
     except Exception as e:
         task_manager.fail_task(str(e))
+
+
+def run_send_single_draft(post_id: str):
+    """
+    Directly send outreach email for a single post via Gmail without manual interaction,
+    attaching the resume, clicking Send, and updating post status in PostgreSQL to SENT.
+    """
+    task_manager.start_task("Sending Outreach Email", total_items=1)
+    config = load_config()
+    resume_path = config.get("resume_path", "")
+
+    post = get_post_by_id(post_id)
+    if not post:
+        task_manager.fail_task(f"Post {post_id} not found.")
+        return
+
+    emails = post.get("contact_emails", [])
+    if not emails:
+        task_manager.fail_task(f"No contact email found for {post.get('author_name')}.")
+        return
+
+    recipient = emails[0]
+    subject = post.get("generated_subject") or "Application for Full Stack Developer"
+    body = post.get("generated_body") or ""
+    author = post.get("author_name", "Recruiter")
+
+    if not body:
+        task_manager.fail_task("Email draft is empty. Generate draft before sending.")
+        return
+
+    try:
+        task_manager.log(f"Launching Firefox session for direct sending to {author} ({recipient})...")
+        with sync_playwright() as playwright:
+            context = launch_firefox_context(
+                playwright,
+                headless=False,
+                sync_cookies_domains=["google.com", "gmail.com"],
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+
+            task_manager.log("Navigating to Gmail...")
+            navigate_to_gmail(page)
+
+            attachment = resume_path if os.path.exists(resume_path) else None
+            task_manager.log(f"Composing email to {recipient}...")
+            populate_email_draft(
+                page=page,
+                recipient=recipient,
+                subject=subject,
+                body=body,
+                attachment_path=attachment,
+            )
+
+            task_manager.log("Clicking Send directly...")
+            send_email_directly(page)
+
+            # Update database
+            mark_post_sent(post_id)
+            task_manager.log(f"✓ Application to {author} ({recipient}) sent successfully!")
+            task_manager.update_progress(1)
+            time.sleep(1)
+
+            context.close()
+            task_manager.finish_task(f"Successfully sent application to {author} ({recipient})!")
+    except Exception as e:
+        task_manager.fail_task(f"Send Error: {str(e)}")
+
+
+def run_send_batch_drafts(post_ids: List[str]):
+    """
+    Directly send multiple outreach emails in a batch via a single Gmail browser session.
+    Iterates through each post, composes, attaches resume, clicks Send directly,
+    marks each sent in PostgreSQL, and applies human pacing delays between messages.
+    """
+    task_manager.start_task("Batch Outreach Sending", total_items=len(post_ids))
+    config = load_config()
+    resume_path = config.get("resume_path", "")
+    attachment = resume_path if os.path.exists(resume_path) else None
+
+    successful = 0
+    failed = []
+
+    try:
+        task_manager.log(f"Launching Firefox session to send {len(post_ids)} applications...")
+        with sync_playwright() as playwright:
+            context = launch_firefox_context(
+                playwright,
+                headless=False,
+                sync_cookies_domains=["google.com", "gmail.com"],
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+
+            task_manager.log("Navigating to Gmail...")
+            navigate_to_gmail(page)
+
+            for idx, post_id in enumerate(post_ids, 1):
+                post = get_post_by_id(post_id)
+                if not post:
+                    failed.append((post_id, "Post not found"))
+                    continue
+
+                emails = post.get("contact_emails", [])
+                if not emails:
+                    failed.append((post.get("author_name", post_id), "No email found"))
+                    continue
+
+                recipient = emails[0]
+                author = post.get("author_name", "Recruiter")
+                subject = post.get("generated_subject") or "Application for Full Stack Developer"
+                body = post.get("generated_body") or ""
+
+                if not body:
+                    failed.append((author, "Empty email body"))
+                    continue
+
+                task_manager.log(f"[{idx}/{len(post_ids)}] Composing to {author} ({recipient})...")
+                task_manager.set_current_step(f"Sending {idx}/{len(post_ids)}: {author}")
+
+                try:
+                    populate_email_draft(
+                        page=page,
+                        recipient=recipient,
+                        subject=subject,
+                        body=body,
+                        attachment_path=attachment,
+                    )
+                    send_email_directly(page)
+                    mark_post_sent(post_id)
+                    successful += 1
+                    task_manager.log(f"  ✓ Sent application {idx}/{len(post_ids)} to {author} ({recipient})")
+                except Exception as send_err:
+                    task_manager.log(f"  ✗ Failed to send to {author}: {send_err}")
+                    failed.append((author, str(send_err)))
+
+                task_manager.update_progress(idx)
+
+                if idx < len(post_ids):
+                    pause = random.uniform(
+                        config.get("pacing_min_seconds", 4),
+                        config.get("pacing_max_seconds", 8)
+                    )
+                    task_manager.log(f"  Waiting {pause:.1f}s before sending next email...")
+                    time.sleep(pause)
+
+            task_manager.log("Closing browser session...")
+            context.close()
+
+            if failed and successful == 0:
+                reasons = "; ".join([f"{a}: {m}" for a, m in failed[:3]])
+                task_manager.fail_task(f"Failed to send all {len(failed)} emails: {reasons}")
+            elif failed:
+                task_manager.finish_task(f"Sent {successful} of {len(post_ids)} applications. ({len(failed)} failed)")
+            else:
+                task_manager.finish_task(f"Successfully sent all {successful} applications via Gmail!")
+
+    except Exception as e:
+        task_manager.fail_task(f"Batch Send Error: {str(e)}")
 
 
 import subprocess
