@@ -103,7 +103,11 @@ def populate_email_draft(
         if file_input.count() > 0:
             file_input.set_input_files(attachment_path)
             print("  Waiting for attachment to upload...")
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(1500)
+            try:
+                page.wait_for_selector('div[role="progressbar"], div[aria-label*="Uploading"]', state="hidden", timeout=12000)
+            except Exception:
+                page.wait_for_timeout(2500)
             print("  ✓ Resume attached.")
         else:
             print("  Warning: File attachment input not found.")
@@ -114,35 +118,78 @@ def populate_email_draft(
     return True
 
 
-def send_email_directly(page: Page, timeout: int = 15000) -> bool:
+def send_email_directly(page: Page, timeout: int = 20000) -> bool:
     """
-    Click the Gmail Send button or press Ctrl+Enter directly,
+    Click the Gmail Send button inside the active compose dialog
+    or trigger platform-appropriate shortcuts (Meta+Enter on Mac, Ctrl+Enter elsewhere),
     waiting for the compose dialog to close and dispatch to complete.
     """
     print("Directly sending email in Gmail...")
-    page.wait_for_timeout(1000)
-    
-    send_btn = page.locator('div[role="button"][data-tooltip*="Send"], div[role="button"]:text-is("Send"), div[aria-label*="Send"]').first
-    try:
-        if send_btn.is_visible():
-            send_btn.click()
-            print("  Clicked Send button.")
-        else:
-            page.keyboard.press("Control+Enter")
-            print("  Pressed Ctrl+Enter to send.")
-    except Exception as e:
-        print(f"  Warning on button click: {e}, attempting Control+Enter shortcut...")
-        try:
-            page.keyboard.press("Control+Enter")
-        except Exception:
-            page.keyboard.press("Meta+Enter")
+    page.wait_for_timeout(800)
 
+    # 1. Ensure any attachment upload progress bar inside dialog is finished
+    try:
+        page.wait_for_selector('div[role="dialog"] div[role="progressbar"]', state="hidden", timeout=10000)
+    except Exception:
+        pass
+
+    dialog = page.locator('div[role="dialog"]').last
+    if dialog.count() == 0:
+        print("  Warning: No active compose dialog found, searching globally...")
+        dialog = page
+
+    # Primary send button strictly inside the compose dialog
+    # Matches Gmail's Send button (.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3, data-tooltip="Send ...", or text "Send")
+    send_btn = dialog.locator(
+        'div[role="button"].T-I-atl, '
+        'div[role="button"][data-tooltip*="Send"], '
+        'div[role="button"][aria-label*="Send \u202a"], '
+        'div[role="button"]:text-is("Send")'
+    ).first
+
+    sent_triggered = False
+
+    try:
+        if send_btn.is_visible(timeout=3000):
+            print("  Clicking Send button inside dialog...")
+            send_btn.click(force=True)
+            sent_triggered = True
+    except Exception as e:
+        print(f"  Button click failed: {e}")
+
+    if not sent_triggered:
+        print("  Triggering keyboard shortcuts to send...")
+        try:
+            body_field = dialog.locator('div[role="textbox"][aria-label*="Message Body"]').first
+            if body_field.is_visible():
+                body_field.focus()
+        except Exception:
+            pass
+
+        # Send shortcut: Meta+Enter for macOS (Command+Enter), Control+Enter for Windows/Linux
+        page.keyboard.press("Meta+Enter")
+        page.wait_for_timeout(300)
+        page.keyboard.press("Control+Enter")
+
+    # 2. Wait for dialog to close indicating dispatch success
     try:
         page.wait_for_selector('div[role="dialog"]', state="hidden", timeout=timeout)
         print("✓ Compose dialog closed — email sent successfully.")
+        return True
     except Exception:
-        page.wait_for_timeout(3000)
-        print("✓ Wait timeout passed — assuming email sent.")
-
-    return True
+        print("  Dialog still visible after timeout. Retrying with keyboard shortcuts...")
+        try:
+            page.keyboard.press("Meta+Enter")
+            page.wait_for_timeout(500)
+            page.keyboard.press("Control+Enter")
+            page.wait_for_selector('div[role="dialog"]', state="hidden", timeout=6000)
+            print("✓ Compose dialog closed on retry — email sent successfully.")
+            return True
+        except Exception:
+            # Check if "Message sent" alert/toast appeared in Gmail
+            toast = page.locator('span:text-is("Message sent"), span:text-is("Message sent.")').first
+            if toast.count() > 0 and toast.is_visible():
+                print("✓ 'Message sent' confirmation detected.")
+                return True
+            raise RuntimeError("Failed to send email: compose dialog remained open.")
 

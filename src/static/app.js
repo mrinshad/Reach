@@ -622,7 +622,7 @@ async function fetchDiscoveredPosts() {
     if (countDiscEl) countDiscEl.textContent = state.total;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'EMAIL_OUTREACH';
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL' && state.genStatusFilter !== 'PENDING') || state.categoryFilter !== 'EMAIL_OUTREACH';
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -630,6 +630,11 @@ async function fetchDiscoveredPosts() {
       } else {
         discBadge.classList.add('hidden');
       }
+    }
+
+    const clearDiscBtn = document.getElementById('btnClearDiscoveredFilters');
+    if (clearDiscBtn) {
+      clearDiscBtn.classList.toggle('hidden', !isFiltered);
     }
 
     renderPostsTable();
@@ -873,6 +878,32 @@ function handleSearchKeyUp(e) {
   if (e.key === 'Enter') {
     applyFilters();
   }
+}
+
+function clearDiscoveredFilters() {
+  state.expFilter = 'ALL';
+  document.querySelectorAll('#expPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.exp === 'ALL');
+  });
+
+  state.categoryFilter = 'EMAIL_OUTREACH';
+  const catSel = document.getElementById('selectCategory');
+  if (catSel) catSel.value = 'EMAIL_OUTREACH';
+
+  state.genStatusFilter = 'PENDING';
+  const genSel = document.getElementById('selectGenStatus');
+  if (genSel) genSel.value = 'PENDING';
+
+  state.sourceFilter = 'ALL';
+  const srcSel = document.getElementById('selectSource');
+  if (srcSel) srcSel.value = 'ALL';
+
+  state.searchQuery = '';
+  const searchInput = document.getElementById('inputSearch');
+  if (searchInput) searchInput.value = '';
+
+  state.page = 1;
+  fetchDiscoveredPosts();
 }
 
 function filterPendingGeneration() {
@@ -1503,6 +1534,20 @@ function handleSearchSentKeyUp(e) {
   }
 }
 
+function clearSentFilters() {
+  state.othersFilter = 'ALL';
+  document.querySelectorAll('#othersPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.others === 'ALL');
+  });
+
+  state.searchSent = '';
+  const searchInput = document.getElementById('inputSearchSent');
+  if (searchInput) searchInput.value = '';
+
+  state.sentPage = 1;
+  fetchSentPosts();
+}
+
 async function fetchSentPosts() {
   const tbody = document.getElementById('sentTableBody');
   tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
@@ -1536,6 +1581,11 @@ async function fetchSentPosts() {
       } else {
         sentBadge.classList.add('hidden');
       }
+    }
+
+    const clearSentBtn = document.getElementById('btnClearSentFilters');
+    if (clearSentBtn) {
+      clearSentBtn.classList.toggle('hidden', !isSentFiltered);
     }
 
     tbody.innerHTML = '';

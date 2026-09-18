@@ -134,50 +134,63 @@
 
     <!-- TAB 1: Discovered Posts (Paginated Table) -->
     <div class="tab-panel hidden" id="tabDiscovered">
-      <!-- Minimal Filter Row -->
-      <div class="toolbar">
-        <div class="filter-pills" id="expPills">
-          <button class="pill active" data-exp="ALL" onclick="setExpFilter('ALL')">All</button>
-          <button class="pill" data-exp="FRESHER" onclick="setExpFilter('FRESHER')">Fresher (0-1 yr)</button>
-          <button class="pill" data-exp="MID" onclick="setExpFilter('MID')">1 - 3 yrs</button>
-          <button class="pill" data-exp="SENIOR" onclick="setExpFilter('SENIOR')">3 - 5+ yrs</button>
-        </div>
-
-        <div class="toolbar-right">
-          <button class="btn btn-add-jd" onclick="openAddJdModal()" title="Add Job Description Manually">
-            <span>+ Add JD</span>
-          </button>
-
-          <select id="selectSource" class="select-clean" onchange="applyFilters()" title="Filter by Job Source">
-            <option value="ALL" selected>All Sources</option>
-            <option value="INFOPARK">⚡ Infopark Kochi</option>
-            <option value="LINKEDIN">in LinkedIn</option>
-            <option value="MANUAL">✍️ Manual JDs</option>
-          </select>
-
-          <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
-            <option value="PENDING" selected>⚡ Yet to Generate (Default)</option>
-            <option value="ALL">All Status (Pending First)</option>
-            <option value="GENERATED">✓ Already Generated</option>
-            <option value="SENT">✉ Sent Applications</option>
-          </select>
-
-          <select id="selectCategory" class="select-clean" onchange="applyFilters()">
-            <option value="EMAIL_OUTREACH">Direct Email Outreach</option>
-            <option value="DRAFT_PORTAL">Drafts & Portals</option>
-            <option value="ALL">All Categories</option>
-          </select>
-
-          <span class="filter-count-badge hidden" id="discoveredResultsBadge"></span>
-
-          <div class="search-box">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="inputSearch" placeholder="Search author, keyword..." onkeyup="handleSearchKeyUp(event)" />
+      <!-- Structured 2-Tier Filter & Search Toolbar -->
+      <div class="toolbar-tiered">
+        <!-- Row 1: Primary Search & Experience Pills -->
+        <div class="toolbar-row primary-row">
+          <div class="filter-pills" id="expPills">
+            <button class="pill active" data-exp="ALL" onclick="setExpFilter('ALL')">All</button>
+            <button class="pill" data-exp="FRESHER" onclick="setExpFilter('FRESHER')">Fresher (0-1 yr)</button>
+            <button class="pill" data-exp="MID" onclick="setExpFilter('MID')">1 - 3 yrs</button>
+            <button class="pill" data-exp="SENIOR" onclick="setExpFilter('SENIOR')">3 - 5+ yrs</button>
           </div>
 
-          <!-- Batch Action Trigger -->
-          <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
-            🤖 Generate (<span id="batchCountBadge">0</span>)
+          <div class="row-actions">
+            <div class="search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearch" placeholder="Search author, keyword..." onkeyup="handleSearchKeyUp(event)" />
+            </div>
+
+            <button class="btn btn-add-jd" onclick="openAddJdModal()" title="Add Job Description Manually">
+              <span>+ Add JD</span>
+            </button>
+
+            <!-- Batch Action Trigger -->
+            <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
+              🤖 Generate (<span id="batchCountBadge">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Secondary Dropdown Filters, Results Badge & Clear Filters Button -->
+        <div class="toolbar-row secondary-row">
+          <div class="filters-group">
+            <span class="filters-label">Filters:</span>
+            <select id="selectSource" class="select-clean" onchange="applyFilters()" title="Filter by Job Source">
+              <option value="ALL" selected>All Sources</option>
+              <option value="INFOPARK">⚡ Infopark Kochi</option>
+              <option value="LINKEDIN">in LinkedIn</option>
+              <option value="MANUAL">✍️ Manual JDs</option>
+            </select>
+
+            <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
+              <option value="PENDING" selected>⚡ Yet to Generate (Default)</option>
+              <option value="ALL">All Status (Pending First)</option>
+              <option value="GENERATED">✓ Already Generated</option>
+              <option value="SENT">✉ Sent Applications</option>
+            </select>
+
+            <select id="selectCategory" class="select-clean" onchange="applyFilters()">
+              <option value="EMAIL_OUTREACH">Direct Email Outreach</option>
+              <option value="DRAFT_PORTAL">Drafts & Portals</option>
+              <option value="ALL">All Categories</option>
+            </select>
+
+            <span class="filter-count-badge hidden" id="discoveredResultsBadge"></span>
+          </div>
+
+          <button class="btn-clear-filters hidden" id="btnClearDiscoveredFilters" onclick="clearDiscoveredFilters()" title="Reset all filters and search back to defaults">
+            <span>✕ Clear Filters</span>
           </button>
         </div>
       </div>
@@ -268,35 +281,31 @@
           <div class="workspace-panel hidden" id="workspacePanel">
             <!-- Workspace Top Bar -->
             <div class="workspace-bar">
-              <div>
+              <div class="candidate-header-block">
                 <h2 class="candidate-title" id="reviewAuthorName">Candidate Name</h2>
                 <span class="candidate-meta" id="reviewHeadline">Headline</span>
               </div>
 
               <div class="bar-actions">
-                <button class="btn btn-outline" onclick="saveActiveDraftEdits()" title="Save changes to database">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <button class="btn btn-outline btn-sm" onclick="saveActiveDraftEdits()" title="Save changes to database">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                   <span>Save</span>
                 </button>
-                <button class="btn btn-primary" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail without manual clicking">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                <button class="btn btn-primary btn-sm" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail without manual clicking">
                   <span>🚀 Send Directly</span>
                 </button>
-                <button class="btn btn-outline" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft with resume for manual inspection">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                  <span>👁️ Open in Gmail</span>
+                <button class="btn btn-outline btn-sm" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft with resume for manual inspection">
+                  <span>👁️ Open Gmail</span>
                 </button>
-                <button class="btn btn-success" onclick="markActivePostSent()" title="Mark as successfully sent">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                <button class="btn btn-success btn-sm" onclick="markActivePostSent()" title="Mark as successfully sent">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                   <span>Mark Sent</span>
                 </button>
-                <button class="btn btn-outline btn-spam-action" onclick="markActivePostSpam()" title="Mark this JD as Spam / Scam and discard">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                  <span>🚫 Mark Spam</span>
+                <button class="btn btn-outline btn-sm btn-spam-action" onclick="markActivePostSpam()" title="Mark this JD as Spam / Scam and discard">
+                  <span>🚫 Spam</span>
                 </button>
-                <button class="btn btn-cancel-app" onclick="cancelActiveApplication()" title="Cancel & Discard this application">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-                  <span>✕ Cancel Application</span>
+                <button class="btn btn-cancel-app btn-sm" onclick="cancelActiveApplication()" title="Cancel & Discard this application">
+                  <span>✕ Cancel</span>
                 </button>
               </div>
             </div>
@@ -375,6 +384,9 @@
             <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
           </div>
+          <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
+            <span>✕ Clear</span>
+          </button>
         </div>
       </div>
 
