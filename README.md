@@ -24,9 +24,10 @@
 - **Safe by Default**: Zero hardcoded personal URLs or file paths in tracked files.
 
 ### 3. 🛡️ Intelligent Anti-Spam & Fraud Protection
-- **Exact Duplicate Auto-Rejection**: Automatically rejects incoming job posts sharing an exact contact email already in the database with the reason `"Spam: Duplicate email (<email>) already in database"`.
-- **Corporate Domain Anomaly Flagging**: Detects when different prefixes use the same custom/corporate domain across multiple recruiters, flagging the post with a `⚠️ Potential Spam` badge.
-- **Public Domain Whitelist**: Public email providers (`gmail.com`, `hotmail.com`, `yahoo.com`, `outlook.com`, `icloud.com`, `proton.me`, etc.) are exempted from domain-based spam grouping.
+- **Reported Scam Domain Auto-Rejection**: Automatically rejects incoming job posts whose contact email domains have previously been reported as scam or spam in the database, with a clear rejection reason and tooltip explaining why.
+- **Reported Email Rejection**: Rejects any incoming contact email that was explicitly reported as scam/spam, even on mainstream providers.
+- **Mainstream Provider Exemption**: Mainstream email providers (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `icloud.com`, `proton.me`, etc.) are exempt from domain-level rejections.
+- **Scam & Potential Scam Badges with Tooltips**: Posts flagged as `🛑 Scam` or `⚠️ Potential Scam` display actionable hover tooltips explaining the reason, and detail cards when clicking "View".
 - **1-Click Spam Marking**: Instantly flag any job post as spam/scam directly from the Home page or Review workspace (`🚫 Spam`).
 
 ### 4. 🗂️ 3-Stage Application Lifecycle

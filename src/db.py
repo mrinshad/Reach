@@ -85,6 +85,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     alter_sql = """
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_potential_spam BOOLEAN DEFAULT FALSE;
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS potential_spam_reason TEXT;
     """
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
@@ -183,48 +184,83 @@ PUBLIC_EMAIL_DOMAINS = {
 }
 
 
-def check_email_spam(emails: List[str], cur) -> Tuple[bool, bool, Optional[str]]:
+def check_email_spam(emails: List[str], cur) -> Tuple[bool, bool, Optional[str], Optional[str]]:
     """
-    Check extracted contact emails against database for duplicate/spam:
-    1. Exact Email Match -> is_exact_spam = True, auto-reject with comment.
-    2. Same Corporate/Custom Domain with Different Prefix -> is_potential_spam = True.
-       Exempts public email providers (gmail, hotmail, yahoo, etc.).
-    Returns: (is_exact_spam, is_potential_spam, spam_reason)
+    Check contact emails against known scam/spam reports:
+    1. For non-mainstream corporate/custom domains:
+       If the domain was previously reported as scam/spam in the database (status = 'REJECTED'
+       and rejection_reason contains 'scam' or 'spam', excluding legacy duplicate email logs),
+       then auto-reject the incoming post with the matched reason.
+    2. For any email (including mainstream domains like gmail.com, yahoo.com):
+       If the exact email was previously reported as scam/spam, auto-reject with the matched reason.
+    3. Potential scam check:
+       If another post from that corporate domain was flagged as potential scam, flag as potential scam.
+    
+    Returns: (is_scam, is_potential_scam, scam_reason, potential_scam_reason)
     """
     if not emails:
-        return False, False, None
+        return False, False, None, None
 
     clean_emails = [e.strip().lower() for e in emails if e and "@" in e]
     if not clean_emails:
-        return False, False, None
+        return False, False, None, None
 
-    # Check 1: Exact email duplicate in database
-    for em in clean_emails:
-        cur.execute(
-            "SELECT 1 FROM posts WHERE %s = ANY(contact_emails) OR %s ILIKE ANY(contact_emails) LIMIT 1;",
-            (em, em)
-        )
-        if cur.fetchone():
-            return True, False, f"Spam: Duplicate email ({em}) already in database"
-
-    # Check 2: Potential spam - same custom domain with different prefix
-    is_potential = False
     for em in clean_emails:
         parts = em.split("@", 1)
-        if len(parts) == 2:
-            prefix, domain = parts[0].strip(), parts[1].strip()
-            if domain and domain not in PUBLIC_EMAIL_DOMAINS:
-                cur.execute("""
-                    SELECT 1 FROM posts, unnest(contact_emails) as other_em
-                    WHERE split_part(lower(other_em), '@', 2) = %s
-                      AND split_part(lower(other_em), '@', 1) != %s
-                    LIMIT 1;
-                """, (domain, prefix))
-                if cur.fetchone():
-                    is_potential = True
-                    break
+        if len(parts) != 2:
+            continue
+        prefix, domain = parts[0].strip(), parts[1].strip()
+        if not domain:
+            continue
 
-    return False, is_potential, None
+        # Check 1: Non-mainstream domain reported as scam/spam
+        if domain not in PUBLIC_EMAIL_DOMAINS:
+            cur.execute("""
+                SELECT author_name, rejection_reason
+                FROM posts, unnest(contact_emails) as other_em
+                WHERE status = 'REJECTED'
+                  AND (rejection_reason ILIKE '%%scam%%' OR rejection_reason ILIKE '%%spam%%')
+                  AND rejection_reason NOT ILIKE '%%duplicate email%%'
+                  AND split_part(lower(other_em), '@', 2) = %s
+                LIMIT 1;
+            """, (domain,))
+            row = cur.fetchone()
+            if row:
+                author_match = row[0] or "Unknown"
+                orig_reason = row[1] or "Scam"
+                return True, False, f"Scam: Domain '{domain}' reported as scam/spam ({orig_reason})", None
+
+        # Check 2: Exact email reported as scam/spam (applies to ALL domains including gmail, yahoo, etc.)
+        cur.execute("""
+            SELECT author_name, rejection_reason
+            FROM posts
+            WHERE status = 'REJECTED'
+              AND (rejection_reason ILIKE '%%scam%%' OR rejection_reason ILIKE '%%spam%%')
+              AND rejection_reason NOT ILIKE '%%duplicate email%%'
+              AND (%s = ANY(contact_emails) OR %s ILIKE ANY(contact_emails))
+            LIMIT 1;
+        """, (em, em))
+        row = cur.fetchone()
+        if row:
+            author_match = row[0] or "Unknown"
+            orig_reason = row[1] or "Scam"
+            return True, False, f"Scam: Email '{em}' reported as scam/spam ({orig_reason})", None
+
+        # Check 3: Check if domain was previously marked as potential scam
+        if domain not in PUBLIC_EMAIL_DOMAINS:
+            cur.execute("""
+                SELECT author_name, potential_spam_reason
+                FROM posts, unnest(contact_emails) as other_em
+                WHERE is_potential_spam = TRUE
+                  AND split_part(lower(other_em), '@', 2) = %s
+                LIMIT 1;
+            """, (domain,))
+            row = cur.fetchone()
+            if row:
+                prior_reason = row[1] or "Suspicious domain activity"
+                return False, True, None, f"Potential Scam: Domain '{domain}' flagged ({prior_reason})"
+
+    return False, False, None, None
 
 
 def get_existing_post_identifiers(db_url: str = DEFAULT_DB_URL) -> Set[str]:
@@ -327,21 +363,21 @@ def upsert_post(
             category = post_data.get("category", "EMAIL_OUTREACH")
 
             # Email duplicate and spam check
-            is_exact_spam, is_potential_spam, spam_reason = check_email_spam(emails, cur)
-            initial_status = "REJECTED" if is_exact_spam else "DISCOVERED"
-            initial_reason = spam_reason if is_exact_spam else None
+            is_scam, is_potential_spam, scam_reason, potential_spam_reason = check_email_spam(emails, cur)
+            initial_status = "REJECTED" if is_scam else "DISCOVERED"
+            initial_reason = scam_reason if is_scam else None
 
             insert_sql = """
             INSERT INTO posts (
                 id, post_url, author_name, author_headline, author_profile,
                 posted_date_raw, full_text, contact_emails, external_links,
                 min_experience, max_experience, raw_experience, seniority_level,
-                is_fresher, category, status, rejection_reason, is_potential_spam, created_at, updated_at
+                is_fresher, category, status, rejection_reason, is_potential_spam, potential_spam_reason, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             ON CONFLICT (post_url) DO NOTHING
             RETURNING id;
@@ -365,6 +401,7 @@ def upsert_post(
                 initial_status,
                 initial_reason,
                 is_potential_spam,
+                potential_spam_reason,
             ))
             res = cur.fetchone()
             conn.commit()
@@ -652,21 +689,38 @@ def update_post_status(
     post_id: str,
     new_status: str,
     rejection_reason: Optional[str] = None,  # will be sanitized/truncated before saving
+    is_potential_spam: Optional[bool] = None,
+    potential_spam_reason: Optional[str] = None,
     db_url: str = DEFAULT_DB_URL
 ):
-    """Update post workflow status with optional cancellation/rejection reason."""
+    """Update post workflow status with optional cancellation/rejection reason and potential scam flags."""
+    set_clauses = ["status = %s", "updated_at = CURRENT_TIMESTAMP"]
+    params = [new_status]
+
     if rejection_reason is not None:
-        # Sanitize/truncate before saving so DB always has concise labels
         from src.chatgpt_service import clean_and_truncate_reason
-        rejection_reason = clean_and_truncate_reason(rejection_reason)
-        sql = "UPDATE posts SET status = %s, rejection_reason = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;"
-        params = (new_status, rejection_reason, post_id)
-    else:
-        sql = "UPDATE posts SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s;"
-        params = (new_status, post_id)
+        cleaned_reason = clean_and_truncate_reason(rejection_reason)
+        set_clauses.append("rejection_reason = %s")
+        params.append(cleaned_reason)
+
+        if is_potential_spam is None and ("potential scam" in rejection_reason.lower() or "potential spam" in rejection_reason.lower()):
+            is_potential_spam = True
+            if potential_spam_reason is None:
+                potential_spam_reason = rejection_reason
+
+    if is_potential_spam is not None:
+        set_clauses.append("is_potential_spam = %s")
+        params.append(is_potential_spam)
+
+    if potential_spam_reason is not None:
+        set_clauses.append("potential_spam_reason = %s")
+        params.append(potential_spam_reason)
+
+    params.append(post_id)
+    sql = f"UPDATE posts SET {', '.join(set_clauses)} WHERE id = %s;"
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, params)
+            cur.execute(sql, tuple(params))
         conn.commit()
 
 
@@ -714,6 +768,8 @@ def revert_post_to_draft(post_id: str, db_url: str = DEFAULT_DB_URL):
             ELSE 'DISCOVERED'
         END,
         rejection_reason = NULL,
+        is_potential_spam = FALSE,
+        potential_spam_reason = NULL,
         sent_at = NULL,
         approved_at = NULL,
         updated_at = CURRENT_TIMESTAMP

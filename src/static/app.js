@@ -664,8 +664,23 @@ function renderSkeletonRows() {
   tbody.innerHTML = rowsHtml;
 }
 
-function getSourceBadgeHtml(postUrl, isPotentialSpam = false) {
-  const url = postUrl || '';
+function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamReason = '', rejectionReason = '', status = '') {
+  let url = '';
+  let potentialSpam = isPotentialSpam;
+  let potentialReason = potentialSpamReason;
+  let rejReason = rejectionReason;
+  let postStatus = status;
+
+  if (typeof postOrUrl === 'object' && postOrUrl !== null) {
+    url = postOrUrl.post_url || '';
+    potentialSpam = !!postOrUrl.is_potential_spam;
+    potentialReason = postOrUrl.potential_spam_reason || '';
+    rejReason = postOrUrl.rejection_reason || '';
+    postStatus = postOrUrl.status || '';
+  } else {
+    url = postOrUrl || '';
+  }
+
   let badge = '';
   if (url.includes('infopark.in')) {
     badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">⚡ Infopark Kochi</span>`;
@@ -674,9 +689,18 @@ function getSourceBadgeHtml(postUrl, isPotentialSpam = false) {
   } else {
     badge = `<span class="source-pill source-linkedin" title="Source: LinkedIn Job Post">in LinkedIn</span>`;
   }
-  if (isPotentialSpam) {
-    badge += `<span class="badge-spam-warning" title="Potential Spam: Another contact email with same corporate domain already exists in database">⚠️ Potential Spam</span>`;
+
+  const isScam = rejReason && (rejReason.toLowerCase().includes('scam') || rejReason.toLowerCase().includes('spam'));
+  const isPotential = potentialSpam || (rejReason && rejReason.toLowerCase().includes('potential'));
+
+  if (isScam) {
+    const why = rejReason || 'Flagged as scam recruiter';
+    badge += `<span class="badge-scam-alert" title="🛑 Scam: ${escapeHtml(why)}">🛑 Scam</span>`;
+  } else if (isPotential) {
+    const why = potentialReason || rejReason || 'Suspicious contact domain or flagged recruiter activity';
+    badge += `<span class="badge-spam-warning" title="⚠️ Potential Scam: ${escapeHtml(why)}">⚠️ Potential Scam</span>`;
   }
+
   return badge;
 }
 
@@ -725,7 +749,7 @@ function renderPostsTable() {
         <div class="recruiter-cell">
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
             <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
-            ${getSourceBadgeHtml(post.post_url, post.is_potential_spam)}
+            ${getSourceBadgeHtml(post)}
           </div>
           <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
         </div>
@@ -1045,7 +1069,10 @@ async function fetchReviewPosts() {
         <div class="queue-item-inner">
           <input type="checkbox" class="draft-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectDraft('${post.id}')" title="Select for batch send" />
           <div class="queue-item-content">
-            <span class="queue-author">${escapeHtml(post.author_name)}</span>
+            <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+              <span class="queue-author">${escapeHtml(post.author_name)}</span>
+              ${getSourceBadgeHtml(post)}
+            </div>
             <span class="queue-email">✉ ${escapeHtml(email)}</span>
           </div>
         </div>
@@ -1079,7 +1106,10 @@ function selectReviewPost(post) {
   document.getElementById('emptyReviewState').classList.add('hidden');
   document.getElementById('workspacePanel').classList.remove('hidden');
 
-  document.getElementById('reviewAuthorName').textContent = post.author_name;
+  const authorEl = document.getElementById('reviewAuthorName');
+  if (authorEl) {
+    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)}`;
+  }
   document.getElementById('reviewHeadline').textContent = post.author_headline || 'N/A';
   document.getElementById('reviewTargetEmail').textContent = (post.contact_emails || []).join(', ') || 'None';
 
@@ -1636,7 +1666,7 @@ async function fetchSentPosts() {
           <div class="recruiter-cell" onclick="openPostModal('${post.id}')" title="Click to view full application details" style="cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
-              ${getSourceBadgeHtml(post.post_url, post.is_potential_spam)}
+              ${getSourceBadgeHtml(post)}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -2039,7 +2069,11 @@ function openPostModal(postId) {
   if (postUrl.includes('infopark.in')) sourceBadge = 'Infopark Kochi';
   else if (postUrl.startsWith('manual://') || postUrl.includes('manual')) sourceBadge = 'Manual JD';
 
-  document.getElementById('modalPostAuthor').textContent = `${post.author_name} — [${sourceBadge}]`;
+  const authorBadgeHtml = getSourceBadgeHtml(post);
+  const authorEl = document.getElementById('modalPostAuthor');
+  if (authorEl) {
+    authorEl.innerHTML = `${escapeHtml(post.author_name)} <span style="font-size: 0.8rem; font-weight: normal; color: var(--text-muted);">— [${escapeHtml(sourceBadge)}]</span> ${authorBadgeHtml}`;
+  }
   const metaEl = document.getElementById('modalPostMeta');
   if (metaEl) {
     const email = (post.contact_emails && post.contact_emails[0]) ? `Email: ${post.contact_emails[0]}` : 'No email detected';
@@ -2047,16 +2081,44 @@ function openPostModal(postId) {
     metaEl.textContent = `${email}${exp}`;
   }
 
-  // Status Banner (for Sent / Cancelled applications)
+  // Status Banner (for Sent / Cancelled / Scam / Potential Scam applications)
   const bannerEl = document.getElementById('modalPostStatusBanner');
   const restoreBtn = document.getElementById('modalPostRestoreBtn');
   if (bannerEl) {
-    if (post.status === 'REJECTED') {
+    const isScam = (post.rejection_reason && (post.rejection_reason.toLowerCase().includes('scam') || post.rejection_reason.toLowerCase().includes('spam')));
+    const isPotential = post.is_potential_spam || (post.rejection_reason && post.rejection_reason.toLowerCase().includes('potential'));
+
+    if (isScam) {
+      bannerEl.className = '';
+      bannerEl.innerHTML = `
+        <div class="modal-scam-box">
+          <div class="modal-scam-box-title">
+            <span>🛑</span> Recruiter Flagged as Scam / Spam
+          </div>
+          <div class="modal-scam-box-desc">
+            <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(post.rejection_reason || 'Marked as scam recruiter')}
+          </div>
+        </div>
+      `;
+    } else if (isPotential) {
+      bannerEl.className = '';
+      const whyText = post.potential_spam_reason || post.rejection_reason || 'Suspicious contact domain or flagged recruiter activity';
+      bannerEl.innerHTML = `
+        <div class="modal-potential-scam-box">
+          <div class="modal-potential-scam-box-title">
+            <span>⚠️</span> Warning: Recruiter Flagged as Potential Scam
+          </div>
+          <div class="modal-potential-scam-box-desc">
+            <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(whyText)}
+          </div>
+        </div>
+      `;
+    } else if (post.status === 'REJECTED') {
       bannerEl.className = '';
       bannerEl.innerHTML = `
         <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.65rem 0.85rem; color: #f87171; font-size: 0.82rem;">
           <strong>🚫 Application Cancelled / Discarded</strong>
-          ${post.rejection_reason ? `<div style="margin-top: 0.25rem; color: #fca5a5;">Reason: <strong>${escapeHtml(post.rejection_reason)}</strong></div>` : ''}
+          ${post.rejection_reason ? `<div style="margin-top: 0.25rem; color: #fca5a5;"><span style="font-weight: 600; color: #fff;">Why:</span> <strong>${escapeHtml(post.rejection_reason)}</strong></div>` : ''}
         </div>
       `;
     } else if (post.status === 'SENT') {

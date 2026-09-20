@@ -326,7 +326,14 @@ def api_mark_post_spam(post_id: str, payload: Optional[SpamPostPayload] = None):
         raise HTTPException(status_code=404, detail="Post not found")
     try:
         reason = payload.reason if (payload and payload.reason) else "Scam"
-        update_post_status(post_id, "REJECTED", rejection_reason=reason)
+        is_potential = "potential" in reason.lower()
+        update_post_status(
+            post_id,
+            "REJECTED",
+            rejection_reason=reason,
+            is_potential_spam=is_potential,
+            potential_spam_reason=reason if is_potential else None,
+        )
         return {"success": True, "message": f"Post marked as {reason} and moved to Others."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

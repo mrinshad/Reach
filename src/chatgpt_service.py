@@ -106,6 +106,13 @@ def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8
         return "Not suitable"
 
     words = t.split()
+    t_lower = t.lower()
+    # For scam/potential scam/spam reasons, preserve context up to 100 characters
+    if "scam" in t_lower or "spam" in t_lower:
+        if len(t) > 100:
+            return t[:97].rstrip() + "..."
+        return t
+
     if len(words) > max_words or len(t) > max_chars:
         # Take up to max_words and also respect max_chars
         truncated = " ".join(words[:max_words])
