@@ -1,0 +1,467 @@
+/* ==========================================================================
+   REVIEW.CSS — Review & Drafts Workspace: Queue Sidebar, Candidate Card, Post Scroll Expander, JD Mail Button & Draft Editor
+   ========================================================================== */
+
+  /* TAB 2: Review Workspace */
+  .review-split {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 1.25rem;
+    align-items: start;
+    min-height: 100%;
+    margin-bottom: 2rem;
+  }
+
+  .review-queue {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 1rem;
+    height: calc(100vh - 120px);
+    max-height: calc(100vh - 120px);
+  }
+
+  .queue-header {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .queue-title {
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+
+  .queue-search {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+  }
+
+  .search-box.sm {
+    width: 100%;
+  }
+
+  .search-box.sm input {
+    width: 100%;
+    font-size: 0.76rem;
+    padding: 0.35rem 0.65rem 0.35rem 1.85rem;
+  }
+
+  .search-box.sm .search-icon {
+    left: 0.55rem;
+  }
+
+  .queue-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .queue-item {
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .queue-item:hover {
+    border-color: var(--border-medium);
+  }
+
+  .queue-item.active {
+    border-color: var(--accent-indigo);
+    background: rgba(99, 102, 241, 0.12);
+  }
+
+  .queue-author {
+    font-weight: 700;
+    font-size: 0.83rem;
+    display: block;
+  }
+
+  .queue-email {
+    font-size: 0.73rem;
+    color: var(--accent-cyan);
+    font-family: var(--font-mono);
+  }
+
+  .review-main {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    height: auto;
+    min-height: calc(100vh - 120px);
+    overflow: visible;
+  }
+
+  .empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .empty-icon {
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .workspace-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.85rem;
+    margin-bottom: 1rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .candidate-header-block {
+    flex: 1 1 240px;
+    min-width: 0;
+    max-width: 480px;
+  }
+
+  .candidate-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .candidate-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .bar-actions .btn {
+    height: 34px;
+    padding: 0 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border-radius: var(--radius-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .bar-actions .btn svg {
+    flex-shrink: 0;
+  }
+
+  .bar-actions .btn-outline {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-medium);
+    color: var(--text-dim);
+  }
+
+  .bar-actions .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  .bar-actions .btn-accent {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+    border: 1px solid rgba(6, 182, 212, 0.4);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(6, 182, 212, 0.25);
+  }
+
+  .bar-actions .btn-accent:hover {
+    background: linear-gradient(135deg, #0369a1, #0891b2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(6, 182, 212, 0.4);
+  }
+
+  .bar-actions .btn-success {
+    background: linear-gradient(135deg, #059669, #10b981);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
+  }
+
+  .bar-actions .btn-success:hover {
+    background: linear-gradient(135deg, #047857, #059669);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
+  }
+
+  .bar-actions .btn-danger {
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    color: #fda4af;
+  }
+
+  .bar-actions .btn-danger:hover {
+    background: rgba(244, 63, 94, 0.2);
+    border-color: rgba(244, 63, 94, 0.5);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
+  .split-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .panel-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 560px;
+    height: 100%;
+  }
+
+  .box-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .box-title {
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  .link-small {
+    color: var(--accent-cyan);
+    font-size: 0.75rem;
+    text-decoration: none;
+  }
+
+  .tag-success {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent-emerald);
+  }
+
+  .post-specs {
+    font-size: 0.78rem;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.65rem;
+  }
+
+  .post-scroll {
+    background: var(--bg-body);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    padding: 0.85rem;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    min-height: 480px;
+    height: auto;
+    flex: 1;
+    overflow: visible;
+    word-break: break-word;
+  }
+
+  .editor-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    flex: 1;
+  }
+
+  .field-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .field-item label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .input-clean,
+  .textarea-clean {
+    background: var(--bg-input);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-xs);
+    font-family: var(--font-sans);
+    font-size: 0.84rem;
+    outline: none;
+  }
+
+  .textarea-clean {
+    min-height: 480px;
+    height: auto;
+    flex: 1;
+    line-height: 1.6;
+    resize: vertical;
+  }
+
+  .input-clean:focus,
+  .textarea-clean:focus {
+    border-color: var(--border-focus);
+  }
+
+  .btn-generate-mail-jd {
+    font-size: 0.72rem;
+    padding: 0.22rem 0.65rem;
+    border-color: rgba(99, 102, 241, 0.45);
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.12);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-generate-mail-jd:hover {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.8);
+    color: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
+  }
+
+  .btn-generate-mail-jd:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .resume-badge-box {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-xs);
+    padding: 0.45rem 0.65rem;
+    font-size: 0.75rem;
+    color: #c7d2fe;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+
+
+  /* Copy Buttons in Review Workspace */
+  .box-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm, 6px);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .box-copy-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .box-copy-btn.copied {
+    color: #34d399 !important;
+    border-color: rgba(16, 185, 129, 0.4) !important;
+    background: rgba(16, 185, 129, 0.15) !important;
+  }
+
+  /* Review Queue Multi-Select Batch Bar & Item Layout */
+  .queue-batch-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    background: rgba(15, 23, 42, 0.4);
+    border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    font-size: 0.74rem;
+  }
+
+  .queue-select-all-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: pointer;
+    color: var(--text-muted, #94a3b8);
+    user-select: none;
+    font-weight: 600;
+  }
+
+  .queue-select-all-label input[type="checkbox"],
+  .draft-checkbox {
+    accent-color: var(--accent-indigo, #6366f1);
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+  }
+
+  .queue-item-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .queue-item-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .btn-xs {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: var(--radius-sm, 6px);
+  }

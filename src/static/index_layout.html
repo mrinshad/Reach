@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reach — Job Outreach Automation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v=5.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <!-- Mobile Sidebar Backdrop Overlay -->
+  <div class="sidebar-backdrop hidden" id="sidebarBackdrop" onclick="closeMobileSidebar()"></div>
+
+  <div class="app-layout">
+    <!-- @include partials/sidebar.html -->
+
+    <!-- Main View Canvas -->
+    <main class="app-main" id="appMain">
+      <!-- @include partials/topbar.html -->
+      <!-- @include partials/task_drawer.html -->
+      <!-- @include partials/tab_discovered.html -->
+      <!-- @include partials/tab_review.html -->
+      <!-- @include partials/tab_sent.html -->
+      <!-- @include partials/tab_analytics.html -->
+    </main>
+  </div>
+
+  <!-- @include partials/modals.html -->
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Audio Element for App Chime Notifications -->
+  <audio id="notifAudio" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <script src="/static/app.js?v=5.0"></script>
+</body>
+</html>

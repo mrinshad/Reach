@@ -1,0 +1,487 @@
+/* ==========================================================================
+   DASHBOARD.CSS — Analytics Dashboard: Top KPI Cards, Chart Grids, Health Grid & Headless Mode Switch Card
+   ========================================================================== */
+
+  /* Top KPI Cards */
+  .analytics-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .kpi-card {
+    background: var(--bg-surface, #0f172a);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 12px);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .kpi-card.glow-emerald::before {
+    background: linear-gradient(90deg, #10b981, #34d399);
+  }
+
+  .kpi-card.glow-sky::before {
+    background: linear-gradient(90deg, #0ea5e9, #38bdf8);
+  }
+
+  .kpi-card.glow-indigo::before {
+    background: linear-gradient(90deg, #6366f1, #818cf8);
+  }
+
+  .kpi-card.glow-rose::before {
+    background: linear-gradient(90deg, #f43f5e, #fb7185);
+  }
+
+  .kpi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .kpi-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .kpi-icon {
+    font-size: 1.15rem;
+  }
+
+  .kpi-num-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-bottom: 0.65rem;
+    min-width: 0;
+  }
+
+  .kpi-value {
+    font-family: var(--font-heading, 'Space Grotesk', sans-serif);
+    font-size: clamp(1.8rem, 2.75vw, 2.35rem);
+    font-weight: 800;
+    color: #f8fafc;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .kpi-sublabel {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .kpi-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.74rem;
+    flex-wrap: wrap;
+  }
+
+  .kpi-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 0.7rem;
+  }
+
+  .kpi-badge.badge-green {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .kpi-badge.badge-blue {
+    background: rgba(14, 165, 233, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 165, 233, 0.3);
+  }
+
+  .kpi-badge.badge-purple {
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+  }
+
+  .kpi-badge.badge-rose {
+    background: rgba(244, 63, 94, 0.15);
+    color: #fb7185;
+    border: 1px solid rgba(244, 63, 94, 0.3);
+  }
+
+  .kpi-note {
+    color: var(--text-dim, #64748b);
+  }
+
+  /* Chart Layout Grids */
+  .analytics-grid-two {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .analytics-grid-three {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .analytics-grid-single {
+    display: grid;
+    grid-template-columns: 1fr;
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-card {
+    background: var(--bg-surface, #0f172a);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+    border-radius: var(--radius-md, 12px);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    gap: 0.5rem;
+  }
+
+  .chart-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin: 0;
+  }
+
+  .chart-subtitle {
+    font-size: 0.74rem;
+    color: var(--text-muted, #94a3b8);
+    margin-top: 0.2rem;
+    margin-bottom: 0;
+  }
+
+  .chart-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9999px;
+    color: #cbd5e1;
+    white-space: nowrap;
+  }
+
+  .chart-container {
+    position: relative;
+    height: 280px;
+    width: 100%;
+  }
+
+  .chart-container-donut {
+    position: relative;
+    height: 240px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .chart-container-horizontal {
+    position: relative;
+    min-height: 260px;
+    height: auto;
+    width: 100%;
+  }
+
+  @media (max-width: 768px) {
+    .analytics-grid-two {
+      grid-template-columns: 1fr;
+    }
+    .analytics-grid-three {
+      grid-template-columns: 1fr;
+    }
+    .analytics-toolbar {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .analytics-actions {
+      width: 100%;
+      justify-content: space-between;
+      overflow-x: auto;
+    }
+  }
+
+
+
+  /* Dashboard Sections & Clickable KPI Cards */
+  .dashboard-section {
+    margin-bottom: 1.75rem;
+  }
+
+  .dashboard-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.9rem;
+  }
+
+  .dashboard-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
+  }
+
+  .dashboard-section-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }
+
+  .clickable-kpi {
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .clickable-kpi:hover {
+    transform: translateY(-2px);
+    border-color: rgba(99, 102, 241, 0.45);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .kpi-jump-action {
+    margin-top: 0.65rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    opacity: 0.75;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .clickable-kpi:hover .kpi-jump-action {
+    opacity: 1;
+    transform: translateX(2px);
+  }
+
+  /* Integration Health Grid */
+  .health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .health-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .health-card:hover {
+    border-color: var(--border-medium);
+  }
+
+  .health-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .health-card-icon {
+    font-size: 1.15rem;
+  }
+
+  .health-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+
+  .health-status-dot.ok {
+    background: var(--accent-emerald);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  }
+
+  .health-status-dot.warn {
+    background: var(--accent-amber);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+  }
+
+  .health-status-dot.error {
+    background: var(--accent-rose);
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.6);
+  }
+
+  .health-card-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .health-card-status {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Headless Browser Mode Switch & Card */
+  .headless-toggle-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.85rem;
+    transition: all 0.2s ease;
+  }
+
+  .headless-toggle-card.active-headless {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.35);
+  }
+
+  .headless-toggle-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .headless-card-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .headless-card-desc {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+    line-height: 1.35;
+  }
+
+  /* iOS-Style Switch */
+  .toggle-switch-ios {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch-ios input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-slider-ios {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(255, 255, 255, 0.15);
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .toggle-slider-ios:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .toggle-switch-ios input:checked + .toggle-slider-ios {
+    background-color: var(--accent-indigo);
+    border-color: var(--accent-indigo);
+  }
+
+  .toggle-switch-ios input:checked + .toggle-slider-ios:before {
+    transform: translateX(20px);
+  }
+
+  /* Quick Headless Sidebar Button */
+  .sidebar-sys-btn.headless-active {
+    color: #a5b4fc !important;
+    background: rgba(99, 102, 241, 0.2) !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
+  }
+
+  /* ==========================================================================
+     MOBILE & TABLET RESPONSIVE SYSTEM (<= 768px & <= 480px)
+     ========================================================================== */

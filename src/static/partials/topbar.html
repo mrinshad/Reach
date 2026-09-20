@@ -1,0 +1,46 @@
+<!-- App Header / Topbar -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button class="icon-btn sm sidebar-topbar-toggle" id="btnTopbarSidebarToggle" onclick="toggleSidebarCollapse()" title="Toggle Sidebar (Expand/Collapse)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="topbar-title-text-group">
+            <h1 class="topbar-page-title" id="pageTitleDisplay">Dashboard Overview</h1>
+            <span class="topbar-breadcrumb" id="pageBreadcrumbDisplay">Real-time database intelligence & automation metrics</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-outline btn-sm btn-topbar" onclick="openAddJdModal()" title="Add Job Description Manually">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Add JD</span>
+          </button>
+          <button class="btn btn-outline btn-sm btn-direct-outreach btn-topbar" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <span>Direct Outreach</span>
+          </button>
+
+          <!-- In-App Notification Center Dropdown -->
+          <div class="notification-center-wrapper">
+            <button class="icon-btn notification-bell-btn" id="btnNotifications" onclick="toggleNotificationCenter()" title="Notifications & Automation Activity">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span class="notification-badge hidden" id="notificationBadge">0</span>
+            </button>
+            <div class="notification-dropdown hidden" id="notificationDropdown">
+              <div class="notification-header">
+                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                  <span style="font-weight: 700; font-size: 0.88rem; color: #fff;">Activity & Alerts</span>
+                  <span class="badge-count" id="notificationCountBadge">0</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                  <button class="btn-link-xs" onclick="testNotificationAlert()" id="btnTestNotifAlert" title="Test audio chime, vibration & notification popup">Test</button>
+                  <button class="btn-link-xs" onclick="handleNotificationPermClick()" id="btnDesktopPerm" title="Alert Notification Settings">Enable Alerts</button>
+                  <button class="btn-link-xs text-muted" onclick="clearAllNotifications()">Clear</button>
+                </div>
+              </div>
+              <div class="notification-list" id="notificationList">
+                <div class="notification-empty">No notifications yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>

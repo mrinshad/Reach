@@ -10,7 +10,7 @@ import threading
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 
 import uuid
@@ -165,13 +165,60 @@ class DirectOutreachPayload(BaseModel):
     mode: Optional[str] = "send"
 
 
+def get_rendered_index_html() -> str:
+    """Dynamically assemble index_layout.html with partials from src/static/partials/."""
+    layout_path = os.path.join(STATIC_DIR, "index_layout.html")
+    if not os.path.exists(layout_path):
+        fallback_file = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(fallback_file):
+            with open(fallback_file, "r", encoding="utf-8") as f:
+                return f.read()
+        return "<html><body><h3>Reach Dashboard</h3></body></html>"
+
+    try:
+        with open(layout_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        def replace_include(match):
+            rel_path = match.group(1).strip()
+            full_path = os.path.join(STATIC_DIR, rel_path)
+            if os.path.exists(full_path):
+                with open(full_path, "r", encoding="utf-8") as pf:
+                    return pf.read()
+            return f"<!-- Missing include: {rel_path} -->"
+
+        pattern = re.compile(r"<!--\s*@include\s+([^\s]+)\s*-->")
+        assembled = pattern.sub(replace_include, content)
+
+        # Keep static index.html in sync on disk for static file serving/caching
+        try:
+            index_file = os.path.join(STATIC_DIR, "index.html")
+            with open(index_file, "w", encoding="utf-8") as f:
+                f.write(assembled)
+        except Exception:
+            pass
+
+        return assembled
+    except Exception as e:
+        fallback_file = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(fallback_file):
+            with open(fallback_file, "r", encoding="utf-8") as f:
+                return f.read()
+        return f"<html><body><h3>Error assembling dashboard: {e}</h3></body></html>"
+
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
-    """Serve the single-page dashboard."""
-    index_file = os.path.join(STATIC_DIR, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return FileResponse(index_file)
+    """Serve the modularly assembled single-page dashboard."""
+    html_content = get_rendered_index_html()
+    return HTMLResponse(content=html_content, media_type="text/html")
+
+
+@app.api_route("/index.html", methods=["GET", "HEAD"])
+def serve_index_html():
+    """Serve index.html explicitly."""
+    html_content = get_rendered_index_html()
+    return HTMLResponse(content=html_content, media_type="text/html")
 
 
 @app.api_route("/sw.js", methods=["GET", "HEAD"])

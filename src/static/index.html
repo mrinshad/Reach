@@ -204,8 +204,9 @@
       </div>
     </aside>
 
+
     <!-- Main View Canvas -->
-    <div class="app-main">
+    <main class="app-main" id="appMain">
       <!-- App Header / Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
@@ -316,7 +317,7 @@
 
       <main class="content-wrapper">
 
-    <!-- TAB 1: Discovered Posts (Paginated Table) -->
+      <!-- TAB 1: Discovered Posts (Paginated Table) -->
     <div class="tab-panel hidden" id="tabDiscovered">
       <!-- Structured 2-Tier Filter & Search Toolbar -->
       <div class="toolbar-tiered">
@@ -474,7 +475,7 @@
       </div>
     </div>
 
-    <!-- TAB 2: Review & Drafts (Side-by-Side) -->
+      <!-- TAB 2: Review & Drafts (Side-by-Side) -->
     <div class="tab-panel hidden" id="tabReview">
       <div class="review-split">
         <!-- Sidebar: Items Ready -->
@@ -610,7 +611,7 @@
       </div>
     </div>
 
-    <!-- TAB 3: Others (Sent & Cancelled Applications History) -->
+      <!-- TAB 3: Others (Sent & Cancelled Applications History) -->
     <div class="tab-panel hidden" id="tabSent">
       <div class="toolbar" style="margin-bottom: 0.85rem;">
         <div class="filter-pills" id="othersPills">
@@ -681,7 +682,7 @@
       </div>
     </div>
 
-    <!-- TAB 4: Analytics Dashboard (Home) -->
+      <!-- TAB 4: Analytics Dashboard (Home) -->
     <div class="tab-panel" id="tabAnalytics">
       <!-- Analytics Header Toolbar -->
       <div class="analytics-toolbar">
@@ -990,6 +991,9 @@
   </main>
 </div> <!-- .app-main -->
 </div> <!-- .app-layout -->
+
+    </main>
+  </div>
 
   <!-- Post Details Expandable Modal -->
   <div class="modal-overlay hidden" id="postModal" onclick="if (event.target === this) closePostModal()">
@@ -1356,9 +1360,15 @@
     </div>
   </div>
 
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=5.1"></script>
+  <!-- Audio Element for App Chime Notifications -->
+  <audio id="notifAudio" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <script src="/static/app.js?v=5.0"></script>
 </body>
 </html>

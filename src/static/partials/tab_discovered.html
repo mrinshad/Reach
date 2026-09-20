@@ -1,0 +1,157 @@
+<!-- TAB 1: Discovered Posts (Paginated Table) -->
+    <div class="tab-panel hidden" id="tabDiscovered">
+      <!-- Structured 2-Tier Filter & Search Toolbar -->
+      <div class="toolbar-tiered">
+        <!-- Row 1: Primary Search & Experience Pills -->
+        <div class="toolbar-row primary-row">
+          <div class="filter-pills" id="expPills">
+            <button class="pill active" data-exp="ALL" onclick="setExpFilter('ALL')">All</button>
+            <button class="pill" data-exp="FRESHER" onclick="setExpFilter('FRESHER')">Fresher (0-1 yr)</button>
+            <button class="pill" data-exp="MID" onclick="setExpFilter('MID')">1 - 3 yrs</button>
+            <button class="pill" data-exp="SENIOR" onclick="setExpFilter('SENIOR')">3 - 5+ yrs</button>
+          </div>
+
+          <div class="row-actions">
+            <div class="search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearch" placeholder="Search author, keyword..." onkeyup="handleSearchKeyUp(event)" />
+            </div>
+
+            <button class="btn btn-add-jd" onclick="openAddJdModal()" title="Add Job Description Manually">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Add JD</span>
+            </button>
+
+            <button class="btn btn-outline btn-direct-outreach" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <span>Direct Outreach</span>
+            </button>
+
+            <!-- Batch Action Trigger -->
+            <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
+              <span>Generate (<span id="batchCountBadge">0</span>)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Secondary Dropdown Filters, Results Badge & Clear Filters Button -->
+        <div class="toolbar-row secondary-row">
+          <div class="filters-group">
+            <span class="filters-label">Filters:</span>
+            <select id="selectSource" class="select-clean" onchange="applyFilters()" title="Filter by Job Source">
+              <option value="ALL" selected>All Sources</option>
+              <option value="INFOPARK">Infopark Kochi</option>
+              <option value="LINKEDIN">LinkedIn</option>
+              <option value="MANUAL">Manual JDs</option>
+              <option value="DIRECT">Direct Outreach</option>
+            </select>
+
+            <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
+              <option value="PENDING" selected>Yet to Generate (Default)</option>
+              <option value="ALL">All Status (Pending First)</option>
+              <option value="GENERATED">Already Generated</option>
+              <option value="SENT">Sent Applications</option>
+              <option value="REJECTED">Cancelled / Screened</option>
+            </select>
+
+            <select id="selectCategory" class="select-clean" onchange="applyFilters()">
+              <option value="EMAIL_OUTREACH">Direct Email Outreach</option>
+              <option value="DRAFT_PORTAL">Drafts & Portals</option>
+              <option value="ALL">All Categories</option>
+            </select>
+
+            <select id="selectLocationFilter" class="select-clean" onchange="applyFilters()" title="Filter by Job Location">
+              <option value="ALL" selected>All Locations</option>
+            </select>
+
+            <select id="selectReasonFilterDiscovered" class="select-clean" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
+              <option value="ALL" selected>All Reasons</option>
+            </select>
+
+            <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
+              <option value="ALL" selected>All Dates</option>
+              <option value="TODAY">Today</option>
+              <option value="YESTERDAY">Yesterday</option>
+              <option value="WEEK">Past 7 Days</option>
+            </select>
+
+            <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
+              <option value="default" selected>Sort: Default</option>
+              <option value="exp_asc">Exp: Low to High</option>
+              <option value="exp_desc">Exp: High to Low</option>
+              <option value="date_desc">Date: Newest First</option>
+              <option value="date_asc">Date: Oldest First</option>
+              <option value="author_asc">Author: A → Z</option>
+              <option value="author_desc">Author: Z → A</option>
+            </select>
+
+            <span class="filter-count-badge hidden" id="discoveredResultsBadge"></span>
+          </div>
+
+          <button class="btn-clear-filters hidden" id="btnClearDiscoveredFilters" onclick="clearDiscoveredFilters()" title="Reset all filters and search back to defaults">
+            <span>✕ Clear Filters</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Paginated Data Table Container -->
+      <div class="table-card">
+        <table class="reach-table">
+          <thead>
+            <tr>
+              <th width="35">
+                <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
+              </th>
+              <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
+                <div class="th-sort-wrapper">
+                  <span>Recruiter / Author</span>
+                  <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                </div>
+              </th>
+              <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                <div class="th-sort-wrapper">
+                  <span>Experience</span>
+                  <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                </div>
+              </th>
+              <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                <div class="th-sort-wrapper">
+                  <span>Date</span>
+                  <span class="sort-indicator" id="sortDateIndicator">↕</span>
+                </div>
+              </th>
+              <th width="190">Contact Email</th>
+              <th>Post Preview</th>
+              <th width="180" style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="postsTableBody">
+            <!-- Populated dynamically or with skeleton -->
+          </tbody>
+        </table>
+
+        <!-- Table Footer / Pagination Controls -->
+        <div class="table-footer">
+          <div class="pagination-info" id="paginationInfo">
+            Showing 0–0 of 0 posts
+          </div>
+
+          <div class="pagination-controls">
+            <div class="rows-per-page">
+              <span>Rows:</span>
+              <select id="selectLimit" onchange="changeRowsPerPage(this.value)">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+
+            <div class="page-buttons" id="pageButtons">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
