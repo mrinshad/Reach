@@ -1065,25 +1065,23 @@ async function fetchStats() {
     const elSent = document.getElementById('statSent');
     if (elSent) elSent.textContent = othersCount;
 
-    // Sidebar Navigation Badges: Pending generation for Discovered, Ready count for Review, None for History
+    // Sidebar Navigation Badges:
+    // 1. Discovered Jobs: count of yet to generate JDs
     const countDiscEl = document.getElementById('countDiscovered');
     if (countDiscEl) {
-      const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : (stats.discovered_total || 0);
+      const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : 0;
       countDiscEl.textContent = pendingCount;
-      countDiscEl.title = `${pendingCount} jobs yet to generate emails`;
+      countDiscEl.title = `${pendingCount} direct email outreach jobs yet to generate`;
     }
 
+    // 2. Review & Drafts: count of drafts ready for review
     const countRevEl = document.getElementById('countReview');
     if (countRevEl) {
       countRevEl.textContent = draftsReady;
       countRevEl.title = `${draftsReady} drafts ready for review`;
     }
 
-    const countSentEl = document.getElementById('countSent');
-    if (countSentEl) {
-      countSentEl.textContent = '';
-      countSentEl.style.display = 'none';
-    }
+    // 3. Sent & History: show nothing (no badge)
 
     const cancelledCount = stats.rejected_total || 0;
     const elOthersAll = document.getElementById('countOthersAll');
@@ -2450,9 +2448,6 @@ async function fetchSentPosts() {
     const data = await res.json();
     state.sentPosts = data.posts || [];
     state.sentTotal = data.total !== undefined ? data.total : (data.posts ? data.posts.length : 0);
-
-    const countSentEl = document.getElementById('countSent');
-    if (countSentEl) countSentEl.textContent = state.sentTotal;
 
     const sentBadge = document.getElementById('sentResultsBadge');
     const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '') || (state.othersReason && state.othersReason !== 'ALL');
