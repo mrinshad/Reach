@@ -398,7 +398,8 @@ reach-job-automation/
 | `POST` | `/api/posts/{id}/mark-sent`| Mark application as sent with timestamp |
 | `GET` | `/api/reasons` | Dynamic list of cancellation/rejection reasons with real-time post counts |
 | `GET` | `/api/locations` | Distinct job locations present across discovered posts |
-| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a single post |
+| `GET` | `/sw.js` | Root-scoped Service Worker for mobile browser notifications |
+| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a single post (supports `?force=true`) |
 | `POST` | `/api/generate-batch` | Enqueue ChatGPT email generation for selected post IDs |
 | `POST` | `/api/open-gmail/{id}` | Enqueue opening Gmail compose with resume attached in Playwright Firefox |
 | `POST` | `/api/send-direct/{id}` | Enqueue direct email dispatch via Gmail without manual clicking |

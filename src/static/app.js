@@ -329,9 +329,90 @@ let notificationState = {
   list: [],
   unreadCount: 0,
   audioCtx: null,
+  swRegistration: null,
 };
 
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+}
+
+function registerReachServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        notificationState.swRegistration = reg;
+      })
+      .catch((err) => {
+        console.debug('Service Worker register notice:', err);
+      });
+  }
+}
+
+function unlockMobileAudioAndHaptics() {
+  const unlock = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtxClass) {
+        if (!notificationState.audioCtx || notificationState.audioCtx.state === 'closed') {
+          notificationState.audioCtx = new AudioCtxClass();
+        }
+        if (notificationState.audioCtx.state === 'suspended') {
+          notificationState.audioCtx.resume();
+        }
+      }
+    } catch (_) {}
+    window.removeEventListener('touchstart', unlock, true);
+    window.removeEventListener('touchend', unlock, true);
+    window.removeEventListener('click', unlock, true);
+  };
+  window.addEventListener('touchstart', unlock, true);
+  window.addEventListener('touchend', unlock, true);
+  window.addEventListener('click', unlock, true);
+}
+
+function triggerHapticVibration(type = 'info') {
+  if (!('vibrate' in navigator)) return;
+  try {
+    if (type === 'error') {
+      navigator.vibrate([180, 80, 180, 80, 250]);
+    } else if (type === 'success') {
+      navigator.vibrate([120, 60, 140]);
+    } else {
+      navigator.vibrate([80]);
+    }
+  } catch (_) {}
+}
+
+let notifTitleFlashTimer = null;
+function flashDocumentTitle(alertText) {
+  if (!document.hidden) return;
+  clearInterval(notifTitleFlashTimer);
+  const originalTitle = document.title || 'Reach Job Automation';
+  let flipped = false;
+  let count = 0;
+  notifTitleFlashTimer = setInterval(() => {
+    document.title = flipped ? `🔔 ${alertText}` : originalTitle;
+    flipped = !flipped;
+    count++;
+    if (count > 24) {
+      clearInterval(notifTitleFlashTimer);
+      document.title = originalTitle;
+    }
+  }, 900);
+
+  const clearFlash = () => {
+    if (!document.hidden) {
+      clearInterval(notifTitleFlashTimer);
+      document.title = originalTitle;
+      document.removeEventListener('visibilitychange', clearFlash);
+    }
+  };
+  document.addEventListener('visibilitychange', clearFlash);
+}
+
 function initNotificationSystem() {
+  registerReachServiceWorker();
+  unlockMobileAudioAndHaptics();
   try {
     const saved = localStorage.getItem('reach_notifications');
     if (saved) {
@@ -357,34 +438,144 @@ function initNotificationSystem() {
 function updateDesktopPermButtonUI() {
   const btn = document.getElementById('btnDesktopPerm');
   if (!btn) return;
+  const isMobile = isMobileDevice();
+
   if (!('Notification' in window)) {
-    btn.style.display = 'none';
+    btn.textContent = isMobile ? 'Mobile Sound & Haptic' : 'Sound Alerts';
+    btn.className = 'btn-link-xs text-success';
+    btn.disabled = false;
     return;
   }
-  if (Notification.permission === 'granted') {
-    btn.textContent = 'Desktop: On';
-    btn.style.opacity = '0.7';
-    btn.disabled = true;
-  } else if (Notification.permission === 'denied') {
-    btn.textContent = 'Desktop: Blocked';
-    btn.disabled = true;
-  } else {
-    btn.textContent = 'Enable Desktop Alerts';
+
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    btn.textContent = isMobile ? 'Mobile Alerts: On' : 'Desktop: On';
+    btn.className = 'btn-link-xs text-success';
     btn.disabled = false;
+    btn.title = 'Alerts are active. Tap to test or manage.';
+  } else if (perm === 'denied') {
+    btn.textContent = isMobile ? 'Mobile: Blocked (Fix)' : 'Desktop: Blocked (Fix)';
+    btn.className = 'btn-link-xs text-danger';
+    btn.disabled = false;
+    btn.title = 'Notification permission blocked. Tap for guide on unblocking.';
+  } else {
+    btn.textContent = isMobile ? 'Enable Mobile Alerts' : 'Enable Desktop Alerts';
+    btn.className = 'btn-link-xs';
+    btn.disabled = false;
+    btn.title = 'Enable browser notifications';
   }
+}
+
+async function handleNotificationPermClick() {
+  if (!('Notification' in window)) {
+    openNotificationHelpModal();
+    return;
+  }
+  if (Notification.permission === 'denied' || Notification.permission === 'granted') {
+    openNotificationHelpModal();
+  } else {
+    await requestNotificationPermission();
+  }
+}
+
+function openNotificationHelpModal() {
+  const modal = document.getElementById('notifHelpModal');
+  if (!modal) return;
+
+  const sysBadge = document.getElementById('notifStatusSystem');
+  const vibBadge = document.getElementById('notifStatusVibration');
+  const httpNotice = document.getElementById('notifHttpNotice');
+
+  if (sysBadge) {
+    if (!('Notification' in window)) {
+      sysBadge.textContent = 'Not Supported';
+      sysBadge.className = 'notif-status-badge';
+    } else if (Notification.permission === 'granted') {
+      sysBadge.textContent = 'Allowed';
+      sysBadge.className = 'notif-status-badge badge-active';
+    } else if (Notification.permission === 'denied') {
+      sysBadge.textContent = 'Blocked';
+      sysBadge.className = 'notif-status-badge badge-blocked';
+    } else {
+      sysBadge.textContent = 'Prompt Needed';
+      sysBadge.className = 'notif-status-badge badge-prompt';
+    }
+  }
+
+  if (vibBadge) {
+    if ('vibrate' in navigator) {
+      vibBadge.textContent = 'Active';
+      vibBadge.className = 'notif-status-badge badge-active';
+    } else {
+      vibBadge.textContent = 'Desktop / N/A';
+      vibBadge.className = 'notif-status-badge';
+    }
+  }
+
+  if (httpNotice) {
+    const isHttpsOrLocalhost = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    httpNotice.style.display = isHttpsOrLocalhost ? 'none' : 'block';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeNotificationHelpModal() {
+  const modal = document.getElementById('notifHelpModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function testNotificationAlert() {
+  playNotificationSound();
+  triggerHapticVibration('success');
+  flashDocumentTitle('Test Alert Received!');
+
+  if ('Notification' in window && Notification.permission === 'granted') {
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification('Reach Automation Alert', {
+          body: 'Test notification verified! Alerts, sound & vibration are active.',
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'reach-test-' + Date.now(),
+          renotify: true,
+        }).catch(() => {
+          try {
+            new Notification('Reach Automation Alert', {
+              body: 'Test notification verified! Alerts, sound & vibration are active.',
+              icon: '/favicon.ico',
+            });
+          } catch (_) {}
+        });
+      }).catch(() => {});
+    } else {
+      try {
+        new Notification('Reach Automation Alert', {
+          body: 'Test notification verified! Alerts, sound & vibration are active.',
+          icon: '/favicon.ico',
+        });
+      } catch (_) {}
+    }
+  }
+
+  showToast('🔊 Test alert fired! Sound, vibration & notifications active.', 'success');
 }
 
 async function requestNotificationPermission() {
   if (!('Notification' in window)) {
-    showToast('Browser does not support desktop notifications', 'warn');
+    showToast('Browser does not support system notifications', 'warn');
     return;
   }
   try {
     const perm = await Notification.requestPermission();
     updateDesktopPermButtonUI();
     if (perm === 'granted') {
-      showToast('Desktop notifications enabled!', 'success');
+      showToast('Notifications enabled successfully!', 'success');
       playNotificationSound();
+      triggerHapticVibration('success');
+    } else if (perm === 'denied') {
+      showToast('Notifications blocked. Tap to view unblock instructions.', 'warn');
+      openNotificationHelpModal();
     }
   } catch (err) {
     console.warn('Notification permission error:', err);
@@ -429,7 +620,7 @@ function playNotificationSound() {
     osc2.start(now + 0.12);
     osc2.stop(now + 0.6);
   } catch (err) {
-    console.debug('Audio chime error:', err);
+    console.debug('Audio chime notice:', err);
   }
 }
 
@@ -457,15 +648,36 @@ function sendAppNotification({ title, message, type = 'info' }) {
   updateNotificationBadgeUI();
   renderNotificationCenter();
   playNotificationSound();
+  triggerHapticVibration(type);
+  flashDocumentTitle(item.title);
 
-  // Desktop native notification if permitted
+  // System notification via Service Worker (Android Chrome) or Notification API (Desktop)
   if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      new Notification(item.title, {
-        body: item.message,
-        icon: '/favicon.ico',
-      });
-    } catch (_) {}
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(item.title, {
+          body: item.message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'reach-task-' + Date.now(),
+          renotify: true,
+        }).catch(() => {
+          try {
+            new Notification(item.title, {
+              body: item.message,
+              icon: '/favicon.ico',
+            });
+          } catch (_) {}
+        });
+      }).catch(() => {});
+    } else {
+      try {
+        new Notification(item.title, {
+          body: item.message,
+          icon: '/favicon.ico',
+        });
+      } catch (_) {}
+    }
   }
 }
 
@@ -853,18 +1065,24 @@ async function fetchStats() {
     const elSent = document.getElementById('statSent');
     if (elSent) elSent.textContent = othersCount;
 
-    // Tab Header Count Badges
+    // Sidebar Navigation Badges: Pending generation for Discovered, Ready count for Review, None for History
     const countDiscEl = document.getElementById('countDiscovered');
-    if (countDiscEl && state.activeTab !== 'tabDiscovered') {
-      countDiscEl.textContent = discoveredTotal;
+    if (countDiscEl) {
+      const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : (stats.discovered_total || 0);
+      countDiscEl.textContent = pendingCount;
+      countDiscEl.title = `${pendingCount} jobs yet to generate emails`;
     }
 
     const countRevEl = document.getElementById('countReview');
-    if (countRevEl) countRevEl.textContent = draftsReady;
+    if (countRevEl) {
+      countRevEl.textContent = draftsReady;
+      countRevEl.title = `${draftsReady} drafts ready for review`;
+    }
 
     const countSentEl = document.getElementById('countSent');
-    if (countSentEl && state.activeTab !== 'tabSent') {
-      countSentEl.textContent = othersCount;
+    if (countSentEl) {
+      countSentEl.textContent = '';
+      countSentEl.style.display = 'none';
     }
 
     const cancelledCount = stats.rejected_total || 0;
@@ -1020,9 +1238,6 @@ async function fetchDiscoveredPosts() {
 
     state.posts = data.posts || [];
     state.total = data.total || 0;
-
-    const countDiscEl = document.getElementById('countDiscovered');
-    if (countDiscEl) countDiscEl.textContent = state.total;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
     // Clear Filters button: visible whenever any filter is not default/ALL
@@ -1670,6 +1885,59 @@ async function saveActiveDraftEdits() {
     }
   } catch (err) {
     showAlert('Save Error', err.message);
+  }
+}
+
+async function generateEmailForActiveDraft() {
+  if (!state.activeReviewPost || !state.activePostId) {
+    showToast('Please select a job post from the left queue to generate outreach email.', 'warn');
+    return;
+  }
+  const postId = state.activePostId;
+  const author = state.activeReviewPost.author_name || 'the job poster';
+
+  const confirmed = await showConfirm(
+    'Generate Outreach Email from JD',
+    `This will submit the full job description for "${author}" to ChatGPT and generate a tailored cold outreach subject & body, replacing the current draft. Proceed?`,
+    'Generate Now'
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btnGenerateMailFromJd');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `
+      <svg class="spin-fast" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+      <span>Generating...</span>
+    `;
+  }
+
+  try {
+    const res = await fetch(`/api/generate-email/${postId}?force=true`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued email generation (Queue #${data.position})`, 'info');
+      } else {
+        showToast('ChatGPT email generation launched!', 'info');
+      }
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Cannot Start', err.detail || 'Failed to start email generator.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    setTimeout(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span>Generate Mail from JD</span>
+        `;
+      }
+    }, 2500);
   }
 }
 

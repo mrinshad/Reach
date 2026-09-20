@@ -62,7 +62,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 async def add_cache_control_headers(request, call_next):
     response = await call_next(request)
     path = request.url.path
-    if path.startswith("/static/") or path == "/" or path == "/index.html":
+    if path.startswith("/static/") or path == "/" or path == "/index.html" or path == "/sw.js":
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -172,6 +172,19 @@ def serve_index():
     if os.path.exists(index_file):
         return FileResponse(index_file)
     return FileResponse(index_file)
+
+
+@app.api_route("/sw.js", methods=["GET", "HEAD"])
+def serve_service_worker():
+    """Serve service worker from root domain scope with Service-Worker-Allowed header."""
+    sw_file = os.path.join(STATIC_DIR, "sw.js")
+    if os.path.exists(sw_file):
+        return FileResponse(
+            sw_file,
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
+    raise HTTPException(status_code=404, detail="Service worker not found")
 
 
 @app.get("/api/health")
@@ -432,14 +445,14 @@ def api_mark_post_spam(post_id: str, payload: Optional[SpamPostPayload] = None):
 
 
 @app.post("/api/generate-email/{post_id}")
-def api_generate_email(post_id: str):
-    """Enqueue ChatGPT generation for a single post in headed Firefox."""
+def api_generate_email(post_id: str, force: bool = False):
+    """Enqueue ChatGPT generation for a single post with optional force override."""
     res = task_manager.enqueue_task(
         task_type="chatgpt",
         task_name=f"ChatGPT Email Generation (Post #{post_id})",
         runner_func=run_chatgpt_batch,
-        args=([post_id],),
-        metadata={"post_id": post_id, "count": 1},
+        args=([post_id], force),
+        metadata={"post_id": post_id, "count": 1, "force": force},
     )
     msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for post {post_id}."
     return {"success": True, "message": msg, **res}
