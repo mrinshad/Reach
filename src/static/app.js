@@ -3675,16 +3675,16 @@ async function loadAnalytics(days = 30) {
 
     // Update KPI metrics
     if (data.summary) {
-      document.getElementById('kpiApplied').textContent = data.summary.total_sent || 0;
+      document.getElementById('kpiApplied').textContent = Number(data.summary.total_sent || 0).toLocaleString();
       document.getElementById('kpiConversionRate').textContent = `${data.summary.sent_conversion_pct || 0}% conversion`;
-      document.getElementById('kpiScraped').textContent = data.summary.total_scraped || 0;
+      document.getElementById('kpiScraped').textContent = Number(data.summary.total_scraped || 0).toLocaleString();
       document.getElementById('kpiEmailRate').textContent = `${data.summary.email_rate_pct || 0}% emails found`;
-      document.getElementById('kpiDirectEmails').textContent = `${data.summary.with_emails || 0} outreach ready`;
-      document.getElementById('kpiDrafted').textContent = data.summary.total_drafted || 0;
-      document.getElementById('kpiDraftReady').textContent = `${data.summary.total_drafted || 0} ready to send`;
-      document.getElementById('kpiPendingGen').textContent = `${data.summary.pending_review || 0} pending AI`;
-      document.getElementById('kpiRejected').textContent = data.summary.total_rejected || 0;
-      document.getElementById('kpiSpamFlagged').textContent = `${data.summary.potential_spam_total || 0} potential spam`;
+      document.getElementById('kpiDirectEmails').textContent = Number(data.summary.with_emails || 0).toLocaleString();
+      document.getElementById('kpiDrafted').textContent = Number(data.summary.total_drafted || 0).toLocaleString();
+      document.getElementById('kpiDraftReady').textContent = `${Number(data.summary.total_drafted || 0).toLocaleString()} ready to send`;
+      document.getElementById('kpiPendingGen').textContent = `${Number(data.summary.pending_review || 0).toLocaleString()} pending AI`;
+      document.getElementById('kpiRejected').textContent = Number(data.summary.total_rejected || 0).toLocaleString();
+      document.getElementById('kpiSpamFlagged').textContent = `${Number(data.summary.potential_spam_total || 0).toLocaleString()} potential spam`;
     }
 
     // Update timeline badges

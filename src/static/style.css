@@ -538,6 +538,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.75rem;
     margin-bottom: 0.65rem;
   }
 
@@ -545,6 +546,16 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .task-card-right {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .pulse-ring {
@@ -554,6 +565,7 @@ body {
     background: var(--accent-indigo);
     box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.7);
     animation: pulse 1.6s infinite;
+    flex-shrink: 0;
   }
 
   @keyframes pulse {
@@ -577,11 +589,17 @@ body {
     font-weight: 700;
     font-size: 0.88rem;
     color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .task-subtitle {
     font-size: 0.75rem;
     color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .task-counter-pill {
@@ -591,6 +609,8 @@ body {
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .progress-bar-track {
@@ -2759,14 +2779,37 @@ body {
     font-size: 1.15rem;
   }
 
+  .kpi-num-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-bottom: 0.65rem;
+    min-width: 0;
+  }
+
   .kpi-value {
     font-family: var(--font-heading, 'Space Grotesk', sans-serif);
-    font-size: 2.15rem;
+    font-size: clamp(1.8rem, 2.75vw, 2.35rem);
     font-weight: 800;
     color: #f8fafc;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.025em;
     line-height: 1.1;
-    margin-bottom: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+  }
+
+  .kpi-sublabel {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .kpi-footer {
@@ -4403,13 +4446,23 @@ body {
     .topbar-left {
       gap: 0.5rem !important;
       min-width: 0 !important;
+      flex: 1 1 auto !important;
+      overflow: hidden !important;
+    }
+
+    .topbar-title-text-group {
+      min-width: 0 !important;
+      flex: 1 1 auto !important;
+      overflow: hidden !important;
     }
 
     .topbar-page-title {
-      font-size: 1.05rem !important;
+      font-size: 1rem !important;
       white-space: nowrap !important;
       overflow: hidden !important;
       text-overflow: ellipsis !important;
+      margin: 0 !important;
+      line-height: 1.2 !important;
     }
 
     .topbar-breadcrumb {
@@ -4418,15 +4471,63 @@ body {
 
     .topbar-right {
       gap: 0.35rem !important;
+      flex-shrink: 0 !important;
     }
 
     .btn-topbar {
-      padding: 0.38rem 0.55rem !important;
-      font-size: 0.75rem !important;
+      padding: 0.4rem !important;
+      min-width: 32px !important;
+      height: 32px !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 0 !important;
     }
 
     .btn-topbar span {
       display: none !important;
+    }
+
+    /* Mobile Task Progress Card Header */
+    .task-card-header {
+      gap: 0.5rem !important;
+    }
+
+    .task-card-right {
+      gap: 0.35rem !important;
+      flex-shrink: 0 !important;
+      white-space: nowrap !important;
+    }
+
+    .task-counter-pill {
+      font-size: 0.72rem !important;
+      padding: 0.18rem 0.45rem !important;
+      white-space: nowrap !important;
+      flex-shrink: 0 !important;
+    }
+
+    /* Mobile Analytics KPI Grid & Charts */
+    .analytics-kpi-grid {
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 0.65rem !important;
+    }
+
+    .kpi-card {
+      padding: 0.95rem !important;
+    }
+
+    .kpi-value {
+      font-size: 1.75rem !important;
+    }
+
+    .analytics-grid-two,
+    .analytics-grid-three {
+      grid-template-columns: 1fr !important;
+      gap: 0.85rem !important;
+    }
+
+    .chart-container {
+      height: 240px !important;
     }
 
     /* Responsive 2-Tier Toolbar */
@@ -4509,6 +4610,15 @@ body {
   }
 
   @media (max-width: 480px) {
+    .analytics-kpi-grid {
+      grid-template-columns: 1fr !important;
+      gap: 0.65rem !important;
+    }
+
+    .kpi-value {
+      font-size: 1.85rem !important;
+    }
+
     .filters-group {
       grid-template-columns: 1fr !important;
     }
