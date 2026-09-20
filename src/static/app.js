@@ -541,10 +541,35 @@ function clearAllNotifications() {
 }
 
 // --- Sidebar Collapsible Mode ---
+function handleBrandLogoClick() {
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar && sidebar.classList.contains('collapsed')) {
+    toggleSidebarCollapse();
+  } else {
+    switchTab('tabAnalytics');
+  }
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('appSidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.add('collapsed');
+  if (backdrop) backdrop.classList.add('hidden');
+  updateSidebarCollapseUI();
+}
+
 function toggleSidebarCollapse() {
   const sidebar = document.getElementById('appSidebar');
   if (!sidebar) return;
   const isCollapsed = sidebar.classList.toggle('collapsed');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (backdrop) {
+    if (window.innerWidth <= 768 && !isCollapsed) {
+      backdrop.classList.remove('hidden');
+    } else {
+      backdrop.classList.add('hidden');
+    }
+  }
   try {
     localStorage.setItem('reach_sidebar_collapsed', isCollapsed ? 'true' : 'false');
   } catch (_) {}
@@ -556,10 +581,14 @@ function initSidebarCollapse() {
   if (!sidebar) return;
   try {
     const saved = localStorage.getItem('reach_sidebar_collapsed');
-    if (saved === 'true') {
+    if (saved === 'false') {
+      sidebar.classList.remove('collapsed');
+    } else {
       sidebar.classList.add('collapsed');
     }
-  } catch (_) {}
+  } catch (_) {
+    sidebar.classList.add('collapsed');
+  }
   updateSidebarCollapseUI();
 }
 
@@ -620,6 +649,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Tab Switching ---
 function switchTab(tabId) {
   state.activeTab = tabId;
+
+  if (window.innerWidth <= 768) {
+    closeMobileSidebar();
+  }
 
   try {
     localStorage.setItem('reach_active_tab', tabId);
@@ -894,6 +927,8 @@ async function fetchSettings() {
         crawlerLocSelect.value = state.config.search_location;
       }
     }
+
+    updateHeadlessUI(state.config ? state.config.headless_mode : false);
   } catch (err) {
     console.error('Error loading settings:', err);
   }
@@ -1694,7 +1729,12 @@ async function sendActiveDraftDirectly() {
   try {
     const res = await fetch(`/api/send-direct/${state.activeReviewPost.id}`, { method: 'POST' });
     if (res.ok) {
-      showToast('Sending email directly via Gmail...', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued direct send (Position #${data.position})`, 'info');
+      } else {
+        showToast('Sending email directly via Gmail...', 'info');
+      }
       state.selectedDraftIds.delete(state.activeReviewPost.id);
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -1728,7 +1768,12 @@ async function sendBatchSelectedDrafts() {
       body: JSON.stringify({ post_ids: ids })
     });
     if (res.ok) {
-      showToast(`Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued batch send for ${ids.length} emails (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      }
       state.selectedDraftIds.clear();
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -1808,7 +1853,12 @@ async function openActivePostInGmail() {
     state.awaitingSentPost = { ...state.activeReviewPost };
     const res = await fetch(`/api/open-gmail/${state.activeReviewPost.id}`, { method: 'POST' });
     if (res.ok) {
-      showToast('Launching Gmail compose in headed Firefox...', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued Gmail draft opening (Position #${data.position})`, 'info');
+      } else {
+        showToast('Launching Gmail compose in headed Firefox...', 'info');
+      }
       startTaskPolling();
     } else {
       state.awaitingSentPost = null;
@@ -2468,7 +2518,12 @@ async function triggerSelectedCrawl() {
       body: JSON.stringify(payload),
     });
     if (res.ok) {
-      showToast(`${sourceName} crawler started`, 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued ${sourceName} crawler (Position #${data.position})`, 'info');
+      } else {
+        showToast(`${sourceName} crawler started`, 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2522,7 +2577,12 @@ async function generateSingleChatGPT(postId) {
   try {
     const res = await fetch(`/api/generate-email/${postId}`, { method: 'POST' });
     if (res.ok) {
-      showToast('ChatGPT email generation launched in headed Firefox', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued email generation (Position #${data.position})`, 'info');
+      } else {
+        showToast('ChatGPT email generation launched in headed Firefox', 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2552,9 +2612,14 @@ async function generateBatchChatGPT() {
     });
 
     if (res.ok) {
+      const data = await res.json();
       state.selectedIds.clear();
       updateSelectedCountUI();
-      showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      if (data.queued) {
+        showToast(`Enqueued batch generation for ${ids.length} posts (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2592,6 +2657,34 @@ async function pollTaskStatus() {
     const fillEl = document.getElementById('taskProgressFill');
     const logsEl = document.getElementById('logsStream');
 
+    // Render task queue drawer if queued tasks exist
+    const queueSection = document.getElementById('taskQueueSection');
+    const queueBadge = document.getElementById('taskQueueCountBadge');
+    const queueList = document.getElementById('taskQueueList');
+    const queue = task.queue || [];
+
+    if (queueSection && queueList) {
+      if (queue.length > 0) {
+        queueSection.classList.remove('hidden');
+        if (queueBadge) queueBadge.textContent = queue.length;
+        queueList.innerHTML = queue.map((item, idx) => `
+          <div class="task-queue-card" id="queueItem_${escapeHtml(item.id)}">
+            <div class="task-queue-card-left">
+              <span class="queue-pos-badge">#${idx + 1}</span>
+              <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+            </div>
+            <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        `).join('');
+      } else {
+        queueSection.classList.add('hidden');
+        if (queueBadge) queueBadge.textContent = '0';
+        queueList.innerHTML = '';
+      }
+    }
+
     if (task.status === 'running') {
       if (!state.pollingTimer) {
         state.pollingTimer = setInterval(pollTaskStatus, 1500);
@@ -2613,74 +2706,118 @@ async function pollTaskStatus() {
       // Reset handled task event key while running
       state.lastHandledTaskKey = null;
     } else if (task.status === 'completed' || task.status === 'error') {
+      const hasQueuedItems = (queue.length > 0);
       const taskEventKey = `${task.task_name}_${task.started_at}_${task.status}`;
-      if (state.lastHandledTaskKey === taskEventKey) {
-        // Already handled! Stop polling and do not reload again
-        stopTaskPolling();
-        return;
-      }
-      state.lastHandledTaskKey = taskEventKey;
-      stopTaskPolling();
+      const isNewCompletion = (state.lastHandledTaskKey !== taskEventKey);
 
-      if (task.status === 'completed') {
-        fillEl.style.width = '100%';
-        let notifMsg = `${task.task_name || 'Automation'} completed successfully.`;
-        if (task.crawl_stats) {
-          const s = task.crawl_stats;
-          subEl.textContent = `Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
-          notifMsg = `Crawled ${s.total_crawled || 0} posts: ${s.newly_added || 0} new jobs added, ${s.skipped_already_added || 0} existing skipped.`;
-          showCrawlSummaryModal(task.task_name, s);
-        } else {
-          subEl.textContent = 'Completed successfully';
-          if (task.completed_items) {
-            notifMsg = `${task.task_name || 'Task'} finished: ${task.completed_items}/${task.total_items || task.completed_items} processed.`;
+      if (isNewCompletion) {
+        state.lastHandledTaskKey = taskEventKey;
+        if (task.status === 'completed') {
+          fillEl.style.width = '100%';
+          let notifMsg = `${task.task_name || 'Automation'} completed successfully.`;
+          if (task.crawl_stats) {
+            const s = task.crawl_stats;
+            subEl.textContent = `Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+            notifMsg = `Crawled ${s.total_crawled || 0} posts: ${s.newly_added || 0} new jobs added, ${s.skipped_already_added || 0} existing skipped.`;
+            showCrawlSummaryModal(task.task_name, s);
+          } else {
+            subEl.textContent = 'Completed successfully';
+            if (task.completed_items) {
+              notifMsg = `${task.task_name || 'Task'} finished: ${task.completed_items}/${task.total_items || task.completed_items} processed.`;
+            }
           }
+
+          sendAppNotification({
+            title: task.task_name || 'Task Complete',
+            message: notifMsg,
+            type: 'success',
+          });
+        } else {
+          const firstLine = (task.error || 'Operation failed').split('\n')[0];
+          subEl.textContent = `Failed: ${firstLine}`;
+
+          sendAppNotification({
+            title: task.task_name || 'Task Failed',
+            message: firstLine,
+            type: 'error',
+          });
+
+          showSnackbar({
+            title: `Task Error: ${task.task_name || 'Automation'}`,
+            message: firstLine,
+            details: task.error,
+            type: 'error',
+          });
+          showCenterAlert(
+            `Automation Stopped: ${task.task_name || 'Task'}`,
+            task.error || 'The automation task encountered an issue and stopped.'
+          );
         }
+        loadDashboardData();
+      }
 
-        sendAppNotification({
-          title: task.task_name || 'Task Complete',
-          message: notifMsg,
-          type: 'success',
-        });
-
-        setTimeout(() => {
-          card.classList.add('hidden');
-          fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
-          loadDashboardData();
-        }, task.crawl_stats ? 3000 : 1500);
+      if (hasQueuedItems) {
+        card.classList.remove('hidden');
+        subEl.textContent = `✓ ${task.task_name} finished. Next queued task starting...`;
+        if (!state.pollingTimer) {
+          state.pollingTimer = setInterval(pollTaskStatus, 1500);
+        }
       } else {
-        const firstLine = (task.error || 'Operation failed').split('\n')[0];
-        subEl.textContent = `Failed: ${firstLine}`;
-
-        sendAppNotification({
-          title: task.task_name || 'Task Failed',
-          message: firstLine,
-          type: 'error',
-        });
-
-        showSnackbar({
-          title: `Task Error: ${task.task_name || 'Automation'}`,
-          message: firstLine,
-          details: task.error,
-          type: 'error',
-        });
-        showCenterAlert(
-          `Automation Stopped: ${task.task_name || 'Task'}`,
-          task.error || 'The automation task encountered an issue and stopped.'
-        );
+        stopTaskPolling();
         setTimeout(() => {
-          card.classList.add('hidden');
-          fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
-          loadDashboardData();
-        }, 2000);
+          if (!state.pollingTimer) {
+            card.classList.add('hidden');
+            fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
+          }
+        }, task.crawl_stats ? 3000 : 1500);
       }
     } else {
-      card.classList.add('hidden');
-      stopTaskPolling();
+      const hasQueuedItems = (queue.length > 0);
+      if (hasQueuedItems) {
+        card.classList.remove('hidden');
+        titleEl.textContent = 'Queue Active';
+        subEl.textContent = `Waiting for next task to start (${queue.length} in queue)...`;
+        if (!state.pollingTimer) {
+          state.pollingTimer = setInterval(pollTaskStatus, 1500);
+        }
+      } else {
+        card.classList.add('hidden');
+        stopTaskPolling();
+      }
     }
   } catch (err) {
     console.error('Task poll error:', err);
     stopTaskPolling();
+  }
+}
+
+async function cancelQueuedTask(taskId) {
+  try {
+    const res = await fetch(`/api/tasks/queue/cancel/${encodeURIComponent(taskId)}`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Queued task cancelled', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.detail || 'Could not cancel task', 'error');
+    }
+  } catch (err) {
+    showToast('Network error cancelling task: ' + err.message, 'error');
+  }
+}
+
+async function clearTaskQueue() {
+  try {
+    const res = await fetch('/api/tasks/queue/clear', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Queue cleared', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.detail || 'Could not clear queue', 'error');
+    }
+  } catch (err) {
+    showToast('Network error clearing queue: ' + err.message, 'error');
   }
 }
 
@@ -2986,11 +3123,85 @@ function openSettingsModal() {
   const settingLoc = document.getElementById('settingSearchLocation');
   if (settingLoc) settingLoc.value = state.config.search_location || '';
   document.getElementById('settingChatGptUrl').value = state.config.chatgpt_url || '';
+  updateHeadlessUI(state.config ? state.config.headless_mode : false);
   document.getElementById('settingsModal').classList.remove('hidden');
 }
 
 function closeSettingsModal() {
   document.getElementById('settingsModal').classList.add('hidden');
+}
+
+// --- Headless Mode Controls ---
+function updateHeadlessUI(isHeadless) {
+  const toggleInput = document.getElementById('settingHeadlessToggle');
+  if (toggleInput) toggleInput.checked = !!isHeadless;
+
+  const statusTitle = document.getElementById('headlessStatusTitle');
+  if (statusTitle) {
+    statusTitle.textContent = isHeadless ? 'Headless Mode (Silent Background)' : 'Headed Mode (Visible Window)';
+  }
+
+  const statusDesc = document.getElementById('headlessStatusDesc');
+  if (statusDesc) {
+    statusDesc.textContent = isHeadless
+      ? 'Browser runs silently in background. Faster execution and zero window interruptions.'
+      : 'Browser opens visibly on screen for monitoring and live inspection.';
+  }
+
+  const quickBtn = document.getElementById('btnQuickHeadlessToggle');
+  if (quickBtn) {
+    quickBtn.classList.toggle('headless-active', !!isHeadless);
+    quickBtn.setAttribute('title', isHeadless
+      ? 'Headless Active (Click to switch to visible window)'
+      : 'Headed Active (Click to switch to silent headless background)');
+  }
+
+  const quickLabel = document.getElementById('quickHeadlessLabel');
+  if (quickLabel) {
+    quickLabel.textContent = isHeadless ? 'Headless' : 'Headed';
+  }
+
+  const iconDisplay = document.getElementById('headlessIconDisplay');
+  if (iconDisplay) {
+    iconDisplay.innerHTML = isHeadless
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  }
+
+  const quickSvg = document.getElementById('quickHeadlessSvg');
+  if (quickSvg) {
+    quickSvg.innerHTML = isHeadless
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
+async function handleHeadlessModalToggle(checked) {
+  try {
+    const res = await fetch('/api/settings/headless', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headless: !!checked }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (state.config) state.config.headless_mode = data.headless;
+      updateHeadlessUI(data.headless);
+      showToast(data.headless ? '✓ Silent Headless mode enabled' : '✓ Visible Headed window mode enabled', 'info');
+    } else {
+      showToast(data.detail || 'Failed to update headless mode', 'error');
+      updateHeadlessUI(state.config ? state.config.headless_mode : false);
+    }
+  } catch (err) {
+    showToast('Network error toggling headless mode: ' + err.message, 'error');
+    updateHeadlessUI(state.config ? state.config.headless_mode : false);
+  }
+}
+
+async function toggleQuickHeadless() {
+  const current = !!(state.config && state.config.headless_mode);
+  const target = !current;
+  await handleHeadlessModalToggle(target);
 }
 
 async function saveSettings() {
@@ -2999,6 +3210,7 @@ async function saveSettings() {
     search_query: document.getElementById('settingSearchQuery').value.trim(),
     search_location: document.getElementById('settingSearchLocation') ? document.getElementById('settingSearchLocation').value.trim() : '',
     chatgpt_url: document.getElementById('settingChatGptUrl').value.trim(),
+    headless_mode: !!(document.getElementById('settingHeadlessToggle') && document.getElementById('settingHeadlessToggle').checked),
   };
 
   try {

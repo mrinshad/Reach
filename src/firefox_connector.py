@@ -173,7 +173,7 @@ def cleanup_stale_profile_locks(profile_dir: str, force: bool = False):
 def launch_firefox_context(
     playwright: Playwright,
     profile_dir: Optional[str] = None,
-    headless: bool = False,
+    headless: Optional[bool] = None,
     sync_cookies_domains: Optional[List[str]] = None,
 ) -> BrowserContext:
     """
@@ -185,13 +185,20 @@ def launch_firefox_context(
     Args:
         playwright: Active Playwright instance.
         profile_dir: Path to Firefox persistent profile directory.
-        headless: Whether to run in headless mode (default: False).
+        headless: Whether to run in headless mode (defaults to user configuration).
         sync_cookies_domains: Optional list of domains (e.g. ['chatgpt.com', 'openai.com'])
                               to import cookies from desktop Firefox if available.
 
     Returns:
         BrowserContext instance.
     """
+    if headless is None:
+        try:
+            from src.config import is_headless
+            headless = is_headless()
+        except Exception:
+            headless = False
+
     if profile_dir is None:
         profile_dir = get_default_firefox_profile_dir()
     else:

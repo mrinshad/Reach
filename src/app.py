@@ -111,6 +111,12 @@ class SettingsPayload(BaseModel):
     chatgpt_url: Optional[str] = None
     pacing_min_seconds: Optional[float] = None
     pacing_max_seconds: Optional[float] = None
+    headless_mode: Optional[bool] = None
+    headless: Optional[bool] = None
+
+
+class HeadlessTogglePayload(BaseModel):
+    headless: bool
 
 
 class ScrapePayload(BaseModel):
@@ -427,83 +433,91 @@ def api_mark_post_spam(post_id: str, payload: Optional[SpamPostPayload] = None):
 
 @app.post("/api/generate-email/{post_id}")
 def api_generate_email(post_id: str):
-    """Trigger ChatGPT generation for a single post in headed Firefox."""
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_chatgpt_batch, args=([post_id],), daemon=True)
-    thread.start()
-    return {"success": True, "message": f"ChatGPT email generation started for post {post_id}."}
+    """Enqueue ChatGPT generation for a single post in headed Firefox."""
+    res = task_manager.enqueue_task(
+        task_type="chatgpt",
+        task_name=f"ChatGPT Email Generation (Post #{post_id})",
+        runner_func=run_chatgpt_batch,
+        args=([post_id],),
+        metadata={"post_id": post_id, "count": 1},
+    )
+    msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for post {post_id}."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/generate-batch")
 def api_generate_batch(payload: GenerateBatchPayload):
-    """Trigger ChatGPT generation for selected posts in headed Firefox."""
+    """Enqueue ChatGPT generation for selected posts in headed Firefox."""
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided.")
 
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_chatgpt_batch, args=(payload.post_ids,), daemon=True)
-    thread.start()
-    return {"success": True, "message": f"Started email generation for {len(payload.post_ids)} posts."}
+    count = len(payload.post_ids)
+    res = task_manager.enqueue_task(
+        task_type="chatgpt",
+        task_name=f"Batch Email Generation ({count} posts)",
+        runner_func=run_chatgpt_batch,
+        args=(payload.post_ids,),
+        metadata={"count": count, "post_ids": payload.post_ids},
+    )
+    msg = f"Queued batch generation of {count} posts (Position #{res['position']})" if res["queued"] else f"Started email generation for {count} posts."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/open-gmail/{post_id}")
 def api_open_gmail(post_id: str):
-    """Trigger Gmail draft creation in headed Firefox with resume attached."""
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_open_gmail_draft, args=(post_id,), daemon=True)
-    thread.start()
-    return {"success": True, "message": "Opening Gmail compose in headed Firefox..."}
+    """Enqueue Gmail draft creation in headed Firefox with resume attached."""
+    res = task_manager.enqueue_task(
+        task_type="gmail_draft",
+        task_name=f"Gmail Draft (Post #{post_id})",
+        runner_func=run_open_gmail_draft,
+        args=(post_id,),
+        metadata={"post_id": post_id},
+    )
+    msg = f"Queued Gmail draft opening (Position #{res['position']})" if res["queued"] else "Opening Gmail compose in headed Firefox..."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/send-direct/{post_id}")
 def api_send_direct(post_id: str):
-    """Trigger direct email sending in Gmail without manual interaction."""
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_send_single_draft, args=(post_id,), daemon=True)
-    thread.start()
-    return {"success": True, "message": "Directly sending application email via Gmail..."}
+    """Enqueue direct email sending in Gmail without manual interaction."""
+    res = task_manager.enqueue_task(
+        task_type="gmail_send",
+        task_name=f"Direct Send (Post #{post_id})",
+        runner_func=run_send_single_draft,
+        args=(post_id,),
+        metadata={"post_id": post_id},
+    )
+    msg = f"Queued email direct sending (Position #{res['position']})" if res["queued"] else "Directly sending application email via Gmail..."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/send-batch")
 def api_send_batch(payload: SendBatchPayload):
-    """Trigger multi-draft batch email sending in Gmail directly."""
+    """Enqueue multi-draft batch email sending in Gmail directly."""
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided for batch sending.")
 
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_send_batch_drafts, args=(payload.post_ids,), daemon=True)
-    thread.start()
-    return {"success": True, "message": f"Started direct sending for {len(payload.post_ids)} applications."}
+    count = len(payload.post_ids)
+    res = task_manager.enqueue_task(
+        task_type="gmail_send_batch",
+        task_name=f"Batch Email Sending ({count} applications)",
+        runner_func=run_send_batch_drafts,
+        args=(payload.post_ids,),
+        metadata={"count": count, "post_ids": payload.post_ids},
+    )
+    msg = f"Queued batch sending for {count} applications (Position #{res['position']})" if res["queued"] else f"Started direct sending for {count} applications."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/direct-outreach")
 def api_direct_outreach(payload: DirectOutreachPayload):
     """
     Direct opportunity cold outreach.
-    Persists a record in PostgreSQL and triggers Gmail automated sending or draft review.
+    Persists a record in PostgreSQL and enqueues Gmail automated sending or draft review.
     """
     recipient = (payload.recipient_email or "").strip()
     if not recipient or "@" not in recipient:
         raise HTTPException(status_code=400, detail="A valid recipient email address is required.")
-
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
 
     company = (payload.company_name or "").strip()
     author_name = company if company else recipient
@@ -540,51 +554,58 @@ def api_direct_outreach(payload: DirectOutreachPayload):
         post_id, _ = upsert_post(post_data)
 
         if mode == "draft":
-            thread = threading.Thread(target=run_open_gmail_draft, args=(post_id,), daemon=True)
-            thread.start()
-            return {
-                "success": True,
-                "post_id": post_id,
-                "message": f"Opening Gmail draft for {recipient} in headed Firefox...",
-            }
+            res = task_manager.enqueue_task(
+                task_type="gmail_draft",
+                task_name=f"Direct Opportunity Draft ({recipient})",
+                runner_func=run_open_gmail_draft,
+                args=(post_id,),
+                metadata={"post_id": post_id, "recipient": recipient},
+            )
+            msg = f"Queued Gmail draft for {recipient} (Position #{res['position']})" if res["queued"] else f"Opening Gmail draft for {recipient} in headed Firefox..."
+            return {"success": True, "post_id": post_id, "message": msg, **res}
         else:
-            thread = threading.Thread(target=run_send_single_draft, args=(post_id,), daemon=True)
-            thread.start()
-            return {
-                "success": True,
-                "post_id": post_id,
-                "message": f"Sending opportunity email to {recipient} directly via Gmail...",
-            }
+            res = task_manager.enqueue_task(
+                task_type="gmail_send",
+                task_name=f"Direct Opportunity Send ({recipient})",
+                runner_func=run_send_single_draft,
+                args=(post_id,),
+                metadata={"post_id": post_id, "recipient": recipient},
+            )
+            msg = f"Queued email sending to {recipient} (Position #{res['position']})" if res["queued"] else f"Sending opportunity email to {recipient} directly via Gmail..."
+            return {"success": True, "post_id": post_id, "message": msg, **res}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
 @app.post("/api/scrape/infopark")
 def api_trigger_scrape_infopark():
-    """Trigger the Infopark jobs scraper."""
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
-    thread = threading.Thread(target=run_infopark_scraper, daemon=True)
-    thread.start()
-    return {"success": True, "message": "Infopark jobs scraper started."}
+    """Enqueue the Infopark jobs scraper."""
+    res = task_manager.enqueue_task(
+        task_type="crawler",
+        task_name="Infopark Jobs Crawler",
+        runner_func=run_infopark_scraper,
+        metadata={"source": "infopark"},
+    )
+    msg = f"Queued Infopark scraper (Position #{res['position']})" if res["queued"] else "Infopark jobs scraper started."
+    return {"success": True, "message": msg, **res}
 
 
 @app.post("/api/scrape/linkedin")
 def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
-    """Trigger the LinkedIn scraper in headed Firefox with optional location and query."""
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
+    """Enqueue the LinkedIn scraper in headed Firefox with optional location and query."""
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
 
-    thread = threading.Thread(target=run_linkedin_scraper, args=(query, loc), daemon=True)
-    thread.start()
-    return {"success": True, "message": "LinkedIn scraper started in headed Firefox."}
+    label = f"LinkedIn Crawler ({loc or 'Default'})" if loc else "LinkedIn Crawler"
+    res = task_manager.enqueue_task(
+        task_type="crawler",
+        task_name=label,
+        runner_func=run_linkedin_scraper,
+        args=(query, loc),
+        metadata={"source": "linkedin", "query": query, "location": loc},
+    )
+    msg = f"Queued LinkedIn scraper for {loc or 'default'} (Position #{res['position']})" if res["queued"] else "LinkedIn scraper started in headed Firefox."
+    return {"success": True, "message": msg, **res}
 
 
 @app.get("/api/scrapers")
@@ -595,7 +616,7 @@ def api_get_scrapers():
 
 @app.post("/api/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Trigger scraper by source using the extensible scraper registry with optional query and location."""
+    """Enqueue scraper by source using the extensible scraper registry with optional query and location."""
     src = "linkedin"
     query = None
     loc = None
@@ -607,14 +628,17 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
     elif source:
         src = source
 
-    current_state = task_manager.get_state()
-    if current_state["status"] == "running":
-        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
-
     try:
-        thread = threading.Thread(target=run_scraper_by_source, args=(src, query, loc), daemon=True)
-        thread.start()
-        return {"success": True, "message": f"Scraper for '{src}' started."}
+        label = f"{src.capitalize()} Crawler" + (f" ({loc})" if loc else "")
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=label,
+            runner_func=run_scraper_by_source,
+            args=(src, query, loc),
+            metadata={"source": src, "query": query, "location": loc},
+        )
+        msg = f"Queued {label} (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
+        return {"success": True, "message": msg, **res}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -634,6 +658,22 @@ def api_clear_task():
     return {"success": True, "message": "Task state cleared."}
 
 
+@app.post("/api/tasks/queue/cancel/{task_id}")
+def api_cancel_queued_task(task_id: str):
+    """Cancel a queued automation task before it executes."""
+    ok = task_manager.cancel_queued_task(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Queued task not found or already running.")
+    return {"success": True, "message": f"Task {task_id} removed from queue."}
+
+
+@app.post("/api/tasks/queue/clear")
+def api_clear_task_queue():
+    """Clear all pending tasks in the execution queue."""
+    cleared = task_manager.clear_queue()
+    return {"success": True, "cleared": cleared, "message": f"Cleared {cleared} task(s) from the queue."}
+
+
 @app.get("/api/settings")
 def api_get_settings():
     """Retrieve current application configuration."""
@@ -646,3 +686,17 @@ def api_update_settings(payload: SettingsPayload):
     data = {k: v for k, v in payload.dict().items() if v is not None}
     updated = save_config(data)
     return {"success": True, "config": updated}
+
+
+@app.post("/api/settings/headless")
+def api_toggle_headless(payload: HeadlessTogglePayload):
+    """Instant 1-click toggle between Headless background mode and Headed visible mode."""
+    updated = save_config({"headless_mode": payload.headless, "headless": payload.headless})
+    mode_text = "Headless Mode (Silent Background)" if payload.headless else "Headed Mode (Visible Window)"
+    return {
+        "success": True,
+        "headless": payload.headless,
+        "headless_mode": payload.headless,
+        "message": f"Switched browser automation to {mode_text}.",
+        "config": updated,
+    }

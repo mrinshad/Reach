@@ -373,22 +373,22 @@ def scrape_infopark_jobs(
                 "location": "Kochi",
             }
 
-            # 5. Pre-screen by role title before ChatGPT (saves API/browser time)
-            prescreened_reason = pre_screen_role(title, full_jd)
-            if prescreened_reason:
-                # Save as REJECTED immediately — skip ChatGPT entirely
-                post_record["category"] = category  # keep category for ref
-                try:
-                    post_id, inserted = upsert_post(post_record, skip_if_exists=True)
-                    if post_id:
-                        update_post_status(post_id, "REJECTED", rejection_reason=prescreened_reason)
-                        existing_identifiers.add(clean_url)
-                        existing_identifiers.add(detail_url)
-                        existing_identifiers.add(sig)
-                    print(f"  🚫 [Pre-Screened / Rejected] {company} | {title} | ❌ {prescreened_reason}")
-                except Exception as db_err:
-                    print(f"  (Warning: DB save error during pre-screen: {db_err})")
-                continue
+            # 5. Pre-screen by role title (COMMENTED OUT: We preserve all jobs to send opportunity emails with candidate's stack)
+            # prescreened_reason = pre_screen_role(title, full_jd)
+            # if prescreened_reason:
+            #     # Save as REJECTED immediately — skip ChatGPT entirely
+            #     post_record["category"] = category  # keep category for ref
+            #     try:
+            #         post_id, inserted = upsert_post(post_record, skip_if_exists=True)
+            #         if post_id:
+            #             update_post_status(post_id, "REJECTED", rejection_reason=prescreened_reason)
+            #             existing_identifiers.add(clean_url)
+            #             existing_identifiers.add(detail_url)
+            #             existing_identifiers.add(sig)
+            #         print(f"  🚫 [Pre-Screened / Rejected] {company} | {title} | ❌ {prescreened_reason}")
+            #     except Exception as db_err:
+            #         print(f"  (Warning: DB save error during pre-screen: {db_err})")
+            #     continue
 
             # 6. Persist to PostgreSQL (suitable role — queued for ChatGPT)
             try:

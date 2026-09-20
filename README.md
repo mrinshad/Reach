@@ -4,66 +4,85 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Playwright](https://img.shields.io/badge/Playwright-Firefox-2EAD33?style=flat&logo=playwright&logoColor=white)](https://playwright.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Responsive](https://img.shields.io/badge/UI-Mobile%20%26%20Desktop-6366F1?style=flat)](#mobile-access)
+[![Responsive](https://img.shields.io/badge/UI-Mobile%20%26%20Desktop-6366F1?style=flat)](#-mobile-access)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**Reach** is a job discovery, AI-assisted screening, and automated cold outreach suite. It aggregates job opportunities from multiple platforms (LinkedIn and tech park portals like Infopark Kochi), uses custom ChatGPT models to craft tailored cold emails, screens out unsuitable criteria (e.g. strict demographic or gender requirements), and launches Gmail in visible, headed Firefox with your resume pre-attached for human review and 1-click sending.
+**Reach** is a comprehensive, open-source job discovery, AI-assisted screening, and automated cold outreach suite. It aggregates job opportunities from multiple platforms (LinkedIn feed crawlers and tech park portals like Infopark Kochi), utilizes custom ChatGPT models to craft tailored cold emails, screens out unsuitable criteria (e.g. strict demographic or gender requirements), and automates Gmail dispatch with your resume pre-attached in either visible window or silent background mode.
 
 ---
 
 ## ✨ Core Highlights & Features
 
 ### 1. 🌐 Extensible Crawler Registry & Unified Source Selector
-- **One Crawler Interface**: Instead of multiple disjointed buttons, a single **Source Dropdown** and **Crawl Button** (`[ 💼 LinkedIn Posts ▾ ] [ ⚡ Crawl ]`) controls all scraping operations.
-- **Pluggable Registry (`SCRAPER_REGISTRY`)**: Add new website crawlers (e.g. Indeed, Technopark, Naukri, YC Jobs) in just one step on the backend without modifying frontend markup.
-- **90-Second Inactivity Watchdog**: All crawlers are guarded by an automated watchdog. If scraping halts or hangs for 90 seconds, the task closes cleanly while safely preserving all discovered jobs in PostgreSQL.
+- **Unified Crawler Interface**: A single consolidated **Source Selector** and **Crawl Button** (`[ 💼 LinkedIn Posts ▾ ] [ Location ▾ ] [ ⚡ Crawl ]`) controls all crawling operations.
+- **Pluggable Registry (`SCRAPER_REGISTRY`)**: Add new website crawlers (e.g. Indeed, Technopark, Naukri, YC Jobs) in one backend step without touching frontend markup.
+- **Location-Targeted Scrapes**: Full support for geographic keyword targeting (e.g., Bengaluru, Kochi, Pune, Dubai, New York, London, Singapore).
+- **90-Second Inactivity Watchdog**: All crawlers are monitored by an automated inactivity watchdog. If network or scraping halts for 90 seconds, the browser context closes cleanly while safely committing all discovered leads to PostgreSQL.
+- **Opportunity-First Ingestion**: Crawlers preserve job postings across tech stacks rather than rejecting them outright, empowering candidates to pitch their versatile full-stack experience for upcoming or alternative roles.
 
-### 2. 🗄️ Database-Backed Settings
-- **PostgreSQL Persistence**: `chatgpt_url` (Custom GPT Chat Link) and `search_query` (Target Search Keywords) are stored directly in the `settings` database table.
-- **Dynamic In-App Configuration**: Update your search keywords and Custom GPT link directly inside the web dashboard Settings modal with instant database synchronization.
-- **Safe by Default**: Zero hardcoded personal URLs or file paths in tracked files.
+### 2. 📋 Centralized Sequential FIFO Task Queue
+- **Thread-Safe Task Engine**: Eliminates `409 Conflict` errors during concurrent triggers. Consecutive operations (e.g., scraping Bangalore, then Kochi, then Pune, followed by batch AI email generation) are enqueued in FIFO order and executed sequentially in the browser.
+- **Live Queue Drawer**: Real-time queue manager displaying upcoming tasks with position badges (`#1`, `#2`), task titles, individual cancel buttons (`/api/tasks/queue/cancel/{id}`), and a 1-click **Clear Queue** option.
+- **Grace Transition Pacing**: Polite 2.5-second cooldown delay between queued tasks to commit database transactions, register summary stats, and update dashboard counters.
 
-### 3. 🛡️ Intelligent Anti-Spam & Fraud Protection
-- **Reported Scam Domain Auto-Rejection**: Automatically rejects incoming job posts whose contact email domains have previously been reported as scam or spam in the database, with a clear rejection reason and tooltip explaining why.
-- **Reported Email Rejection**: Rejects any incoming contact email that was explicitly reported as scam/spam, even on mainstream providers.
-- **Mainstream Provider Exemption**: Mainstream email providers (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `icloud.com`, `proton.me`, etc.) are exempt from domain-level rejections.
-- **Scam & Potential Scam Badges with Tooltips**: Posts flagged as `🛑 Scam` or `⚠️ Potential Scam` display actionable hover tooltips explaining the reason, and detail cards when clicking "View".
-- **1-Click Spam Marking**: Instantly flag any job post as spam/scam directly from the Home page or Review workspace (`🚫 Spam`).
+### 3. 📬 Direct Opportunity Cold Outreach
+- **Proactive Recruiter Outreach**: Send tailored opportunity pitches directly to hiring managers and recruiters even without an existing scraped post.
+- **Automated Opportunity Template**: Pre-fills a professional Full-Stack Software Engineer template highlighting key technologies, problem-solving skills, and attached resume.
+- **Full Database Tracking**: Dispatched cold emails are automatically ingested into PostgreSQL (`posts` table with source `'Direct Outreach'`) and archived under **Sent & History**.
 
-### 4. 🗂️ 3-Stage Application Lifecycle
-- **Discovered Posts**: Raw incoming job descriptions with recruiter contact details, experience level pills, and multi-source badges (`LinkedIn`, `Infopark Kochi`, `Manual`).
+### 4. 🔔 Multi-Channel Notification Center
+- **In-App Activity Dropdown**: Persistent topbar bell button with unread counter badge and timestamped activity log.
+- **Audio Chimes & Native Desktop Alerts**: Subtle Web Audio API chime sounds on task completion or failure, with optional native OS desktop notification permissions.
+
+### 5. 🎨 Collapsible Icon-Only Sidebar & Fluid Canvas
+- **Icon-Only Collapsed Mode (68px)**: Collapsed by default for maximum screen real estate with smooth cubic-bezier open/close animations.
+- **Expandable Full Mode (270px)**: Click toggle button or logo to expand sidebar with full labels, system diagnostics, and quick controls.
+- **Fluid Canvas Architecture**: Synchronized layout transitions (`calc(100% - 68px)` vs `calc(100% - 270px)`) preventing horizontal content shift or table distortion.
+- **Crisp SVG Vector Icons**: 100% scalable vector SVGs replace legacy emojis and text icons across the entire platform.
+
+### 6. 🎛️ Headless Browser Mode On/Off Switch
+- **Flexible Automation Visibility**: Toggle seamlessly between **Headless Mode** (silent background automation with zero window popups) and **Headed Mode** (visible window for live monitoring and debugging).
+- **Persistent Database Configuration**: Stored in PostgreSQL `settings.headless_mode` and respected across all Playwright contexts and scraper subprocesses.
+- **1-Click Quick Toggle**: Instant toggle button in the sidebar footer and an iOS-style switch inside the **Settings** modal.
+
+### 7. 🛡️ Intelligent Anti-Spam & Fraud Protection
+- **Reported Scam Domain Auto-Rejection**: Automatically rejects incoming job posts whose contact email domains have previously been reported as scam/spam, with a clear rejection reason.
+- **Reported Email Blacklist**: Rejects any incoming contact email explicitly flagged as scam/spam, regardless of provider.
+- **Mainstream Provider Exemption**: Mainstream email providers (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `icloud.com`, `proton.me`, etc.) are exempt from domain-level rejections to prevent false positives.
+- **Scam & Potential Scam Badges with Tooltips**: Flagged posts display actionable hover tooltips explaining the reason, and detail cards when clicking "View".
+- **1-Click Spam Marking**: Instantly flag any job post as spam/scam directly from the Discovered feed or Review workspace (`🚫 Spam`).
+
+### 8. 🗂️ 3-Stage Application Lifecycle
+- **Discovered Posts**: Raw incoming job descriptions with recruiter contact details, experience level pills, multi-column sorting, and multi-source badges (`LinkedIn`, `Infopark Kochi`, `Manual`, `Direct Outreach`).
 - **Review & Drafts**: Side-by-side workspace displaying the original job post against the ChatGPT-generated email draft, with live editing and resume attachment validation.
-- **Others / History**: Unified chronological archive of all `Sent` applications and `Cancelled` / `Discarded` posts. Clicking any card opens full details, cancellation reasons, and sent email bodies, with 1-click **Restore**.
+- **Sent & History**: Unified chronological archive of all `Sent` applications and `Cancelled` / `Discarded` posts. Clicking any card opens full details, cancellation reasons, and sent email bodies, with 1-click **Restore**.
 
-### 5. ⚡ Pre-Made Cancellation Reasons
-- 1-click chips for common rejection criteria:
-  - `⚠️ Not enough experience`
-  - `🚫 Not a job / Promotional`
-  - `👩 Female candidates only`
-  - `⚡ Irrelevant tech stack`
-  - `💰 Unrealistic / Low budget`
-  - `🗑️ Spam / Duplicate`
-- Stored permanently in `posts.rejection_reason` and viewable across the application.
+### 9. ⚡ Dynamic Cancellation Reasons & Header Sorting
+- **1-Click Rejection Chips**: Rapidly reject posts with pre-made criteria chips (`⚠️ Not enough experience`, `🚫 Not a job / Promotional`, `👩 Female candidates only`, `⚡ Irrelevant tech stack`, `💰 Unrealistic / Low budget`, `🗑️ Spam / Duplicate`).
+- **Database-Driven Reason Counts**: Dropdowns load dynamic rejection reasons with live post counts (`GET /api/reasons`).
+- **Reason Truncation**: Rejection reasons are cleanly truncated (48 chars / 8 words + ellipsis) for clean presentation.
+- **Interactive Header Sorting**: Neutral sort indicators (`↕`) on table columns turn into active directional indicators (`↑`, `↓`) on click.
+- **Relative Time Formatting**: Timestamps display intuitive relative labels (`2 hrs`, `30 mins`).
 
-### 6. 💎 Zero Token Wastage & Pure Crawling (No Third-Party APIs)
+### 10. 💎 Zero Token Wastage & Pure Crawling (No Third-Party APIs)
 - **100% Free & Unlimited**: Zero OpenAI or Anthropic API token billing, zero proxy network bills, and zero third-party scraping subscriptions.
-- **Pure Browser Crawling**: Uses headed/headless Playwright Firefox for direct, high-fidelity crawling on LinkedIn, Infopark, and other job portals.
+- **Pure Browser Crawling**: Uses Playwright Firefox for direct, high-fidelity crawling on LinkedIn, Infopark, and other job portals.
 - **Automated Web ChatGPT**: Directly orchestrates your existing logged-in ChatGPT conversation or Custom GPT in the browser. You get state-of-the-art AI generation with custom conversational memory without paying a cent in API tokens.
 
-### 7. 🚀 Direct & 1-Click Batch Email Outreach (No Manual Clicking)
-- **Direct Dispatch**: Send email applications directly through Gmail in the browser without manual clicking — your active resume is automatically attached and the email is dispatched via Gmail shortcuts/buttons.
+### 11. 🚀 Direct & 1-Click Batch Email Outreach (No Manual Clicking)
+- **Direct Dispatch**: Send email applications directly through Gmail in the browser without manual clicking — your active resume is automatically attached and the email is dispatched via Gmail keyboard shortcuts/buttons.
 - **Multi-Draft Batch Sending**: Check multiple drafts in Review & Drafts or click "Select All" to dispatch emails across multiple candidates in a single browser session with polite randomized delays (4–8s) to safeguard email reputation.
-- **Manual Review When Needed**: The `👁️ Open in Gmail` option remains available for any custom inspection.
+- **Manual Review When Needed**: The `👁️ Open in Gmail` option remains available for interactive inspection.
 - **1-Click Copy**: Built-in copy buttons on top-right corners of both the Job Description (JD) and Outreach Email Draft for instant clipboard copy.
 
-### 8. 📊 Real-Time Analytics & Trends Dashboard (Default Home)
+### 12. 📊 Real-Time Analytics & Trends Dashboard (Default Home)
 - **Analytics as Home**: Launch directly into rich visualizations of your outreach pipeline, lead conversion, and scraping activity.
-- **Tab State Persistence**: Navigating between tabs or reloading the page preserves your exact active tab via `localStorage` and hash routing.
-- **Accurate Real-Time Metrics**: High-impact top summary bar tracking `🚀 Applied`, `✉️ Drafts Ready`, `🎯 Outreach Ready`, and `🕸️ Total Sourced`, with dynamic filter count badges on Discovered and Sent tables.
+- **Tab State Persistence**: Navigating between tabs or reloading the page preserves your exact active tab via `localStorage` and hash routing (`#analytics`, `#discovered`, `#review`, `#sent`).
+- **Accurate Real-Time Metrics**: High-impact top summary bar tracking `🚀 Applied`, `✉️ Drafts Ready`, `🎯 Outreach Ready`, and `🕸️ Total Sourced`.
 - **Jobs Applied Each Day**: Smooth interactive line graph tracking daily application velocity over time.
 - **Scraping Inflow Activity**: Daily volume comparisons of newly discovered leads.
 - **Application Status Distribution**: Donut charts detailing conversion stages (`Applied / Sent`, `Drafts Ready`, `Discovered`, `Screened Out`).
-- **Scraping Sources Breakdown**: Relative performance of LinkedIn vs Infopark vs Manual entry.
+- **Scraping Sources Breakdown**: Relative performance of LinkedIn vs Infopark vs Manual entry vs Direct Outreach.
 - **Cancellation & Spam Analysis**: Visual frequency ranking of rejection reasons (unsuitable criteria, scams, irrelevant tech stack).
 - **Timeframe Filtering**: Instantly toggle between `7 Days`, `14 Days`, `30 Days`, and `All Time` with database-first aggregation.
 
@@ -72,27 +91,47 @@
 ## 🏗️ Architecture
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph Sourcing ["1. Sourcing & Aggregation"]
-        A["LinkedIn Posts Scraper"] --> REG{"Scraper Registry"}
-        B["Infopark Kochi Scraper"] --> REG
-        C["Manual JD Ingestion"] --> DB[("PostgreSQL Database\n(posts, settings)")]
+        A["LinkedIn Posts Crawler"]
+        B["Infopark Kochi Scraper"]
+        C["Manual JD Ingestion"]
+        D["Direct Cold Outreach Modal"]
+        A --> QUEUE{"FIFO Task Queue"}
+        B --> QUEUE
+        C --> DB[("PostgreSQL Database\n(posts, settings)")]
+        D --> QUEUE
+        QUEUE --> REG["Crawler Registry\n(90s Inactivity Watchdog)"]
         REG --> DB
     end
 
     subgraph Screening ["2. AI Screening & Outreach"]
-        DB --> D["ChatGPT Automation (Custom GPT)"]
-        D -- Tailored Draft --> DB
-        D -- Unsuitable Criteria --> REJ["Auto-Reject & Tag"]
+        DB --> QUEUE
+        QUEUE --> E["ChatGPT Automation (Custom GPT)"]
+        E -- Tailored Draft --> DB
+        E -- Unsuitable Criteria --> REJ["Auto-Reject & Tag"]
         REJ --> DB
     end
 
-    subgraph Dashboard ["3. Application Management"]
-        DB --> E["Discovered Feed"]
-        DB --> F["Review & Drafts"]
-        DB --> G["Others (Sent & Cancelled)"]
-        F --> H["Headed Firefox (Gmail Compose)"]
-        H -- 1-Click Send --> G
+    subgraph BrowserEngine ["3. Playwright Automation Engine"]
+        F["Playwright Firefox Context"]
+        G{"Headless Switch\n(True / False)"}
+        G --> F
+    end
+
+    subgraph Dispatch ["4. Application Outreach & Review"]
+        DB --> H["Discovered Feed"]
+        DB --> I["Review & Drafts"]
+        DB --> J["Sent & History Archive"]
+        I --> QUEUE
+        QUEUE --> F
+        F --> K["Gmail Automation (Direct Send / Compose)"]
+        K -- Sent Confirmation --> DB
+    end
+
+    subgraph Intelligence ["5. Intelligence & UI"]
+        DB --> L["Real-Time Analytics Dashboard"]
+        QUEUE --> M["Multi-Channel Notification Center"]
     end
 ```
 
@@ -103,7 +142,8 @@ flowchart LR
 This codebase is configured to be **safe to open-source**:
 - **No Stored Passwords**: Reach uses your existing logged-in browser sessions stored locally in Firefox (`~/.playwright_firefox_profile`).
 - **Zero Exposed Keys & Personal Paths**: No user home directories, personal resume files, or private ChatGPT conversation UUIDs are tracked in git.
-- **Strictly Headed Automation**: All automated browser interactions execute visibly (`headless=False`), allowing real-time monitoring of every action.
+- **Flexible Headless / Headed Automation**: Toggle seamlessly between silent background execution (`headless=True`) for zero UI interruption and visible window mode (`headless=False`) for live monitoring and debugging.
+- **Database Isolation**: Application configuration and settings are stored locally in your private PostgreSQL instance.
 
 ---
 
@@ -255,7 +295,7 @@ Candidate knowledge to learn:
 
 #### 4. Save the Conversation Link in Reach
 1. Copy the full browser URL of this ChatGPT conversation thread (e.g., `https://chatgpt.com/c/your-chat-id` or `https://chatgpt.com/g/g-your-custom-gpt`).
-2. In Reach, click the ⚙️ **Settings** icon in the navbar.
+2. In Reach, click the ⚙️ **Settings** icon in the sidebar or topbar.
 3. Paste the URL into **ChatGPT Custom GPT Chat Link** and click **Save Settings**.
 4. The URL is saved permanently in your PostgreSQL `settings` table and used automatically for all batch email generation.
 
@@ -274,7 +314,7 @@ The terminal displays your access URLs:
   Reach — Job Outreach Automation Hub
   Mac (Local):     http://localhost:8000
   Phone (Wi-Fi):   http://192.168.1.10:8000  <-- Open on Phone
-  Automation Mode: Strictly Headed (headless=False)
+  Automation Mode: Configurable (Headed / Headless Switch)
 ======================================================================
 ```
 
@@ -285,10 +325,12 @@ The terminal displays your access URLs:
 
 ## 📱 Mobile Access
 
-Reach features a dedicated mobile responsive design:
-- **Rich Card Feed**: Table rows transform into touch-friendly cards displaying recruiter name, source badge, experience pills, contact email, and one-tap action buttons.
-- **Touch Actions**: Review original job descriptions, edit drafts, mark spam, cancel with chips, and trigger Gmail compose directly from your phone.
-- **Unified Others Tab**: Inspect sent outreach emails and reasons for cancelled posts with single-tap details and instant restoration.
+Reach features a dedicated mobile responsive design tested across phone and tablet viewports (`<= 768px` and `<= 480px`):
+- **Off-Canvas Navigation Drawer**: The sidebar transforms into a full-height slide-out drawer with a blurred backdrop overlay and auto-closes on tab selection.
+- **Touch-Optimized Cards**: Table views transform into touch-friendly cards displaying recruiter name, source badge, experience pills, contact email, and one-tap action buttons.
+- **Two-Tier Filter Toolbar**: Sticky, wrap-safe filter dropdowns and 1-tap Clear Filters button.
+- **Single-Column Split Workspace**: Side-by-side Review & Drafts smoothly stacks on mobile for comfortable vertical scrolling and editing.
+- **Mobile Modals**: Full-width touch dialogs for direct opportunity outreach, settings, and job details.
 
 ---
 
@@ -307,22 +349,23 @@ reach-job-automation/
 │   └── workflows.md          # Technical workflows & DOM selectors
 ├── resumes/                  # User resumes directory (git-ignored)
 ├── scripts/
-│   ├── linkedin_posts_search.py  # Standalone LinkedIn posts scraper
-│   ├── infopark_jobs_search.py   # Standalone Infopark portal scraper
+│   ├── linkedin_posts_search.py      # LinkedIn feed scraper with watchdog
+│   ├── infopark_jobs_search.py       # Infopark Kochi portal scraper
 │   ├── process_posts_with_chatgpt.py # Batch ChatGPT generator
-│   └── prepare_gmail_draft.py    # Gmail compose launcher
+│   └── prepare_gmail_draft.py        # Gmail compose launcher
 └── src/
-    ├── app.py                # FastAPI endpoints & REST API
-    ├── automation_tasks.py   # Scraper registry & background task manager
+    ├── app.py                # FastAPI endpoints & REST API routes
+    ├── automation_tasks.py   # FIFO task queue manager & scraper registry
     ├── chatgpt_service.py    # ChatGPT prompt & generation logic
-    ├── db.py                 # PostgreSQL client, settings & spam filters
+    ├── config.py             # Database-backed configuration & headless helper
+    ├── db.py                 # PostgreSQL client, settings, & anti-spam filters
     ├── experience_extractor.py # YOE & seniority parsing
-    ├── firefox_connector.py  # Headed Playwright Firefox context
-    ├── gmail_service.py      # Gmail draft preparation
+    ├── firefox_connector.py  # Headed / Headless Playwright Firefox context
+    ├── gmail_service.py      # Gmail draft preparation & direct send
     ├── health_service.py     # Live session health checks
     └── static/
-        ├── app.js            # Frontend client application logic
-        ├── index.html        # UI dashboard & modals
+        ├── app.js            # Frontend client application logic & state
+        ├── index.html        # UI dashboard, sidebar, modals & SVG icons
         └── style.css         # Responsive dark-theme design system
 ```
 
@@ -333,22 +376,37 @@ reach-job-automation/
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Live connectivity status for LinkedIn, ChatGPT, Gmail, Infopark, and PostgreSQL |
-| `GET` | `/api/stats` | Counters for Discovered, Pending, Drafts Ready, and Others |
-| `GET` | `/api/analytics` | Aggregated analytics & timeline metrics for dashboard graphs & KPIs |
+| `GET` | `/api/stats` | Top-bar summary counters (`applied`, `drafts_ready`, `pending`, `total_sourced`) |
+| `GET` | `/api/analytics` | Aggregated metrics, velocity timeline, conversion stages, and rejection breakdown |
 | `GET` | `/api/scrapers` | List of registered website scrapers (`linkedin`, `infopark`, etc.) |
-| `POST` | `/api/scrape` | Trigger scraper background task by source (`{"source": "linkedin"}`) |
-| `GET` | `/api/posts` | Paginated & filtered job posts (`status`, `gen_status`, `source`, `min_exp`, etc.) |
+| `POST` | `/api/scrape` | Enqueue scraper background task by source with optional query and location |
+| `POST` | `/api/scrape/linkedin` | Enqueue LinkedIn feed crawler with optional location |
+| `POST` | `/api/scrape/infopark` | Enqueue Infopark Kochi crawler |
+| `GET` | `/api/tasks/status` | Real-time task execution state, log stream, and pending FIFO queue summary |
+| `POST` | `/api/tasks/clear` | Reset active task status to idle |
+| `POST` | `/api/tasks/queue/cancel/{id}` | Cancel a specific pending task from the sequential queue |
+| `POST` | `/api/tasks/queue/clear` | Clear all pending tasks from the sequential queue |
+| `GET` | `/api/posts` | Paginated & filtered job posts (`status`, `gen_status`, `source`, `location`, `sort_by`, etc.) |
+| `GET` | `/api/posts/{id}` | Retrieve full details of a single job post |
+| `PUT` | `/api/posts/{id}` | Update job post attributes (subject, body, email, company, notes) |
 | `POST` | `/api/posts/manual` | Manually ingest a raw job description |
-| `POST` | `/api/posts/{id}/spam` | 1-click action to mark a post as Spam / Scam and move to Others |
-| `POST` | `/api/posts/{id}/reject` | Cancel application with pre-made or custom reason comment |
+| `POST` | `/api/direct-outreach` | Direct opportunity cold outreach with DB tracking and automated Gmail dispatch |
+| `POST` | `/api/posts/{id}/move-to-review` | Move a post to Review & Drafts workspace |
+| `POST` | `/api/posts/{id}/spam` | 1-click action to mark a post as Spam / Scam and archive in Sent & History |
+| `POST` | `/api/posts/{id}/reject` | Cancel application with pre-made chip or custom reason |
 | `POST` | `/api/posts/{id}/revert` | Restore a sent or cancelled post back to active drafts/discovered |
 | `POST` | `/api/posts/{id}/mark-sent`| Mark application as sent with timestamp |
-| `POST` | `/api/generate-batch` | Trigger ChatGPT email generation for selected post IDs |
-| `POST` | `/api/open-gmail/{id}` | Launch headed Firefox with pre-filled Gmail compose & resume attached |
-| `POST` | `/api/send-direct/{id}` | Direct email dispatch via Gmail with attached resume without manual clicking |
-| `POST` | `/api/send-batch` | 1-click batch direct dispatch of selected applications in a single browser session |
+| `GET` | `/api/reasons` | Dynamic list of cancellation/rejection reasons with real-time post counts |
+| `GET` | `/api/locations` | Distinct job locations present across discovered posts |
+| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a single post |
+| `POST` | `/api/generate-batch` | Enqueue ChatGPT email generation for selected post IDs |
+| `POST` | `/api/open-gmail/{id}` | Enqueue opening Gmail compose with resume attached in Playwright Firefox |
+| `POST` | `/api/send-direct/{id}` | Enqueue direct email dispatch via Gmail without manual clicking |
+| `POST` | `/api/send-batch` | Enqueue batch direct dispatch across selected drafts sequentially |
+| `POST` | `/api/resume/upload` | Upload and activate replacement resume PDF |
 | `GET` | `/api/settings` | Retrieve active application configuration (DB + config.json) |
-| `POST` | `/api/settings` | Update settings and persist `chatgpt_url` & `search_query` in PostgreSQL |
+| `POST` | `/api/settings` | Update configuration (`chatgpt_url`, `search_query`, `headless_mode`) |
+| `POST` | `/api/settings/headless` | 1-click toggle between Headless Mode and Headed Mode |
 
 ---
 

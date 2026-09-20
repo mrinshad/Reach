@@ -292,10 +292,23 @@ def main():
     search_url = build_posts_search_url(effective_query)
 
     with sync_playwright() as playwright:
-        print("[1/4] Launching Firefox (headed=True, human-like)...")
+        headless_env = os.environ.get("HEADLESS", "").lower()
+        if headless_env in ("true", "1", "yes"):
+            hl = True
+        elif headless_env in ("false", "0", "no"):
+            hl = False
+        else:
+            try:
+                from src.config import is_headless
+                hl = is_headless()
+            except Exception:
+                hl = False
+
+        mode_desc = "headless mode (silent background)" if hl else "headed mode (visible window)"
+        print(f"[1/4] Launching Firefox in {mode_desc}...")
         context = launch_firefox_context(
             playwright,
-            headless=False,
+            headless=hl,
             sync_cookies_domains=["linkedin.com"],
         )
 
