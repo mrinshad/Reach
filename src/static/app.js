@@ -34,7 +34,30 @@ const state = {
   analyticsDays: 30,
   analyticsData: null,
   charts: {},
+  sortBy: 'default',
+  dateFilter: 'ALL',
+  othersReason: 'ALL',
+  locationFilter: 'ALL',
+  discoveredReason: 'ALL',
 };
+
+const DEFAULT_OPPORTUNITY_SUBJECT = "Full-Stack Software Engineer – Job Opportunities";
+const DEFAULT_OPPORTUNITY_BODY = `Hi,
+
+I’m Mohammed Rinshad, a Full-Stack Software Engineer with 3+ years of experience in web and enterprise application development.
+
+My experience includes React, Next.js, Node.js, TypeScript, .NET Core, REST APIs, PostgreSQL, SQL Server, Azure, GCP, CI/CD, authentication, RBAC, and database design. I’ve worked on ERP, accounting, education, and enterprise applications, including both frontend and backend development.
+
+I’m currently looking for opportunities in Frontend, Backend, Full-Stack, DevOps, or Cloud Engineering. I’m open to relocating for the right opportunity and am also interested in remote roles.
+
+I’ve attached my resume for reference. If there are any current or upcoming openings that match my background, I’d be grateful to be considered.
+
+Regards,
+Mohammed Rinshad P
++91 98956 12423
+rinshadmorayur09@gmail.com
+LinkedIn: linkedin.com/in/mrinshad
+GitHub: github.com/mrinshad`;
 
 // --- Custom Dialog System (Replaces Native Alert & Confirm) ---
 let dialogResolver = null;
@@ -326,6 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   switchTab(startTab);
+  initCrawlerControls();
+  fetchLocations();
+  loadRejectionReasonsFilter();
   loadDashboardData();
   fetchHealth();
   fetchScrapers();
@@ -375,6 +401,7 @@ function switchTab(tabId) {
   } else if (tabId === 'tabReview') {
     fetchReviewPosts();
   } else if (tabId === 'tabSent') {
+    loadRejectionReasonsFilter();
     fetchSentPosts();
   } else if (tabId === 'tabAnalytics') {
     loadAnalytics(state.analyticsDays || 30);
@@ -431,6 +458,8 @@ async function loadDashboardData() {
   await Promise.all([
     fetchStats(),
     fetchSettings(),
+    fetchLocations(),
+    loadRejectionReasonsFilter(),
   ]);
 
   if (state.activeTab === 'tabDiscovered') {
@@ -542,6 +571,16 @@ async function fetchSettings() {
     const filename = resumePath.split('/').pop() || 'No Resume Selected';
     document.getElementById('resumeFileName').textContent = filename;
     document.getElementById('resumePill').title = `Active Resume: ${resumePath}`;
+
+    const crawlerLocSelect = document.getElementById('crawlerLocationSelect');
+    if (crawlerLocSelect) {
+      const savedCrawlerLoc = localStorage.getItem('reach_selected_crawler_location');
+      if (savedCrawlerLoc !== null) {
+        crawlerLocSelect.value = savedCrawlerLoc;
+      } else if (state.config.search_location) {
+        crawlerLocSelect.value = state.config.search_location;
+      }
+    }
   } catch (err) {
     console.error('Error loading settings:', err);
   }
@@ -603,6 +642,22 @@ async function fetchDiscoveredPosts() {
       params.append('search', state.searchQuery);
     }
 
+    if (state.sortBy && state.sortBy !== 'default') {
+      params.append('order_by', state.sortBy);
+    }
+
+    if (state.dateFilter && state.dateFilter !== 'ALL') {
+      params.append('date_filter', state.dateFilter);
+    }
+
+    if (state.locationFilter && state.locationFilter !== 'ALL') {
+      params.append('location', state.locationFilter);
+    }
+
+    if (state.discoveredReason && state.discoveredReason !== 'ALL') {
+      params.append('reason', state.discoveredReason);
+    }
+
     if (state.expFilter === 'FRESHER') {
       params.append('max_exp', '1.0');
     } else if (state.expFilter === 'MID') {
@@ -622,8 +677,8 @@ async function fetchDiscoveredPosts() {
     if (countDiscEl) countDiscEl.textContent = state.total;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
-    // Clear Filters button: visible whenever any filter is not 'ALL'
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL';
+    // Clear Filters button: visible whenever any filter is not default/ALL
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default') || (state.locationFilter && state.locationFilter !== 'ALL') || (state.discoveredReason && state.discoveredReason !== 'ALL');
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -642,7 +697,7 @@ async function fetchDiscoveredPosts() {
     renderPagination();
   } catch (err) {
     const tbody = document.getElementById('postsTableBody');
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem;">Error loading posts: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">Error loading posts: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -654,9 +709,10 @@ function renderSkeletonRows() {
       <tr class="skeleton-row">
         <td><div class="skeleton-bar" style="width: 18px;"></div></td>
         <td><div class="skeleton-bar" style="width: 140px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 80px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 120px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 220px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 75px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 65px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 110px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 200px;"></div></td>
         <td style="text-align: right;"><div class="skeleton-bar" style="width: 70px; margin-left: auto;"></div></td>
       </tr>
     `;
@@ -682,7 +738,9 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
   }
 
   let badge = '';
-  if (url.includes('infopark.in')) {
+  if (url.startsWith('direct://') || url.includes('direct')) {
+    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">✉ Direct Outreach</span>`;
+  } else if (url.includes('infopark.in')) {
     badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">⚡ Infopark Kochi</span>`;
   } else if (url.startsWith('manual://') || url.includes('manual')) {
     badge = `<span class="source-pill source-manual" title="Source: Manually Added">✍️ Manual</span>`;
@@ -709,7 +767,7 @@ function renderPostsTable() {
   tbody.innerHTML = '';
 
   if (state.posts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 3rem; color: #64748b;">No matching jobs found. Try adjusting filters or scrape today's Infopark jobs.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">No matching jobs found. Try adjusting filters or scrape today's Infopark jobs.</td></tr>`;
     return;
   }
 
@@ -731,6 +789,10 @@ function renderPostsTable() {
       expClass = min < 3 ? 'badge-mid' : 'badge-senior';
     }
 
+    // Date cell: dd/mm/yyyy hh:mm AM/PM (1 hr)
+    const dateStr = formatPostDateTimeWithRelative(post);
+    const dateHtml = `<span class="table-date-badge" title="${escapeHtml(post.posted_date_raw || post.created_at || '')}">${escapeHtml(dateStr || '—')}</span>`;
+
     // Email cell
     const primaryEmail = (post.contact_emails && post.contact_emails[0]) || '';
     const emailHtml = primaryEmail
@@ -750,12 +812,16 @@ function renderPostsTable() {
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
             <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
             ${getSourceBadgeHtml(post)}
+            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
           </div>
           <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
         </div>
       </td>
       <td>
         <span class="pill-badge ${expClass}">${escapeHtml(expText)}</span>
+      </td>
+      <td>
+        ${dateHtml}
       </td>
       <td>
         ${emailHtml}
@@ -777,34 +843,34 @@ function renderPostsTable() {
           ${
             post.status === 'SENT'
               ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem;">✓ Sent</span>
-                 <button class="btn btn-outline btn-sm" onclick="switchTab('tabSent')" title="View in Sent History">
-                   <span>Sent</span>
+                 <button class="btn btn-icon-only" onclick="switchTab('tabSent')" title="View in Sent History">
+                   <span>✉</span>
                  </button>`
               : post.status === 'REJECTED'
                 ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">🚫 Cancelled</span>
-                   <button class="btn btn-outline btn-sm" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
-                     <span>Restore</span>
+                   <button class="btn btn-icon-only btn-restore" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
+                     <span>↺</span>
                    </button>`
                 : isGenerated
                   ? `<button class="btn btn-outline btn-sm" onclick="openPostInReview('${post.id}')" title="Review Generated Draft">
                        <span>Review Draft</span>
                      </button>
-                     <button class="btn btn-spam-quick" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫 Spam</span>
+                     <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
+                       <span>🚫</span>
                      </button>
-                     <button class="btn btn-cancel-quick" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕ Cancel</span>
+                     <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
+                       <span>✕</span>
                      </button>`
                   : `
                      ${primaryEmail ? `<button class="btn btn-primary btn-sm" onclick="generateSingleChatGPT('${post.id}')" title="Generate with ChatGPT"><span>Generate</span></button>` : ''}
                      <button class="btn btn-outline btn-sm" onclick="movePostToReview('${post.id}')" title="Move directly to Review & Drafts">
-                       <span>Move to Review</span>
+                       <span>Review</span>
                      </button>
-                     <button class="btn btn-spam-quick" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫 Spam</span>
+                     <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
+                       <span>🚫</span>
                      </button>
-                     <button class="btn btn-cancel-quick" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕ Cancel</span>
+                     <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
+                       <span>✕</span>
                      </button>
                   `
           }
@@ -894,9 +960,73 @@ function applyFilters() {
   if (srcSelect) {
     state.sourceFilter = srcSelect.value;
   }
+  const dateSelect = document.getElementById('selectDateFilter');
+  if (dateSelect) {
+    state.dateFilter = dateSelect.value;
+  }
+  const locSelect = document.getElementById('selectLocationFilter');
+  if (locSelect) {
+    state.locationFilter = locSelect.value;
+  }
+  const discReasonSelect = document.getElementById('selectReasonFilterDiscovered');
+  if (discReasonSelect) {
+    state.discoveredReason = discReasonSelect.value;
+  }
+  const sortSelect = document.getElementById('selectSortBy');
+  if (sortSelect) {
+    state.sortBy = sortSelect.value;
+    updateSortIndicators();
+  }
   state.searchQuery = document.getElementById('inputSearch').value.trim();
   state.page = 1;
   fetchDiscoveredPosts();
+}
+
+function handleSortSelectChange(val) {
+  state.sortBy = val;
+  updateSortIndicators();
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
+function toggleSort(col) {
+  if (col === 'exp') {
+    state.sortBy = state.sortBy === 'exp_asc' ? 'exp_desc' : 'exp_asc';
+  } else if (col === 'date') {
+    state.sortBy = state.sortBy === 'date_desc' ? 'date_asc' : 'date_desc';
+  } else if (col === 'author') {
+    state.sortBy = state.sortBy === 'author_asc' ? 'author_desc' : 'author_asc';
+  }
+  const sortSel = document.getElementById('selectSortBy');
+  if (sortSel) sortSel.value = state.sortBy;
+  updateSortIndicators();
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
+function updateSortIndicators() {
+  const expInd = document.getElementById('sortExpIndicator');
+  const dateInd = document.getElementById('sortDateIndicator');
+  const authorInd = document.getElementById('sortAuthorIndicator');
+
+  if (expInd) {
+    const isAsc = state.sortBy === 'exp_asc';
+    const isDesc = state.sortBy === 'exp_desc';
+    expInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    expInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
+  if (dateInd) {
+    const isAsc = state.sortBy === 'date_asc';
+    const isDesc = state.sortBy === 'date_desc';
+    dateInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    dateInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
+  if (authorInd) {
+    const isAsc = state.sortBy === 'author_asc';
+    const isDesc = state.sortBy === 'author_desc';
+    authorInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    authorInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
 }
 
 function handleSearchKeyUp(e) {
@@ -923,6 +1053,23 @@ function clearDiscoveredFilters() {
   state.sourceFilter = 'ALL';
   const srcSel = document.getElementById('selectSource');
   if (srcSel) srcSel.value = 'ALL';
+
+  state.dateFilter = 'ALL';
+  const dateSel = document.getElementById('selectDateFilter');
+  if (dateSel) dateSel.value = 'ALL';
+
+  state.locationFilter = 'ALL';
+  const locSel = document.getElementById('selectLocationFilter');
+  if (locSel) locSel.value = 'ALL';
+
+  state.discoveredReason = 'ALL';
+  const discReasonSel = document.getElementById('selectReasonFilterDiscovered');
+  if (discReasonSel) discReasonSel.value = 'ALL';
+
+  state.sortBy = 'default';
+  const sortSel = document.getElementById('selectSortBy');
+  if (sortSel) sortSel.value = 'default';
+  updateSortIndicators();
 
   state.searchQuery = '';
   const searchInput = document.getElementById('inputSearch');
@@ -1072,6 +1219,7 @@ async function fetchReviewPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <span class="queue-author">${escapeHtml(post.author_name)}</span>
               ${getSourceBadgeHtml(post)}
+              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem;" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="queue-email">✉ ${escapeHtml(email)}</span>
           </div>
@@ -1108,7 +1256,7 @@ function selectReviewPost(post) {
 
   const authorEl = document.getElementById('reviewAuthorName');
   if (authorEl) {
-    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)}`;
+    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)} ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}`;
   }
   document.getElementById('reviewHeadline').textContent = post.author_headline || 'N/A';
   document.getElementById('reviewTargetEmail').textContent = (post.contact_emails || []).join(', ') || 'None';
@@ -1572,12 +1720,80 @@ function clearSentFilters() {
     pill.classList.toggle('active', pill.dataset.others === 'ALL');
   });
 
+  state.othersReason = 'ALL';
+  const reasonSel = document.getElementById('selectReasonFilter');
+  if (reasonSel) reasonSel.value = 'ALL';
+
   state.searchSent = '';
   const searchInput = document.getElementById('inputSearchSent');
   if (searchInput) searchInput.value = '';
 
   state.sentPage = 1;
   fetchSentPosts();
+}
+
+async function loadRejectionReasonsFilter(selectedReason = null) {
+  try {
+    const res = await fetch('/api/reasons');
+    if (!res.ok) return;
+    const data = await res.json();
+    const items = data.counts || (data.reasons || []).map(r => ({ reason: r, count: null }));
+
+    // Update Sent / Cancelled tab reason filter
+    const sentSelect = document.getElementById('selectReasonFilter');
+    if (sentSelect) {
+      const currentSentVal = selectedReason || state.othersReason || 'ALL';
+      let html = '<option value="ALL">All Reasons</option>';
+      items.forEach(item => {
+        const countTxt = item.count !== null && item.count !== undefined ? ` (${item.count})` : '';
+        const isSel = item.reason === currentSentVal ? 'selected' : '';
+        html += `<option value="${escapeHtml(item.reason)}" ${isSel}>${escapeHtml(item.reason)}${countTxt}</option>`;
+      });
+      sentSelect.innerHTML = html;
+      sentSelect.value = currentSentVal;
+    }
+
+    // Update Discovered tab reason filter
+    const discSelect = document.getElementById('selectReasonFilterDiscovered');
+    if (discSelect) {
+      const currentDiscVal = state.discoveredReason || 'ALL';
+      let html = '<option value="ALL">All Reasons</option>';
+      items.forEach(item => {
+        const countTxt = item.count !== null && item.count !== undefined ? ` (${item.count})` : '';
+        const isSel = item.reason === currentDiscVal ? 'selected' : '';
+        html += `<option value="${escapeHtml(item.reason)}" ${isSel}>${escapeHtml(item.reason)}${countTxt}</option>`;
+      });
+      discSelect.innerHTML = html;
+      discSelect.value = currentDiscVal;
+    }
+
+    if (selectedReason) {
+      state.othersReason = selectedReason;
+    }
+  } catch (e) {
+    console.error('Error loading rejection reasons:', e);
+  }
+}
+
+function applySentReasonFilter() {
+  const select = document.getElementById('selectReasonFilter');
+  if (select) {
+    state.othersReason = select.value;
+  }
+  state.sentPage = 1;
+  fetchSentPosts();
+}
+
+function filterOthersByReason(reason) {
+  switchTab('tabSent');
+  setOthersFilter('REJECTED');
+  loadRejectionReasonsFilter(reason).then(() => {
+    state.othersReason = reason;
+    const select = document.getElementById('selectReasonFilter');
+    if (select) select.value = reason;
+    state.sentPage = 1;
+    fetchSentPosts();
+  });
 }
 
 async function fetchSentPosts() {
@@ -1595,6 +1811,9 @@ async function fetchSentPosts() {
     if (state.searchSent) {
       params.append('search', state.searchSent);
     }
+    if (state.othersReason && state.othersReason !== 'ALL') {
+      params.append('reason', state.othersReason);
+    }
 
     const res = await fetch(`/api/posts?${params.toString()}`);
     const data = await res.json();
@@ -1605,7 +1824,7 @@ async function fetchSentPosts() {
     if (countSentEl) countSentEl.textContent = state.sentTotal;
 
     const sentBadge = document.getElementById('sentResultsBadge');
-    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '');
+    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '') || (state.othersReason && state.othersReason !== 'ALL');
     if (sentBadge) {
       if (isSentFiltered) {
         sentBadge.textContent = `${state.sentTotal} result${state.sentTotal === 1 ? '' : 's'}`;
@@ -1640,9 +1859,7 @@ async function fetchSentPosts() {
       };
 
       const email = (post.contact_emails && post.contact_emails[0]) || 'N/A';
-      const updatedDate = post.updated_at
-        ? new Date(post.updated_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : 'Recently';
+      const updatedDate = formatDateTime(post.sent_at || post.updated_at || post.created_at);
 
       const isSent = post.status === 'SENT';
       const isRejected = post.status === 'REJECTED';
@@ -1667,6 +1884,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
+              ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -1681,6 +1899,13 @@ async function fetchSentPosts() {
         <td style="font-size: 0.76rem; color: var(--text-muted); white-space: nowrap;">${updatedDate}</td>
         <td style="text-align: right;">
           <div class="table-actions" style="justify-content: flex-end; gap: 0.35rem;">
+            ${
+              post.post_url && !post.post_url.startsWith('manual://') && !post.post_url.startsWith('direct://')
+                ? `<a href="${post.post_url}" target="_blank" class="icon-btn sm" title="Open source post">
+                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                   </a>`
+                : ''
+            }
             <button class="btn btn-outline btn-sm" onclick="openPostModal('${post.id}')" title="View details">
               <span>View</span>
             </button>
@@ -1688,13 +1913,6 @@ async function fetchSentPosts() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               <span>Restore</span>
             </button>
-            ${
-              post.post_url && !post.post_url.startsWith('manual://')
-                ? `<a href="${post.post_url}" target="_blank" class="icon-btn sm" title="Open source post">
-                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                   </a>`
-                : ''
-            }
           </div>
         </td>
       `;
@@ -1810,6 +2028,34 @@ async function triggerInfoparkScrape() {
   }
 }
 
+function handleCrawlerSourceChange() {
+  const sourceSelect = document.getElementById('crawlerSourceSelect');
+  const locSelect = document.getElementById('crawlerLocationSelect');
+  if (!sourceSelect || !locSelect) return;
+  const sourceId = sourceSelect.value;
+  if (sourceId === 'infopark') {
+    locSelect.disabled = true;
+    locSelect.title = "Infopark crawler discovers jobs in Kochi, Kerala";
+  } else {
+    locSelect.disabled = false;
+    locSelect.title = "Target Job Location / Area";
+  }
+}
+
+function initCrawlerControls() {
+  const locSelect = document.getElementById('crawlerLocationSelect');
+  if (locSelect) {
+    const saved = localStorage.getItem('reach_selected_crawler_location');
+    if (saved !== null) {
+      locSelect.value = saved;
+    }
+    locSelect.onchange = () => {
+      localStorage.setItem('reach_selected_crawler_location', locSelect.value);
+    };
+  }
+  handleCrawlerSourceChange();
+}
+
 async function fetchScrapers() {
   try {
     const res = await fetch('/api/scrapers');
@@ -1825,30 +2071,88 @@ async function fetchScrapers() {
       `).join('');
       select.onchange = () => {
         localStorage.setItem('reach_selected_crawler_source', select.value);
+        handleCrawlerSourceChange();
       };
+      handleCrawlerSourceChange();
     }
   } catch (err) {
     console.error('Error fetching scrapers:', err);
   }
 }
 
+async function fetchLocations() {
+  try {
+    const res = await fetch('/api/locations');
+    if (!res.ok) return;
+    const data = await res.json();
+    const savedLocations = data.locations || [];
+    const presets = data.presets || [];
+
+    const filterSelect = document.getElementById('selectLocationFilter');
+    if (!filterSelect) return;
+
+    const currentVal = state.locationFilter || 'ALL';
+
+    let html = `<option value="ALL">All Locations</option>`;
+    if (savedLocations.length > 0) {
+      html += `<optgroup label="Locations with Discovered Posts">`;
+      savedLocations.forEach((loc) => {
+        html += `<option value="${escapeHtml(loc)}" ${currentVal === loc ? 'selected' : ''}>📍 ${escapeHtml(loc)}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    const remainingPresets = presets.filter((p) => !savedLocations.includes(p));
+    if (remainingPresets.length > 0) {
+      html += `<optgroup label="Major Job Hubs">`;
+      remainingPresets.forEach((loc) => {
+        html += `<option value="${escapeHtml(loc)}" ${currentVal === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    filterSelect.innerHTML = html;
+    filterSelect.value = currentVal;
+  } catch (err) {
+    console.error('Error loading locations:', err);
+  }
+}
+
 async function triggerSelectedCrawl() {
   const select = document.getElementById('crawlerSourceSelect');
+  const locSelect = document.getElementById('crawlerLocationSelect');
   const sourceId = select ? select.value : 'linkedin';
   const sourceName = select ? select.options[select.selectedIndex]?.text.trim() : 'Selected Source';
+  const selectedLocation = (locSelect && !locSelect.disabled) ? (locSelect.value || '').trim() : '';
+
+  let searchDetails = '';
+  if (sourceId === 'linkedin') {
+    const baseQuery = (state.config && state.config.search_query) || 'Full stack developer';
+    if (selectedLocation) {
+      searchDetails = `\n\nSearch Query: "${baseQuery} ${selectedLocation}"\nSaved Location: "${selectedLocation}"`;
+    } else {
+      searchDetails = `\n\nSearch Query: "${baseQuery}" (No specific location appended)`;
+    }
+  } else if (sourceId === 'infopark') {
+    searchDetails = `\n\nSource: Infopark Kochi Portal\nSaved Location: "Kochi"`;
+  }
 
   const confirmed = await showConfirm(
     `Start Crawling: ${sourceName}`,
-    `Launch the ${sourceName} scraper? It will run visibly with a 90-second inactivity watchdog and automatically save discovered jobs to the database.`,
+    `Launch the ${sourceName} scraper? It will run visibly with a 90-second inactivity watchdog and automatically save discovered jobs to the database.${searchDetails}`,
     { confirmText: `Start Crawl` }
   );
   if (!confirmed) return;
 
   try {
+    const payload = { source: sourceId };
+    if (selectedLocation && sourceId === 'linkedin') {
+      payload.location = selectedLocation;
+    }
     const res = await fetch('/api/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: sourceId }),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       showToast(`${sourceName} crawler started`, 'info');
@@ -2007,12 +2311,18 @@ async function pollTaskStatus() {
 
       if (task.status === 'completed') {
         fillEl.style.width = '100%';
-        subEl.textContent = '✓ Completed successfully';
+        if (task.crawl_stats) {
+          const s = task.crawl_stats;
+          subEl.textContent = `✓ Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+          showCrawlSummaryModal(task.task_name, s);
+        } else {
+          subEl.textContent = '✓ Completed successfully';
+        }
         setTimeout(() => {
           card.classList.add('hidden');
           fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
           loadDashboardData();
-        }, 1500);
+        }, task.crawl_stats ? 3000 : 1500);
       } else {
         const firstLine = (task.error || 'Operation failed').split('\n')[0];
         subEl.textContent = `✗ Failed: ${firstLine}`;
@@ -2040,6 +2350,56 @@ async function pollTaskStatus() {
     console.error('Task poll error:', err);
     stopTaskPolling();
   }
+}
+
+function showCrawlSummaryModal(taskName, stats) {
+  const modal = document.getElementById('crawlSummaryModal');
+  const title = document.getElementById('crawlSummaryTitle');
+  const grid = document.getElementById('crawlSummaryGrid');
+  if (!modal || !grid) return;
+
+  title.textContent = `${taskName || 'Crawler'} Summary`;
+
+  const total = stats.total_crawled !== undefined ? stats.total_crawled : 0;
+  const added = stats.newly_added !== undefined ? stats.newly_added : 0;
+  const emailOutreach = stats.new_email_outreach !== undefined ? stats.new_email_outreach : 0;
+  const draftPortal = stats.new_draft_portal !== undefined ? stats.new_draft_portal : 0;
+  const skippedInDb = stats.skipped_already_added !== undefined ? stats.skipped_already_added : 0;
+  const skippedOther = stats.skipped_other !== undefined ? stats.skipped_other : 0;
+
+  grid.innerHTML = `
+    <div class="crawl-stat-card" style="border-left: 3px solid #38bdf8;">
+      <div class="crawl-stat-val" style="color: #38bdf8;">${total}</div>
+      <div class="crawl-stat-lbl">Total Posts Scanned</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #34d399;">
+      <div class="crawl-stat-val" style="color: #34d399;">${added}</div>
+      <div class="crawl-stat-lbl">Newly Added Jobs</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #818cf8;">
+      <div class="crawl-stat-val" style="color: #818cf8;">${emailOutreach}</div>
+      <div class="crawl-stat-lbl">Direct Email Outreach</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #f59e0b;">
+      <div class="crawl-stat-val" style="color: #f59e0b;">${draftPortal}</div>
+      <div class="crawl-stat-lbl">Drafts & Portals</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #94a3b8;">
+      <div class="crawl-stat-val" style="color: #94a3b8;">${skippedInDb}</div>
+      <div class="crawl-stat-lbl">Skipped (Already in DB)</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #f43f5e;">
+      <div class="crawl-stat-val" style="color: #f43f5e;">${skippedOther}</div>
+      <div class="crawl-stat-lbl">Skipped (No Match / Filtered)</div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+}
+
+function closeCrawlSummaryModal() {
+  const modal = document.getElementById('crawlSummaryModal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function toggleTaskLogs() {
@@ -2078,7 +2438,8 @@ function openPostModal(postId) {
   if (metaEl) {
     const email = (post.contact_emails && post.contact_emails[0]) ? `Email: ${post.contact_emails[0]}` : 'No email detected';
     const exp = post.raw_experience ? ` • Exp: ${post.raw_experience}` : '';
-    metaEl.textContent = `${email}${exp}`;
+    const loc = post.location ? ` • 📍 Location: ${post.location}` : '';
+    metaEl.textContent = `${email}${exp}${loc}`;
   }
 
   // Status Banner (for Sent / Cancelled / Scam / Potential Scam applications)
@@ -2170,6 +2531,7 @@ function closePostModal() {
 function openAddJdModal() {
   document.getElementById('manualJdTitle').value = '';
   document.getElementById('manualJdCompany').value = '';
+  if (document.getElementById('manualJdLocation')) document.getElementById('manualJdLocation').value = '';
   document.getElementById('manualJdContent').value = '';
   document.getElementById('modalAddJd').classList.remove('hidden');
 }
@@ -2186,6 +2548,7 @@ async function submitManualJd() {
   }
   const title = (document.getElementById('manualJdTitle').value || '').trim();
   const company = (document.getElementById('manualJdCompany').value || '').trim();
+  const location = (document.getElementById('manualJdLocation')?.value || '').trim();
 
   try {
     const res = await fetch('/api/posts/manual', {
@@ -2195,6 +2558,7 @@ async function submitManualJd() {
         title: title || 'Job Opening',
         company: company || 'Recruiter',
         content: content,
+        location: location || null,
       }),
     });
     if (res.ok) {
@@ -2211,10 +2575,82 @@ async function submitManualJd() {
   }
 }
 
+// --- Direct Opportunity Outreach Modal ---
+function openDirectOutreachModal() {
+  const emailInput = document.getElementById('directOutreachEmail');
+  const companyInput = document.getElementById('directOutreachCompany');
+  const locInput = document.getElementById('directOutreachLocation');
+  const subInput = document.getElementById('directOutreachSubject');
+  const bodyInput = document.getElementById('directOutreachBody');
+
+  if (emailInput) emailInput.value = '';
+  if (companyInput) companyInput.value = '';
+  if (locInput) locInput.value = '';
+  if (subInput) subInput.value = DEFAULT_OPPORTUNITY_SUBJECT;
+  if (bodyInput) bodyInput.value = DEFAULT_OPPORTUNITY_BODY;
+
+  document.getElementById('modalDirectOutreach')?.classList.remove('hidden');
+  if (emailInput) emailInput.focus();
+}
+
+function closeDirectOutreachModal() {
+  document.getElementById('modalDirectOutreach')?.classList.add('hidden');
+}
+
+function resetDirectOutreachBody() {
+  const subInput = document.getElementById('directOutreachSubject');
+  const bodyInput = document.getElementById('directOutreachBody');
+  if (subInput) subInput.value = DEFAULT_OPPORTUNITY_SUBJECT;
+  if (bodyInput) bodyInput.value = DEFAULT_OPPORTUNITY_BODY;
+}
+
+async function submitDirectOutreach(mode = 'send') {
+  const email = (document.getElementById('directOutreachEmail')?.value || '').trim();
+  if (!email || !email.includes('@')) {
+    showAlert('Invalid Recipient', 'Please enter a valid recipient email address.');
+    return;
+  }
+
+  const company = (document.getElementById('directOutreachCompany')?.value || '').trim();
+  const location = (document.getElementById('directOutreachLocation')?.value || '').trim();
+  const subject = (document.getElementById('directOutreachSubject')?.value || '').trim() || DEFAULT_OPPORTUNITY_SUBJECT;
+  const body = (document.getElementById('directOutreachBody')?.value || '').trim() || DEFAULT_OPPORTUNITY_BODY;
+
+  try {
+    const res = await fetch('/api/direct-outreach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient_email: email,
+        company_name: company || null,
+        location: location || null,
+        subject: subject,
+        body: body,
+        mode: mode,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      closeDirectOutreachModal();
+      showToast(data.message || `✓ Outreach dispatched to ${email}`, 'success');
+      startTaskPolling();
+      loadDashboardData();
+    } else {
+      const err = await res.json();
+      showAlert('Direct Outreach Error', err.detail || 'Failed to dispatch direct outreach.');
+    }
+  } catch (err) {
+    showAlert('Network Error', err.message);
+  }
+}
+
 // --- Settings Modal ---
 function openSettingsModal() {
   document.getElementById('settingResumePath').value = state.config.resume_path || '';
   document.getElementById('settingSearchQuery').value = state.config.search_query || '';
+  const settingLoc = document.getElementById('settingSearchLocation');
+  if (settingLoc) settingLoc.value = state.config.search_location || '';
   document.getElementById('settingChatGptUrl').value = state.config.chatgpt_url || '';
   document.getElementById('settingsModal').classList.remove('hidden');
 }
@@ -2227,6 +2663,7 @@ async function saveSettings() {
   const payload = {
     resume_path: document.getElementById('settingResumePath').value.trim(),
     search_query: document.getElementById('settingSearchQuery').value.trim(),
+    search_location: document.getElementById('settingSearchLocation') ? document.getElementById('settingSearchLocation').value.trim() : '',
     chatgpt_url: document.getElementById('settingChatGptUrl').value.trim(),
   };
 
@@ -2257,6 +2694,118 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function formatRelativeLabel(raw) {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(\d+)\s*([a-zA-Z]+)$/);
+  if (!match) return trimmed;
+  const num = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  if (unit === 'h' || unit.startsWith('hr')) {
+    return num === 1 ? '1 hr' : `${num} hrs`;
+  }
+  if (unit === 'm' || unit.startsWith('min')) {
+    return num === 1 ? '1 min' : `${num} mins`;
+  }
+  if (unit === 'd' || unit.startsWith('day')) {
+    return num === 1 ? '1 day' : `${num} days`;
+  }
+  if (unit === 'w' || unit.startsWith('wk') || unit.startsWith('week')) {
+    return num === 1 ? '1 week' : `${num} weeks`;
+  }
+  if (unit === 'mo' || unit.startsWith('mon') || unit.startsWith('month')) {
+    return num === 1 ? '1 mo' : `${num} mos`;
+  }
+  if (unit === 'y' || unit.startsWith('yr') || unit.startsWith('year')) {
+    return num === 1 ? '1 yr' : `${num} yrs`;
+  }
+  return trimmed;
+}
+
+function formatPostDateTimeWithRelative(post) {
+  if (!post) return '—';
+
+  let baseDate = null;
+  if (post.created_at) {
+    baseDate = new Date(post.created_at);
+  }
+  if (!baseDate || isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  const raw = (post.posted_date_raw || '').trim();
+  let computedDate = new Date(baseDate.getTime());
+  let relativeLabel = '';
+
+  if (raw) {
+    // If raw is already a date like "20-09-2026" or "2026-09-20"
+    if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(raw)) {
+      relativeLabel = '';
+    } else {
+      const match = raw.match(/^(\d+)\s*([a-zA-Z]+)$/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        const unit = match[2].toLowerCase();
+        let msOffset = 0;
+
+        if (unit.startsWith('m') && !unit.startsWith('mo')) {
+          msOffset = val * 60 * 1000;
+        } else if (unit.startsWith('h')) {
+          msOffset = val * 60 * 60 * 1000;
+        } else if (unit.startsWith('d')) {
+          msOffset = val * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('w')) {
+          msOffset = val * 7 * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('mo')) {
+          msOffset = val * 30 * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('y')) {
+          msOffset = val * 365 * 24 * 60 * 60 * 1000;
+        }
+
+        if (msOffset > 0) {
+          computedDate = new Date(baseDate.getTime() - msOffset);
+        }
+        relativeLabel = formatRelativeLabel(raw);
+      } else {
+        relativeLabel = raw;
+      }
+    }
+  }
+
+  const day = String(computedDate.getDate()).padStart(2, '0');
+  const month = String(computedDate.getMonth() + 1).padStart(2, '0');
+  const year = computedDate.getFullYear();
+
+  let hours = computedDate.getHours();
+  const minutes = String(computedDate.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+
+  const formattedDate = `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
+  if (relativeLabel) {
+    return `${formattedDate} (${relativeLabel})`;
+  }
+  return formattedDate;
+}
+
+function formatDateTime(dateVal) {
+  if (!dateVal) return '—';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return String(dateVal);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+  return `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
 }
 
 // ==========================================================================
@@ -2492,8 +3041,41 @@ function renderRejectionReasonsChart(reasons) {
   }
   const cleanReasons = (reasons && reasons.length > 0) ? reasons : [{ reason: 'No cancellations recorded', count: 0 }];
 
-  // Truncate Y-axis labels to max 30 chars for display; full text shown in tooltip
-  const truncLabel = (s) => s.length > 30 ? s.slice(0, 27).trimEnd() + '...' : s;
+  // Dynamic height adjustment: comfortable spacing per reason bar so all reasons render cleanly
+  const container = document.getElementById('chartReasonsContainer');
+  const dynamicHeight = Math.max(260, cleanReasons.length * 36);
+  if (container) {
+    container.style.height = `${dynamicHeight}px`;
+  }
+
+  // Populate companion analytical breakdown list
+  const listEl = document.getElementById('reasonsAnalyticsList');
+  if (listEl) {
+    const totalCancellations = cleanReasons.reduce((acc, r) => acc + (r.count || 0), 0);
+    if (!reasons || reasons.length === 0 || totalCancellations === 0) {
+      listEl.innerHTML = '<div style="font-size:0.78rem; color:#64748b; padding:0.5rem;">No cancellation reasons recorded yet.</div>';
+    } else {
+      listEl.innerHTML = cleanReasons.map((r, idx) => {
+        const pct = totalCancellations > 0 ? Math.round((r.count / totalCancellations) * 100) : 0;
+        return `
+          <div class="reasons-analytics-row">
+            <span class="reasons-rank-badge">#${idx + 1}</span>
+            <span class="reasons-name" title="${escapeHtml(r.reason)}">${escapeHtml(r.reason)}</span>
+            <div class="reasons-stats">
+              <span class="reasons-pct-badge">${pct}%</span>
+              <span class="reasons-count-badge">${r.count}</span>
+              <button class="reasons-filter-btn" onclick="filterOthersByReason('${escapeHtml(r.reason).replace(/'/g, "\\'")}')" title="Filter applications in Others by this reason">
+                Filter Others ↗
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Truncate Y-axis labels to max 35 chars for display; full text shown in tooltip
+  const truncLabel = (s) => s.length > 35 ? s.slice(0, 32).trimEnd() + '...' : s;
   const fullLabels = cleanReasons.map(r => r.reason);
   const displayLabels = fullLabels.map(truncLabel);
 
@@ -2511,6 +3093,7 @@ function renderRejectionReasonsChart(reasons) {
     },
     options: {
       ...chartDefaultOptions,
+      maintainAspectRatio: false,
       indexAxis: 'y',
       plugins: {
         ...((chartDefaultOptions.plugins) || {}),

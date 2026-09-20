@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=2.4" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -46,9 +46,82 @@
       <!-- Extensible Crawler Source Selector & Trigger -->
       <div class="crawler-control-group">
         <div class="crawler-select-wrapper">
-          <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source">
+          <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source" onchange="handleCrawlerSourceChange()">
             <option value="linkedin">💼 LinkedIn Posts</option>
             <option value="infopark">🏢 Infopark Kochi</option>
+          </select>
+        </div>
+        <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
+          <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
+            <option value="" selected>📍 Anywhere (No Area Filter)</option>
+            <optgroup label="Middle East">
+              <option value="Dubai">🇦🇪 Dubai</option>
+              <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
+              <option value="Riyadh">🇸🇦 Riyadh</option>
+              <option value="Doha">🇶🇦 Doha</option>
+              <option value="Manama">🇧🇭 Manama</option>
+              <option value="Kuwait City">🇰🇼 Kuwait City</option>
+              <option value="Muscat">🇴🇲 Muscat</option>
+              <option value="Tel Aviv">🇮🇱 Tel Aviv</option>
+            </optgroup>
+            <optgroup label="India">
+              <option value="Bengaluru">🇮🇳 Bengaluru</option>
+              <option value="Hyderabad">🇮🇳 Hyderabad</option>
+              <option value="Pune">🇮🇳 Pune</option>
+              <option value="Chennai">🇮🇳 Chennai</option>
+              <option value="Mumbai">🇮🇳 Mumbai</option>
+              <option value="Delhi">🇮🇳 Delhi</option>
+              <option value="Kochi">🇮🇳 Kochi</option>
+            </optgroup>
+            <optgroup label="North America">
+              <option value="San Francisco">🇺🇸 San Francisco</option>
+              <option value="Seattle">🇺🇸 Seattle</option>
+              <option value="New York">🇺🇸 New York</option>
+              <option value="Boston">🇺🇸 Boston</option>
+              <option value="Austin">🇺🇸 Austin</option>
+              <option value="Los Angeles">🇺🇸 Los Angeles</option>
+              <option value="Toronto">🇨🇦 Toronto</option>
+              <option value="Vancouver">🇨🇦 Vancouver</option>
+              <option value="Montreal">🇨🇦 Montreal</option>
+            </optgroup>
+            <optgroup label="Europe">
+              <option value="London">🇬🇧 London</option>
+              <option value="Dublin">🇮🇪 Dublin</option>
+              <option value="Amsterdam">🇳🇱 Amsterdam</option>
+              <option value="Berlin">🇩🇪 Berlin</option>
+              <option value="Paris">🇫🇷 Paris</option>
+              <option value="Stockholm">🇸🇪 Stockholm</option>
+              <option value="Copenhagen">🇩🇰 Copenhagen</option>
+              <option value="Zurich">🇨🇭 Zurich</option>
+              <option value="Munich">🇩🇪 Munich</option>
+            </optgroup>
+            <optgroup label="Asia Pacific">
+              <option value="Singapore">🇸🇬 Singapore</option>
+              <option value="Tokyo">🇯🇵 Tokyo</option>
+              <option value="Seoul">🇰🇷 Seoul</option>
+              <option value="Beijing">🇨🇳 Beijing</option>
+              <option value="Shanghai">🇨🇳 Shanghai</option>
+              <option value="Shenzhen">🇨🇳 Shenzhen</option>
+              <option value="Hong Kong">🇭🇰 Hong Kong</option>
+            </optgroup>
+            <optgroup label="Oceania">
+              <option value="Sydney">🇦🇺 Sydney</option>
+              <option value="Melbourne">🇦🇺 Melbourne</option>
+              <option value="Auckland">🇳🇿 Auckland</option>
+            </optgroup>
+            <optgroup label="Latin America">
+              <option value="São Paulo">🇧🇷 São Paulo</option>
+              <option value="Mexico City">🇲🇽 Mexico City</option>
+              <option value="Buenos Aires">🇦🇷 Buenos Aires</option>
+            </optgroup>
+            <optgroup label="Africa">
+              <option value="Cape Town">🇿🇦 Cape Town</option>
+              <option value="Johannesburg">🇿🇦 Johannesburg</option>
+              <option value="Nairobi">🇰🇪 Nairobi</option>
+            </optgroup>
+            <optgroup label="Work Mode">
+              <option value="Remote">🌐 Remote</option>
+            </optgroup>
           </select>
         </div>
         <button id="btnStartCrawl" class="btn btn-primary btn-crawl" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
@@ -155,6 +228,10 @@
               <span>+ Add JD</span>
             </button>
 
+            <button class="btn btn-outline btn-direct-outreach" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
+              <span>✉ Direct Outreach</span>
+            </button>
+
             <!-- Batch Action Trigger -->
             <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
               🤖 Generate (<span id="batchCountBadge">0</span>)
@@ -171,6 +248,7 @@
               <option value="INFOPARK">⚡ Infopark Kochi</option>
               <option value="LINKEDIN">in LinkedIn</option>
               <option value="MANUAL">✍️ Manual JDs</option>
+              <option value="DIRECT">✉ Direct Outreach</option>
             </select>
 
             <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
@@ -178,12 +256,38 @@
               <option value="ALL">All Status (Pending First)</option>
               <option value="GENERATED">✓ Already Generated</option>
               <option value="SENT">✉ Sent Applications</option>
+              <option value="REJECTED">🚫 Cancelled / Screened</option>
             </select>
 
             <select id="selectCategory" class="select-clean" onchange="applyFilters()">
               <option value="EMAIL_OUTREACH">Direct Email Outreach</option>
               <option value="DRAFT_PORTAL">Drafts & Portals</option>
               <option value="ALL">All Categories</option>
+            </select>
+
+            <select id="selectLocationFilter" class="select-clean" onchange="applyFilters()" title="Filter by Job Location">
+              <option value="ALL" selected>All Locations</option>
+            </select>
+
+            <select id="selectReasonFilterDiscovered" class="select-clean" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
+              <option value="ALL" selected>All Reasons</option>
+            </select>
+
+            <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
+              <option value="ALL" selected>All Dates</option>
+              <option value="TODAY">📅 Today</option>
+              <option value="YESTERDAY">📅 Yesterday</option>
+              <option value="WEEK">📅 Past 7 Days</option>
+            </select>
+
+            <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
+              <option value="default" selected>Sort: Default</option>
+              <option value="exp_asc">Exp: Low to High</option>
+              <option value="exp_desc">Exp: High to Low</option>
+              <option value="date_desc">Date: Newest First</option>
+              <option value="date_asc">Date: Oldest First</option>
+              <option value="author_asc">Author: A → Z</option>
+              <option value="author_desc">Author: Z → A</option>
             </select>
 
             <span class="filter-count-badge hidden" id="discoveredResultsBadge"></span>
@@ -203,11 +307,27 @@
               <th width="35">
                 <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
               </th>
-              <th>Recruiter / Author</th>
-              <th width="110">Experience</th>
-              <th width="210">Contact Email</th>
+              <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
+                <div class="th-sort-wrapper">
+                  <span>Recruiter / Author</span>
+                  <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                </div>
+              </th>
+              <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                <div class="th-sort-wrapper">
+                  <span>Experience</span>
+                  <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                </div>
+              </th>
+              <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                <div class="th-sort-wrapper">
+                  <span>Date</span>
+                  <span class="sort-indicator" id="sortDateIndicator">↕</span>
+                </div>
+              </th>
+              <th width="190">Contact Email</th>
               <th>Post Preview</th>
-              <th width="260" style="text-align: right;">Action</th>
+              <th width="180" style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="postsTableBody">
@@ -379,6 +499,9 @@
           </button>
         </div>
         <div class="toolbar-right">
+          <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
+            <option value="ALL" selected>All Reasons</option>
+          </select>
           <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
           <div class="search-box">
             <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -399,7 +522,7 @@
               <th>Subject / Note</th>
               <th>Status & Reason</th>
               <th>Updated</th>
-              <th width="140" style="text-align: right;">Action</th>
+              <th width="175" style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="sentTableBody">
@@ -583,8 +706,11 @@
               <p class="chart-subtitle">Why jobs were marked unsuitable, scam, or cancelled</p>
             </div>
           </div>
-          <div class="chart-container-horizontal">
+          <div class="chart-container-horizontal" id="chartReasonsContainer">
             <canvas id="chartRejectionReasons"></canvas>
+          </div>
+          <div class="reasons-analytics-list" id="reasonsAnalyticsList">
+            <!-- Dynamic companion ranked analytical list -->
           </div>
         </div>
       </div>
@@ -646,7 +772,15 @@
             <span>Target LinkedIn Search Keywords:</span>
             <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
           </label>
-          <input type="text" id="settingSearchQuery" class="input-clean" />
+          <input type="text" id="settingSearchQuery" class="input-clean" placeholder="e.g. Full stack developer" />
+        </div>
+
+        <div class="form-block">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Default Target Job Location / Area:</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
+          </label>
+          <input type="text" id="settingSearchLocation" class="input-clean" placeholder="e.g. Dubai, Bengaluru, or leave blank for anywhere" />
         </div>
 
         <div class="headed-info-card">
@@ -685,6 +819,10 @@
           <input type="text" id="manualJdCompany" class="input-clean" placeholder="e.g. Acme Corp" />
         </div>
         <div class="form-block">
+          <label>Job Location / City (Optional):</label>
+          <input type="text" id="manualJdLocation" class="input-clean" placeholder="e.g. Dubai, Kochi, Bengaluru..." />
+        </div>
+        <div class="form-block">
           <label>Job Description Text <span style="color:var(--danger-color);">*</span>:</label>
           <textarea id="manualJdContent" rows="10" class="textarea-clean" placeholder="Paste the entire JD text here including requirements, emails, contact details..."></textarea>
         </div>
@@ -692,6 +830,62 @@
       <div class="modal-bottom">
         <button class="btn btn-outline" onclick="closeAddJdModal()">Cancel</button>
         <button class="btn btn-primary" onclick="submitManualJd()">Save JD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Direct Opportunity Outreach -->
+  <div class="modal-overlay hidden" id="modalDirectOutreach" onclick="if (event.target === this) closeDirectOutreachModal()">
+    <div class="modal-box modal-md">
+      <div class="modal-top">
+        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 0.4rem;">
+            <span>✉</span> Direct Opportunity Outreach
+          </h3>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Send speculative cold application directly to a recruiter or company contact</span>
+        </div>
+        <button class="close-x" onclick="closeDirectOutreachModal()">×</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem 1.5rem;">
+        <div class="form-block">
+          <label style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>Recipient Email <span style="color: var(--danger-color);">*</span></span>
+          </label>
+          <input type="email" id="directOutreachEmail" class="input-clean" placeholder="recruiter@company.com" required />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-block">
+            <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Company / Recruiter (Optional):</label>
+            <input type="text" id="directOutreachCompany" class="input-clean" placeholder="e.g. Acme Innovations" />
+          </div>
+          <div class="form-block">
+            <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Location (Optional):</label>
+            <input type="text" id="directOutreachLocation" class="input-clean" placeholder="e.g. Dubai, Bengaluru..." />
+          </div>
+        </div>
+        <div class="form-block">
+          <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Subject Line:</label>
+          <input type="text" id="directOutreachSubject" class="input-clean" />
+        </div>
+        <div class="form-block">
+          <label style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>Email Body:</span>
+            <button type="button" class="btn-link" style="font-size: 0.75rem; color: #818cf8; background: none; border: none; cursor: pointer; text-decoration: underline;" onclick="resetDirectOutreachBody()">Reset to Default</button>
+          </label>
+          <textarea id="directOutreachBody" rows="9" class="textarea-clean" style="font-size: 0.82rem; line-height: 1.45;"></textarea>
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
+          <span>📎</span> Active configured resume will be automatically attached in Gmail Playwright session.
+        </p>
+      </div>
+      <div class="modal-bottom" style="justify-content: flex-end; align-items: center; gap: 0.65rem;">
+        <button class="btn btn-outline btn-sm" onclick="closeDirectOutreachModal()">Cancel</button>
+        <button class="btn btn-outline btn-sm" onclick="submitDirectOutreach('draft')" title="Create draft in Gmail and keep Firefox window open on screen for review">
+          👁️ Open Draft in Gmail
+        </button>
+        <button class="btn btn-primary btn-sm" style="background: #6366f1; border-color: #6366f1;" onclick="submitDirectOutreach('send')" title="Send directly via Playwright automated Gmail session">
+          ⚡ Send via Gmail Directly
+        </button>
       </div>
     </div>
   </div>
@@ -758,6 +952,27 @@
     </div>
   </div>
 
+  <!-- Crawl Completion Summary Modal -->
+  <div class="modal-overlay hidden" id="crawlSummaryModal" onclick="if (event.target === this) closeCrawlSummaryModal()">
+    <div class="modal-box modal-md">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 1.25rem;">📊</span>
+          <h3 id="crawlSummaryTitle" style="font-size: 1.05rem; font-weight: 700;">Crawl Summary</h3>
+        </div>
+        <button class="close-x" onclick="closeCrawlSummaryModal()">×</button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem 1.5rem;">
+        <div class="crawl-stats-grid" id="crawlSummaryGrid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+      <div class="modal-bottom">
+        <button class="btn btn-primary" onclick="closeCrawlSummaryModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Non-Native Custom Confirm / Alert Dialog Component -->
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">
@@ -776,6 +991,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.4"></script>
 </body>
 </html>

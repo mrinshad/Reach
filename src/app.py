@@ -29,6 +29,9 @@ from src.db import (
     revert_post_to_draft,
     move_post_to_review,
     upsert_post,
+    get_distinct_rejection_reasons,
+    get_rejection_reasons_with_counts,
+    get_distinct_locations,
 )
 from src.experience_extractor import extract_experience
 from src.config import load_config, save_config
@@ -53,6 +56,17 @@ app = FastAPI(title="Reach Automation Hub", version="2.0.0")
 # Mount static files
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def add_cache_control_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path == "/" or path == "/index.html":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # Pydantic models for request bodies
@@ -87,11 +101,13 @@ class ManualPostPayload(BaseModel):
     content: Optional[str] = None
     contact_emails: Optional[List[str]] = None
     post_url: Optional[str] = None
+    location: Optional[str] = None
 
 
 class SettingsPayload(BaseModel):
     resume_path: Optional[str] = None
     search_query: Optional[str] = None
+    search_location: Optional[str] = None
     chatgpt_url: Optional[str] = None
     pacing_min_seconds: Optional[float] = None
     pacing_max_seconds: Optional[float] = None
@@ -99,6 +115,48 @@ class SettingsPayload(BaseModel):
 
 class ScrapePayload(BaseModel):
     source: Optional[str] = "linkedin"
+    location: Optional[str] = None
+    search_query: Optional[str] = None
+
+
+MAJOR_JOB_HUBS = [
+    "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",
+    "Toronto", "Vancouver", "Montreal",
+    "London", "Dublin", "Amsterdam", "Berlin", "Paris", "Stockholm", "Copenhagen", "Zurich", "Munich",
+    "Singapore", "Tokyo", "Seoul", "Beijing", "Shanghai", "Shenzhen", "Hong Kong",
+    "Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "Delhi", "Kochi",
+    "Dubai", "Abu Dhabi", "Riyadh", "Doha", "Manama", "Kuwait City", "Muscat", "Tel Aviv",
+    "Sydney", "Melbourne", "Auckland",
+    "São Paulo", "Mexico City", "Buenos Aires",
+    "Cape Town", "Johannesburg", "Nairobi", "Remote"
+]
+
+DEFAULT_OPPORTUNITY_SUBJECT = "Full-Stack Software Engineer – Job Opportunities"
+DEFAULT_OPPORTUNITY_BODY = """Hi,
+
+I’m Mohammed Rinshad, a Full-Stack Software Engineer with 3+ years of experience in web and enterprise application development.
+
+My experience includes React, Next.js, Node.js, TypeScript, .NET Core, REST APIs, PostgreSQL, SQL Server, Azure, GCP, CI/CD, authentication, RBAC, and database design. I’ve worked on ERP, accounting, education, and enterprise applications, including both frontend and backend development.
+
+I’m currently looking for opportunities in Frontend, Backend, Full-Stack, DevOps, or Cloud Engineering. I’m open to relocating for the right opportunity and am also interested in remote roles.
+
+I’ve attached my resume for reference. If there are any current or upcoming openings that match my background, I’d be grateful to be considered.
+
+Regards,
+Mohammed Rinshad P
++91 98956 12423
+rinshadmorayur09@gmail.com
+LinkedIn: linkedin.com/in/mrinshad
+GitHub: github.com/mrinshad"""
+
+
+class DirectOutreachPayload(BaseModel):
+    recipient_email: str
+    company_name: Optional[str] = None
+    location: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    mode: Optional[str] = "send"
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
@@ -175,6 +233,7 @@ def api_create_manual_post(payload: ManualPostPayload):
         "detected_links": [post_url] if post_url.startswith("http") else [],
         "experience": exp_info,
         "category": "EMAIL_OUTREACH" if emails else "DRAFT_PORTAL",
+        "location": payload.location.strip() if payload.location else None,
     }
 
     try:
@@ -216,10 +275,13 @@ def api_get_posts(
     max_exp: Optional[float] = None,
     search: Optional[str] = None,
     order_by: Optional[str] = None,
+    reason: Optional[str] = None,
+    date_filter: Optional[str] = None,
+    location: Optional[str] = None,
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """Retrieve posts with filtering, search, and pagination."""
+    """Retrieve posts with filtering, search, sorting, location, and pagination."""
     try:
         limit_val = getattr(limit, "default", limit)
         offset_val = getattr(offset, "default", offset)
@@ -235,10 +297,34 @@ def api_get_posts(
             max_exp=max_exp,
             search=search,
             order_by=order_by,
+            reason=reason,
+            date_filter=date_filter,
+            location=location,
             limit=safe_limit,
             offset=safe_offset,
         )
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/locations")
+def api_get_locations():
+    """Retrieve distinct locations saved in DB and predefined major job hubs."""
+    try:
+        saved_locs = get_distinct_locations()
+        return {"locations": saved_locs, "presets": MAJOR_JOB_HUBS}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/reasons")
+def api_get_reasons():
+    """Retrieve distinct cancellation/rejection reasons with counts for filtering."""
+    try:
+        counts = get_rejection_reasons_with_counts()
+        reasons = [c["reason"] for c in counts]
+        return {"reasons": reasons, "counts": counts}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -405,6 +491,74 @@ def api_send_batch(payload: SendBatchPayload):
     return {"success": True, "message": f"Started direct sending for {len(payload.post_ids)} applications."}
 
 
+@app.post("/api/direct-outreach")
+def api_direct_outreach(payload: DirectOutreachPayload):
+    """
+    Direct opportunity cold outreach.
+    Persists a record in PostgreSQL and triggers Gmail automated sending or draft review.
+    """
+    recipient = (payload.recipient_email or "").strip()
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=400, detail="A valid recipient email address is required.")
+
+    current_state = task_manager.get_state()
+    if current_state["status"] == "running":
+        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
+
+    company = (payload.company_name or "").strip()
+    author_name = company if company else recipient
+    subject = (payload.subject or "").strip() or DEFAULT_OPPORTUNITY_SUBJECT
+    body = (payload.body or "").strip() or DEFAULT_OPPORTUNITY_BODY
+    location = (payload.location or "").strip() or None
+    mode = (payload.mode or "send").strip().lower()
+
+    unique_token = uuid.uuid4().hex[:12]
+    post_url = f"direct://{unique_token}"
+
+    post_data = {
+        "author_name": author_name,
+        "author_headline": "Direct Opportunity Outreach",
+        "author_profile": "",
+        "posted_date_raw": datetime.now().strftime("%d-%m-%Y"),
+        "full_text": f"Direct opportunity outreach to {author_name} ({recipient}).\n\nSubject: {subject}\n\n{body}",
+        "contact_emails": [recipient],
+        "external_links": [],
+        "min_experience": 3.0,
+        "max_experience": None,
+        "raw_experience": "3+ years",
+        "seniority_level": "Mid",
+        "is_fresher": False,
+        "category": "EMAIL_OUTREACH",
+        "status": "EMAIL_GENERATED",
+        "generated_subject": subject,
+        "generated_body": body,
+        "post_url": post_url,
+        "location": location,
+    }
+
+    try:
+        post_id, _ = upsert_post(post_data)
+
+        if mode == "draft":
+            thread = threading.Thread(target=run_open_gmail_draft, args=(post_id,), daemon=True)
+            thread.start()
+            return {
+                "success": True,
+                "post_id": post_id,
+                "message": f"Opening Gmail draft for {recipient} in headed Firefox...",
+            }
+        else:
+            thread = threading.Thread(target=run_send_single_draft, args=(post_id,), daemon=True)
+            thread.start()
+            return {
+                "success": True,
+                "post_id": post_id,
+                "message": f"Sending opportunity email to {recipient} directly via Gmail...",
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 @app.post("/api/scrape/infopark")
 def api_trigger_scrape_infopark():
@@ -419,13 +573,16 @@ def api_trigger_scrape_infopark():
 
 
 @app.post("/api/scrape/linkedin")
-def api_trigger_scrape_linkedin():
-    """Trigger the LinkedIn scraper in headed Firefox."""
+def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
+    """Trigger the LinkedIn scraper in headed Firefox with optional location and query."""
     current_state = task_manager.get_state()
     if current_state["status"] == "running":
         raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
 
-    thread = threading.Thread(target=run_linkedin_scraper, daemon=True)
+    query = payload.search_query if payload else None
+    loc = payload.location if payload else None
+
+    thread = threading.Thread(target=run_linkedin_scraper, args=(query, loc), daemon=True)
     thread.start()
     return {"success": True, "message": "LinkedIn scraper started in headed Firefox."}
 
@@ -438,10 +595,15 @@ def api_get_scrapers():
 
 @app.post("/api/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Trigger scraper by source using the extensible scraper registry."""
+    """Trigger scraper by source using the extensible scraper registry with optional query and location."""
     src = "linkedin"
-    if payload and payload.source:
-        src = payload.source
+    query = None
+    loc = None
+    if payload:
+        if payload.source:
+            src = payload.source
+        query = payload.search_query
+        loc = payload.location
     elif source:
         src = source
 
@@ -450,7 +612,7 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
         raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
 
     try:
-        thread = threading.Thread(target=run_scraper_by_source, args=(src,), daemon=True)
+        thread = threading.Thread(target=run_scraper_by_source, args=(src, query, loc), daemon=True)
         thread.start()
         return {"success": True, "message": f"Scraper for '{src}' started."}
     except ValueError as e:

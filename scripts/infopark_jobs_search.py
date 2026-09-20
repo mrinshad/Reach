@@ -370,6 +370,7 @@ def scrape_infopark_jobs(
                 "detected_links": [detail_url],
                 "experience": exp_info,
                 "category": category,
+                "location": "Kochi",
             }
 
             # 5. Pre-screen by role title before ChatGPT (saves API/browser time)
@@ -416,6 +417,16 @@ def scrape_infopark_jobs(
     print(f"  - Previously Added (Skipped):     {skipped_existing}")
     print(f"  - Other Dates (Skipped):          {skipped_other_date}")
     print("=" * 68)
+
+    crawl_stats = {
+        "total_crawled": total_scanned,
+        "newly_added": len(new_jobs),
+        "new_email_outreach": added_email_outreach,
+        "new_draft_portal": added_draft_portal,
+        "skipped_already_added": skipped_existing,
+        "skipped_other": skipped_other_date,
+    }
+    print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")
 
     return {
         "total_scanned": total_scanned,

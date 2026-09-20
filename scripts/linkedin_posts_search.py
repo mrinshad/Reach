@@ -16,6 +16,7 @@ import time
 import json
 import random
 import subprocess
+import argparse
 from datetime import datetime
 from typing import Optional, Tuple, Set
 from urllib.parse import quote
@@ -264,10 +265,31 @@ def main():
     # Initialize PostgreSQL table & settings
     init_db()
 
-    # Load search keyword dynamically from database settings
-    db_query = get_setting("search_query")
-    query = (db_query or "Full stack developer").strip()
-    search_url = build_posts_search_url(query)
+    # Priority for search query & location:
+    # 1. CLI args (--query, --location)
+    # 2. Environment variables (SCRAPER_QUERY, SCRAPER_LOCATION)
+    # 3. Database settings table (search_query, search_location)
+    parser = argparse.ArgumentParser(description="LinkedIn Posts Scraper")
+    parser.add_argument("--query", type=str, default=None, help="Target search keywords")
+    parser.add_argument("--location", type=str, default=None, help="Target job place / area")
+    args, _ = parser.parse_known_args()
+
+    raw_query = args.query or os.environ.get("SCRAPER_QUERY") or get_setting("search_query") or "Full stack developer"
+    base_query = raw_query.strip()
+
+    raw_location = args.location or os.environ.get("SCRAPER_LOCATION") or get_setting("search_location") or ""
+    location = raw_location.strip()
+    if location.upper() in ("ALL", "ANYWHERE", "NONE"):
+        location = ""
+
+    if location:
+        effective_query = f"{base_query} {location}".strip()
+        print(f"🔎 [Search Target] Keywords: '{base_query}' | Location: '{location}' => Search: '{effective_query}'")
+    else:
+        effective_query = base_query
+        print(f"🔎 [Search Target] Keywords: '{base_query}' | No location constraint")
+
+    search_url = build_posts_search_url(effective_query)
 
     with sync_playwright() as playwright:
         print("[1/4] Launching Firefox (headed=True, human-like)...")
@@ -318,6 +340,7 @@ def main():
         # Human-like scrolling to collect all posts today from 00:00 midnight until now
         max_scroll_cycles = 60
         consecutive_no_new = 0
+        total_scanned_count = 0
 
         for cycle in range(max_scroll_cycles):
             cards = lazy_col.locator('> div')
@@ -339,6 +362,7 @@ def main():
                 if snippet in processed_snippets:
                     continue
                 processed_snippets.add(snippet)
+                total_scanned_count += 1
 
                 data = extract_post_from_card(page, card, index=len(email_posts) + len(draft_posts))
 
@@ -394,6 +418,9 @@ def main():
                     reason = "No email (apply link / portal)" if not data["detected_emails"] else "Comment-to-apply bait"
                     print(f"    📋 [SAVED AS DRAFT] {data['author_name']} | Exp: {exp_label} | Reason: {reason} | Time: {data['post_date']}")
 
+                if location:
+                    data["location"] = location
+
                 # Persist to PostgreSQL (skip_if_exists=True ensures zero overwriting)
                 try:
                     post_id, inserted = upsert_post(data, skip_if_exists=True)
@@ -421,6 +448,17 @@ def main():
         print(f"  - Draft / Portal Posts Added:     {len(draft_posts)}")
         print(f"  - Previously Added (Skipped):     {skipped_existing_count}")
         print("=" * 68)
+
+        total_new = len(email_posts) + len(draft_posts)
+        crawl_stats = {
+            "total_crawled": max(total_scanned_count, total_new + skipped_existing_count),
+            "newly_added": total_new,
+            "new_email_outreach": len(email_posts),
+            "new_draft_portal": len(draft_posts),
+            "skipped_already_added": skipped_existing_count,
+            "skipped_other": max(0, total_scanned_count - total_new - skipped_existing_count)
+        }
+        print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")
 
         # Save primary email outreach posts
         email_json_path = os.path.join(ARTIFACT_DIR, "scratch", "email_hiring_posts_today.json")

@@ -50,6 +50,7 @@ class TaskManager:
             "error": None,
             "started_at": None,
             "finished_at": None,
+            "crawl_stats": None,
         }
 
     def start_task(self, task_name: str, total_items: int = 1):
@@ -64,6 +65,7 @@ class TaskManager:
                 "error": None,
                 "started_at": time.time(),
                 "finished_at": None,
+                "crawl_stats": None,
             }
 
     def log(self, message: str):
@@ -85,11 +87,13 @@ class TaskManager:
             if current_step:
                 self.state["current_step"] = current_step
 
-    def finish_task(self, success_message: str = "Task completed successfully."):
+    def finish_task(self, success_message: str = "Task completed successfully.", crawl_stats: Optional[Dict[str, Any]] = None):
         with self._lock:
             self.state["status"] = "completed"
             self.state["current_step"] = success_message
             self.state["finished_at"] = time.time()
+            if crawl_stats:
+                self.state["crawl_stats"] = crawl_stats
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✓ {success_message}")
 
     def fail_task(self, error_message: str):
@@ -106,6 +110,7 @@ class TaskManager:
             self.state["error"] = None
             self.state["task_name"] = ""
             self.state["current_step"] = ""
+            self.state["crawl_stats"] = None
 
     def get_state(self) -> Dict[str, Any]:
         with self._lock:
@@ -448,10 +453,11 @@ def run_scraper_subprocess_with_timeout(
     task_name: str,
     script_path: str,
     inactivity_timeout_seconds: float = 90.0,
-    finish_message: str = "Scraping finished successfully."
+    finish_message: str = "Scraping finished successfully.",
+    extra_env: Optional[Dict[str, str]] = None,
 ):
     """
-    Run a scraper script subprocess with a 90-second inactivity watchdog.
+    Execute a scraping script in a subprocess monitored with an inactivity watchdog.
     If the scraper stops producing output / making progress for 90 seconds,
     the watchdog terminates the subprocess, closes the task cleanly, and
     preserves all jobs saved in the database up to that point.
@@ -460,12 +466,17 @@ def run_scraper_subprocess_with_timeout(
     try:
         task_manager.log(f"Starting {task_name} (inactivity timeout: {int(inactivity_timeout_seconds)}s)...")
 
+        env = os.environ.copy()
+        if extra_env:
+            env.update({k: str(v) for k, v in extra_env.items() if v is not None})
+
         proc = subprocess.Popen(
             [sys.executable, "-u", script_path],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         )
 
         last_activity = [time.time()]
@@ -497,19 +508,39 @@ def run_scraper_subprocess_with_timeout(
         watchdog_thread = threading.Thread(target=inactivity_watchdog, daemon=True)
         watchdog_thread.start()
 
+        parsed_stats = None
         for line in proc.stdout:
             last_activity[0] = time.time()
             cleaned = line.rstrip()
             if cleaned:
-                task_manager.log(cleaned)
+                if "__CRAWL_STATS__:" in cleaned:
+                    try:
+                        import json
+                        raw_json = cleaned.split("__CRAWL_STATS__:", 1)[1].strip()
+                        parsed_stats = json.loads(raw_json)
+                    except Exception:
+                        pass
+                else:
+                    task_manager.log(cleaned)
 
         completed.set()
         proc.wait()
 
         if timed_out[0]:
-            task_manager.finish_task(f"{task_name} closed after 90s inactivity timeout. Scraped posts saved.")
+            task_manager.finish_task(
+                f"{task_name} closed after 90s inactivity timeout. Scraped posts saved.",
+                crawl_stats=parsed_stats
+            )
         elif proc.returncode == 0:
-            task_manager.finish_task(finish_message)
+            if parsed_stats:
+                custom_msg = (
+                    f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
+                    f"{parsed_stats.get('newly_added', 0)} newly added, "
+                    f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
+                )
+                task_manager.finish_task(custom_msg, crawl_stats=parsed_stats)
+            else:
+                task_manager.finish_task(finish_message)
         else:
             task_manager.fail_task(f"{task_name} exited with code {proc.returncode}")
     except Exception as e:
@@ -535,21 +566,32 @@ def run_infopark_scraper():
     )
 
 
-def run_linkedin_scraper():
+def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = None):
     """
     Run the LinkedIn Posts Scraper in headed Firefox (headless=False) via subprocess
-    with 90-second inactivity timeout.
+    with 90-second inactivity timeout, with optional query and location parameters.
     """
     script_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "scripts",
         "linkedin_posts_search.py"
     )
+    task_label = "LinkedIn Posts Scraper"
+    if location and location.strip():
+        task_label = f"LinkedIn Posts Scraper ({location.strip()})"
+
+    extra_env = {}
+    if query:
+        extra_env["SCRAPER_QUERY"] = query.strip()
+    if location:
+        extra_env["SCRAPER_LOCATION"] = location.strip()
+
     run_scraper_subprocess_with_timeout(
-        task_name="LinkedIn Posts Scraper",
+        task_name=task_label,
         script_path=script_path,
         inactivity_timeout_seconds=90.0,
-        finish_message="LinkedIn scraping finished successfully."
+        finish_message="LinkedIn scraping finished successfully.",
+        extra_env=extra_env,
     )
 
 
@@ -584,12 +626,15 @@ def get_registered_scrapers() -> List[Dict[str, str]]:
     ]
 
 
-def run_scraper_by_source(source_id: str):
-    """Dispatch and run a scraper background task by source ID."""
+def run_scraper_by_source(source_id: str, query: Optional[str] = None, location: Optional[str] = None):
+    """Dispatch and run a scraper background task by source ID with optional query and location."""
     source_lower = (source_id or "linkedin").strip().lower()
     scraper = SCRAPER_REGISTRY.get(source_lower)
     if not scraper:
         valid_sources = list(SCRAPER_REGISTRY.keys())
         raise ValueError(f"Unknown scraper source '{source_id}'. Supported sources: {valid_sources}")
-    scraper["runner"]()
-
+    
+    if source_lower == "linkedin":
+        run_linkedin_scraper(query=query, location=location)
+    else:
+        scraper["runner"]()
