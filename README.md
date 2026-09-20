@@ -334,10 +334,16 @@ Reach features a dedicated mobile responsive design tested across phone and tabl
 
 ---
 
-## 📂 Project Structure
+## 📂 Project Structure & Modular Architecture
+
+Reach utilizes a component-based frontend architecture with modular CSS stylesheets, HTML partials, and hierarchical `AGENTS.md` routing maps designed for AI pair-programming efficiency:
 
 ```text
 reach-job-automation/
+├── AGENTS.md                 # Primary Agent navigation map & feature routing matrix
+├── .agents/
+│   └── rules/
+│       └── codebase_map.md   # Antigravity hierarchical workspace rule
 ├── config.example.json       # Template configuration
 ├── config.json               # Local user configuration (git-ignored)
 ├── requirements.txt          # Python dependencies
@@ -354,7 +360,8 @@ reach-job-automation/
 │   ├── process_posts_with_chatgpt.py # Batch ChatGPT generator
 │   └── prepare_gmail_draft.py        # Gmail compose launcher
 └── src/
-    ├── app.py                # FastAPI endpoints & REST API routes
+    ├── AGENTS.md             # Backend & automation navigation guide
+    ├── app.py                # FastAPI endpoints, REST API & dynamic template assembly
     ├── automation_tasks.py   # FIFO task queue manager & scraper registry
     ├── chatgpt_service.py    # ChatGPT prompt & generation logic
     ├── config.py             # Database-backed configuration & headless helper
@@ -364,9 +371,34 @@ reach-job-automation/
     ├── gmail_service.py      # Gmail draft preparation & direct send
     ├── health_service.py     # Live session health checks
     └── static/
+        ├── AGENTS.md         # Frontend DOM elements & JS router
         ├── app.js            # Frontend client application logic & state
-        ├── index.html        # UI dashboard, sidebar, modals & SVG icons
-        └── style.css         # Responsive dark-theme design system
+        ├── index_layout.html # Master layout with component include markers
+        ├── index.html        # Auto-synchronized complete single-page HTML
+        ├── sw.js             # Root-scoped Service Worker for web push alerts
+        ├── style.css         # Master manifest importing modular stylesheets
+        ├── css/
+        │   ├── AGENTS.md     # CSS selector, tokens & class index
+        │   ├── variables.css # Design tokens, colors, typography, border radii
+        │   ├── base.css      # Resets, base typography, buttons, badges, skeleton
+        │   ├── layout.css    # 100vh app shell, topbar, notification dropdown
+        │   ├── sidebar.css   # Collapsible sidebar, 44x44 icons, crawler selector
+        │   ├── dashboard.css # Analytics KPI cards, charts, headless toggle switch
+        │   ├── discovered.css# 2-tier search toolbar, data table, pagination
+        │   ├── review.css    # Review queue, candidate card, JD mail button, draft editor
+        │   ├── history.css   # Sent/cancelled tables, cancellation pills
+        │   ├── tasks.css     # Task drawer, progress bar, terminal stream log
+        │   ├── modals.css    # Pinned modal dialogs, diagnostics & toasts
+        │   └── responsive.css# Mobile drawer, compact headers & touch styles
+        └── partials/
+            ├── sidebar.html        # Left navigation sidebar component
+            ├── topbar.html         # Header topbar component
+            ├── task_drawer.html    # Live task drawer component
+            ├── tab_analytics.html  # Dashboard overview tab component
+            ├── tab_discovered.html # Discovered jobs tab component
+            ├── tab_review.html     # Review & drafts workspace tab component
+            ├── tab_sent.html       # Outreach history tab component
+            └── modals.html         # All 7 dialog modals & alert dialogs
 ```
 
 ---
@@ -378,6 +410,7 @@ reach-job-automation/
 | `GET` | `/api/health` | Live connectivity status for LinkedIn, ChatGPT, Gmail, Infopark, and PostgreSQL |
 | `GET` | `/api/stats` | Top-bar summary counters (`applied`, `drafts_ready`, `pending`, `total_sourced`) |
 | `GET` | `/api/analytics` | Aggregated metrics, velocity timeline, conversion stages, and rejection breakdown |
+| `GET` | `/api/notifications` | Active in-app notification center activity feed |
 | `GET` | `/api/scrapers` | List of registered website scrapers (`linkedin`, `infopark`, etc.) |
 | `POST` | `/api/scrape` | Enqueue scraper background task by source with optional query and location |
 | `POST` | `/api/scrape/linkedin` | Enqueue LinkedIn feed crawler with optional location |
@@ -399,7 +432,7 @@ reach-job-automation/
 | `GET` | `/api/reasons` | Dynamic list of cancellation/rejection reasons with real-time post counts |
 | `GET` | `/api/locations` | Distinct job locations present across discovered posts |
 | `GET` | `/sw.js` | Root-scoped Service Worker for mobile browser notifications |
-| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a single post (supports `?force=true`) |
+| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a post (supports `?force=true` override) |
 | `POST` | `/api/generate-batch` | Enqueue ChatGPT email generation for selected post IDs |
 | `POST` | `/api/open-gmail/{id}` | Enqueue opening Gmail compose with resume attached in Playwright Firefox |
 | `POST` | `/api/send-direct/{id}` | Enqueue direct email dispatch via Gmail without manual clicking |
