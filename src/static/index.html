@@ -186,6 +186,23 @@
               <option value="ALL">All Categories</option>
             </select>
 
+            <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
+              <option value="ALL" selected>All Dates</option>
+              <option value="TODAY">📅 Today</option>
+              <option value="YESTERDAY">📅 Yesterday</option>
+              <option value="WEEK">📅 Past 7 Days</option>
+            </select>
+
+            <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
+              <option value="default" selected>Sort: Default</option>
+              <option value="exp_asc">Exp: Low to High</option>
+              <option value="exp_desc">Exp: High to Low</option>
+              <option value="date_desc">Date: Newest First</option>
+              <option value="date_asc">Date: Oldest First</option>
+              <option value="author_asc">Author: A → Z</option>
+              <option value="author_desc">Author: Z → A</option>
+            </select>
+
             <span class="filter-count-badge hidden" id="discoveredResultsBadge"></span>
           </div>
 
@@ -203,11 +220,18 @@
               <th width="35">
                 <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
               </th>
-              <th>Recruiter / Author</th>
-              <th width="110">Experience</th>
-              <th width="210">Contact Email</th>
+              <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
+                <span>Recruiter / Author</span> <span class="sort-indicator" id="sortAuthorIndicator"></span>
+              </th>
+              <th width="115" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                <span>Experience</span> <span class="sort-indicator" id="sortExpIndicator"></span>
+              </th>
+              <th width="90" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                <span>Date</span> <span class="sort-indicator" id="sortDateIndicator"></span>
+              </th>
+              <th width="190">Contact Email</th>
               <th>Post Preview</th>
-              <th width="260" style="text-align: right;">Action</th>
+              <th width="200" style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="postsTableBody">
@@ -379,6 +403,9 @@
           </button>
         </div>
         <div class="toolbar-right">
+          <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
+            <option value="ALL" selected>All Reasons</option>
+          </select>
           <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
           <div class="search-box">
             <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -583,8 +610,11 @@
               <p class="chart-subtitle">Why jobs were marked unsuitable, scam, or cancelled</p>
             </div>
           </div>
-          <div class="chart-container-horizontal">
+          <div class="chart-container-horizontal" id="chartReasonsContainer">
             <canvas id="chartRejectionReasons"></canvas>
+          </div>
+          <div class="reasons-analytics-list" id="reasonsAnalyticsList">
+            <!-- Dynamic companion ranked analytical list -->
           </div>
         </div>
       </div>
@@ -754,6 +784,27 @@
         <button class="btn btn-danger btn-sm" onclick="confirmCancelWithReason()" id="btnConfirmCancelModal">
           ✕ Cancel & Discard
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Crawl Completion Summary Modal -->
+  <div class="modal-overlay hidden" id="crawlSummaryModal" onclick="if (event.target === this) closeCrawlSummaryModal()">
+    <div class="modal-box modal-md">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 1.25rem;">📊</span>
+          <h3 id="crawlSummaryTitle" style="font-size: 1.05rem; font-weight: 700;">Crawl Summary</h3>
+        </div>
+        <button class="close-x" onclick="closeCrawlSummaryModal()">×</button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem 1.5rem;">
+        <div class="crawl-stats-grid" id="crawlSummaryGrid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+      <div class="modal-bottom">
+        <button class="btn btn-primary" onclick="closeCrawlSummaryModal()">Done</button>
       </div>
     </div>
   </div>

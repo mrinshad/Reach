@@ -50,6 +50,7 @@ class TaskManager:
             "error": None,
             "started_at": None,
             "finished_at": None,
+            "crawl_stats": None,
         }
 
     def start_task(self, task_name: str, total_items: int = 1):
@@ -64,6 +65,7 @@ class TaskManager:
                 "error": None,
                 "started_at": time.time(),
                 "finished_at": None,
+                "crawl_stats": None,
             }
 
     def log(self, message: str):
@@ -85,11 +87,13 @@ class TaskManager:
             if current_step:
                 self.state["current_step"] = current_step
 
-    def finish_task(self, success_message: str = "Task completed successfully."):
+    def finish_task(self, success_message: str = "Task completed successfully.", crawl_stats: Optional[Dict[str, Any]] = None):
         with self._lock:
             self.state["status"] = "completed"
             self.state["current_step"] = success_message
             self.state["finished_at"] = time.time()
+            if crawl_stats:
+                self.state["crawl_stats"] = crawl_stats
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✓ {success_message}")
 
     def fail_task(self, error_message: str):
@@ -106,6 +110,7 @@ class TaskManager:
             self.state["error"] = None
             self.state["task_name"] = ""
             self.state["current_step"] = ""
+            self.state["crawl_stats"] = None
 
     def get_state(self) -> Dict[str, Any]:
         with self._lock:
@@ -497,19 +502,39 @@ def run_scraper_subprocess_with_timeout(
         watchdog_thread = threading.Thread(target=inactivity_watchdog, daemon=True)
         watchdog_thread.start()
 
+        parsed_stats = None
         for line in proc.stdout:
             last_activity[0] = time.time()
             cleaned = line.rstrip()
             if cleaned:
-                task_manager.log(cleaned)
+                if "__CRAWL_STATS__:" in cleaned:
+                    try:
+                        import json
+                        raw_json = cleaned.split("__CRAWL_STATS__:", 1)[1].strip()
+                        parsed_stats = json.loads(raw_json)
+                    except Exception:
+                        pass
+                else:
+                    task_manager.log(cleaned)
 
         completed.set()
         proc.wait()
 
         if timed_out[0]:
-            task_manager.finish_task(f"{task_name} closed after 90s inactivity timeout. Scraped posts saved.")
+            task_manager.finish_task(
+                f"{task_name} closed after 90s inactivity timeout. Scraped posts saved.",
+                crawl_stats=parsed_stats
+            )
         elif proc.returncode == 0:
-            task_manager.finish_task(finish_message)
+            if parsed_stats:
+                custom_msg = (
+                    f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
+                    f"{parsed_stats.get('newly_added', 0)} newly added, "
+                    f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
+                )
+                task_manager.finish_task(custom_msg, crawl_stats=parsed_stats)
+            else:
+                task_manager.finish_task(finish_message)
         else:
             task_manager.fail_task(f"{task_name} exited with code {proc.returncode}")
     except Exception as e:

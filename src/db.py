@@ -418,11 +418,13 @@ def get_posts(
     max_exp: Optional[float] = None,
     search: Optional[str] = None,
     order_by: Optional[str] = None,
+    reason: Optional[str] = None,
+    date_filter: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
 ) -> List[Dict[str, Any]]:
-    """Retrieve posts with optional filtering and search for UI dashboard and automation."""
+    """Retrieve posts with optional filtering, sorting, and search for UI dashboard and automation."""
     where_clauses = []
     params = []
 
@@ -466,6 +468,19 @@ def get_posts(
     elif gen_status is None and status is None:
         where_clauses.append("status IN ('DISCOVERED', 'SELECTED')")
 
+    if reason and reason != "ALL":
+        where_clauses.append("rejection_reason ILIKE %s")
+        params.append(f"%{reason}%")
+
+    if date_filter:
+        df_upper = date_filter.upper()
+        if df_upper == "TODAY":
+            where_clauses.append("created_at >= CURRENT_DATE")
+        elif df_upper == "YESTERDAY":
+            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
+        elif df_upper == "WEEK":
+            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
             (
@@ -501,14 +516,28 @@ def get_posts(
                 OR COALESCE(author_headline, '') ILIKE %s 
                 OR COALESCE(generated_subject, '') ILIKE %s 
                 OR COALESCE(rejection_reason, '') ILIKE %s
+                OR COALESCE(posted_date_raw, '') ILIKE %s
                 OR COALESCE(array_to_string(contact_emails, ' '), '') ILIKE %s
             )
         """)
         s_param = f"%{search}%"
-        params.extend([s_param, s_param, s_param, s_param, s_param, s_param])
+        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param])
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    if status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
+
+    if order_by == "exp_asc":
+        order_sql = "ORDER BY CASE WHEN is_fresher = TRUE THEN 0 WHEN min_experience IS NOT NULL THEN min_experience ELSE 99 END ASC, created_at DESC"
+    elif order_by == "exp_desc":
+        order_sql = "ORDER BY COALESCE(max_experience, min_experience, 0) DESC, is_fresher ASC, created_at DESC"
+    elif order_by == "date_desc":
+        order_sql = "ORDER BY created_at DESC"
+    elif order_by == "date_asc":
+        order_sql = "ORDER BY created_at ASC"
+    elif order_by == "author_asc":
+        order_sql = "ORDER BY author_name ASC, created_at DESC"
+    elif order_by == "author_desc":
+        order_sql = "ORDER BY author_name DESC, created_at DESC"
+    elif status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
         order_sql = "ORDER BY updated_at DESC"
     else:
         order_sql = """
@@ -544,6 +573,8 @@ def get_posts_paginated(
     max_exp: Optional[float] = None,
     search: Optional[str] = None,
     order_by: Optional[str] = None,
+    reason: Optional[str] = None,
+    date_filter: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -592,6 +623,19 @@ def get_posts_paginated(
     elif gen_status is None and status is None:
         where_clauses.append("status IN ('DISCOVERED', 'SELECTED')")
 
+    if reason and reason != "ALL":
+        where_clauses.append("rejection_reason ILIKE %s")
+        params.append(f"%{reason}%")
+
+    if date_filter:
+        df_upper = date_filter.upper()
+        if df_upper == "TODAY":
+            where_clauses.append("created_at >= CURRENT_DATE")
+        elif df_upper == "YESTERDAY":
+            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
+        elif df_upper == "WEEK":
+            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
             (
@@ -627,16 +671,29 @@ def get_posts_paginated(
                 OR COALESCE(author_headline, '') ILIKE %s 
                 OR COALESCE(generated_subject, '') ILIKE %s 
                 OR COALESCE(rejection_reason, '') ILIKE %s
+                OR COALESCE(posted_date_raw, '') ILIKE %s
                 OR COALESCE(array_to_string(contact_emails, ' '), '') ILIKE %s
             )
         """)
         s_param = f"%{search}%"
-        params.extend([s_param, s_param, s_param, s_param, s_param, s_param])
+        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param])
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     count_sql = f"SELECT COUNT(*) FROM posts {where_sql};"
 
-    if status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
+    if order_by == "exp_asc":
+        order_sql = "ORDER BY CASE WHEN is_fresher = TRUE THEN 0 WHEN min_experience IS NOT NULL THEN min_experience ELSE 99 END ASC, created_at DESC"
+    elif order_by == "exp_desc":
+        order_sql = "ORDER BY COALESCE(max_experience, min_experience, 0) DESC, is_fresher ASC, created_at DESC"
+    elif order_by == "date_desc":
+        order_sql = "ORDER BY created_at DESC"
+    elif order_by == "date_asc":
+        order_sql = "ORDER BY created_at ASC"
+    elif order_by == "author_asc":
+        order_sql = "ORDER BY author_name ASC, created_at DESC"
+    elif order_by == "author_desc":
+        order_sql = "ORDER BY author_name DESC, created_at DESC"
+    elif status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
         order_sql = "ORDER BY updated_at DESC"
     else:
         order_sql = """
@@ -673,6 +730,27 @@ def get_posts_paginated(
         "limit": limit,
         "offset": offset,
     }
+
+
+def get_distinct_rejection_reasons(db_url: str = DEFAULT_DB_URL) -> List[str]:
+    """Retrieve list of distinct cancellation/rejection reasons for dropdown filtering in UI."""
+    sql = """
+        SELECT DISTINCT TRIM(rejection_reason) AS reason
+        FROM posts
+        WHERE status = 'REJECTED'
+          AND rejection_reason IS NOT NULL
+          AND TRIM(rejection_reason) != ''
+        ORDER BY reason ASC;
+    """
+    try:
+        with get_connection(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                rows = cur.fetchall()
+                return [r[0] for r in rows if r[0]]
+    except Exception as e:
+        print(f"Error fetching distinct rejection reasons: {e}")
+        return []
 
 
 def get_post_by_id(post_id: str, db_url: str = DEFAULT_DB_URL) -> Optional[Dict[str, Any]]:

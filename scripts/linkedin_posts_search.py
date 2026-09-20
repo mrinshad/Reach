@@ -318,6 +318,7 @@ def main():
         # Human-like scrolling to collect all posts today from 00:00 midnight until now
         max_scroll_cycles = 60
         consecutive_no_new = 0
+        total_scanned_count = 0
 
         for cycle in range(max_scroll_cycles):
             cards = lazy_col.locator('> div')
@@ -339,6 +340,7 @@ def main():
                 if snippet in processed_snippets:
                     continue
                 processed_snippets.add(snippet)
+                total_scanned_count += 1
 
                 data = extract_post_from_card(page, card, index=len(email_posts) + len(draft_posts))
 
@@ -421,6 +423,17 @@ def main():
         print(f"  - Draft / Portal Posts Added:     {len(draft_posts)}")
         print(f"  - Previously Added (Skipped):     {skipped_existing_count}")
         print("=" * 68)
+
+        total_new = len(email_posts) + len(draft_posts)
+        crawl_stats = {
+            "total_crawled": max(total_scanned_count, total_new + skipped_existing_count),
+            "newly_added": total_new,
+            "new_email_outreach": len(email_posts),
+            "new_draft_portal": len(draft_posts),
+            "skipped_already_added": skipped_existing_count,
+            "skipped_other": max(0, total_scanned_count - total_new - skipped_existing_count)
+        }
+        print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")
 
         # Save primary email outreach posts
         email_json_path = os.path.join(ARTIFACT_DIR, "scratch", "email_hiring_posts_today.json")

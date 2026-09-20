@@ -2838,7 +2838,8 @@ body {
 
   .chart-container-horizontal {
     position: relative;
-    height: 260px;
+    min-height: 260px;
+    height: auto;
     width: 100%;
   }
 
@@ -2948,4 +2949,162 @@ body {
     border-radius: 9999px;
     white-space: nowrap;
     animation: fadeIn 0.2s ease;
+  }
+
+  /* Compact Icon-Only Action Buttons */
+  .btn-icon-only {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    line-height: 1;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .btn-icon-only:hover {
+    transform: translateY(-1px);
+  }
+  .btn-icon-only.btn-spam-icon:hover {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.4);
+    color: #fda4af;
+  }
+  .btn-icon-only.btn-cancel-icon:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #fca5a5;
+  }
+  .btn-icon-only.btn-restore:hover {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+  }
+
+  /* Sortable Headers & Indicator */
+  .sortable-th {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+  }
+  .sortable-th:hover {
+    color: #fff !important;
+  }
+  .sort-indicator {
+    display: inline-block;
+    font-size: 0.68rem;
+    margin-left: 0.25rem;
+    color: var(--primary-color);
+  }
+
+  /* Date Badges */
+  .table-date-badge {
+    font-size: 0.76rem;
+    color: #94a3b8;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  /* Companion Analytical Reasons Breakdown */
+  .reasons-analytics-list {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 1rem;
+    max-height: 480px;
+    overflow-y: auto;
+  }
+  .reasons-analytics-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s ease;
+  }
+  .reasons-analytics-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .reasons-rank-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #64748b;
+    width: 24px;
+    flex-shrink: 0;
+  }
+  .reasons-name {
+    font-size: 0.8rem;
+    color: #cbd5e1;
+    flex: 1;
+    padding-right: 0.75rem;
+    word-break: break-word;
+  }
+  .reasons-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-shrink: 0;
+  }
+  .reasons-count-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(244, 63, 94, 0.12);
+    color: #fda4af;
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+  }
+  .reasons-pct-badge {
+    font-size: 0.72rem;
+    color: #94a3b8;
+    min-width: 40px;
+    text-align: right;
+  }
+  .reasons-filter-btn {
+    font-size: 0.72rem;
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.1);
+    border: 1px solid rgba(14, 165, 233, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0.15rem 0.4rem;
+    transition: all 0.15s ease;
+  }
+  .reasons-filter-btn:hover {
+    background: rgba(14, 165, 233, 0.2);
+    color: #7dd3fc;
+  }
+
+  /* Crawl Completion Stats Modal */
+  .crawl-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.85rem;
+  }
+  .crawl-stat-card {
+    padding: 1rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .crawl-stat-val {
+    font-size: 1.65rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .crawl-stat-lbl {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
   }

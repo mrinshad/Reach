@@ -34,6 +34,9 @@ const state = {
   analyticsDays: 30,
   analyticsData: null,
   charts: {},
+  sortBy: 'default',
+  dateFilter: 'ALL',
+  othersReason: 'ALL',
 };
 
 // --- Custom Dialog System (Replaces Native Alert & Confirm) ---
@@ -375,6 +378,7 @@ function switchTab(tabId) {
   } else if (tabId === 'tabReview') {
     fetchReviewPosts();
   } else if (tabId === 'tabSent') {
+    loadRejectionReasonsFilter();
     fetchSentPosts();
   } else if (tabId === 'tabAnalytics') {
     loadAnalytics(state.analyticsDays || 30);
@@ -603,6 +607,14 @@ async function fetchDiscoveredPosts() {
       params.append('search', state.searchQuery);
     }
 
+    if (state.sortBy && state.sortBy !== 'default') {
+      params.append('order_by', state.sortBy);
+    }
+
+    if (state.dateFilter && state.dateFilter !== 'ALL') {
+      params.append('date_filter', state.dateFilter);
+    }
+
     if (state.expFilter === 'FRESHER') {
       params.append('max_exp', '1.0');
     } else if (state.expFilter === 'MID') {
@@ -622,8 +634,8 @@ async function fetchDiscoveredPosts() {
     if (countDiscEl) countDiscEl.textContent = state.total;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
-    // Clear Filters button: visible whenever any filter is not 'ALL'
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL';
+    // Clear Filters button: visible whenever any filter is not default/ALL
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default');
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -642,7 +654,7 @@ async function fetchDiscoveredPosts() {
     renderPagination();
   } catch (err) {
     const tbody = document.getElementById('postsTableBody');
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 2rem;">Error loading posts: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 2rem;">Error loading posts: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -654,9 +666,10 @@ function renderSkeletonRows() {
       <tr class="skeleton-row">
         <td><div class="skeleton-bar" style="width: 18px;"></div></td>
         <td><div class="skeleton-bar" style="width: 140px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 80px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 120px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 220px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 75px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 65px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 110px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 200px;"></div></td>
         <td style="text-align: right;"><div class="skeleton-bar" style="width: 70px; margin-left: auto;"></div></td>
       </tr>
     `;
@@ -709,7 +722,7 @@ function renderPostsTable() {
   tbody.innerHTML = '';
 
   if (state.posts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 3rem; color: #64748b;">No matching jobs found. Try adjusting filters or scrape today's Infopark jobs.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">No matching jobs found. Try adjusting filters or scrape today's Infopark jobs.</td></tr>`;
     return;
   }
 
@@ -730,6 +743,18 @@ function renderPostsTable() {
       expText = `${min}${max} yrs`;
       expClass = min < 3 ? 'badge-mid' : 'badge-senior';
     }
+
+    // Date cell
+    let dateStr = post.posted_date_raw || '';
+    if (!dateStr && post.created_at) {
+      try {
+        const d = new Date(post.created_at);
+        dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      } catch (e) {
+        dateStr = '';
+      }
+    }
+    const dateHtml = `<span class="table-date-badge" title="${escapeHtml(post.posted_date_raw || post.created_at || '')}">${escapeHtml(dateStr || '—')}</span>`;
 
     // Email cell
     const primaryEmail = (post.contact_emails && post.contact_emails[0]) || '';
@@ -758,6 +783,9 @@ function renderPostsTable() {
         <span class="pill-badge ${expClass}">${escapeHtml(expText)}</span>
       </td>
       <td>
+        ${dateHtml}
+      </td>
+      <td>
         ${emailHtml}
       </td>
       <td>
@@ -777,34 +805,34 @@ function renderPostsTable() {
           ${
             post.status === 'SENT'
               ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem;">✓ Sent</span>
-                 <button class="btn btn-outline btn-sm" onclick="switchTab('tabSent')" title="View in Sent History">
-                   <span>Sent</span>
+                 <button class="btn btn-icon-only" onclick="switchTab('tabSent')" title="View in Sent History">
+                   <span>✉</span>
                  </button>`
               : post.status === 'REJECTED'
                 ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">🚫 Cancelled</span>
-                   <button class="btn btn-outline btn-sm" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
-                     <span>Restore</span>
+                   <button class="btn btn-icon-only btn-restore" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
+                     <span>↺</span>
                    </button>`
                 : isGenerated
                   ? `<button class="btn btn-outline btn-sm" onclick="openPostInReview('${post.id}')" title="Review Generated Draft">
                        <span>Review Draft</span>
                      </button>
-                     <button class="btn btn-spam-quick" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫 Spam</span>
+                     <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
+                       <span>🚫</span>
                      </button>
-                     <button class="btn btn-cancel-quick" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕ Cancel</span>
+                     <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
+                       <span>✕</span>
                      </button>`
                   : `
                      ${primaryEmail ? `<button class="btn btn-primary btn-sm" onclick="generateSingleChatGPT('${post.id}')" title="Generate with ChatGPT"><span>Generate</span></button>` : ''}
                      <button class="btn btn-outline btn-sm" onclick="movePostToReview('${post.id}')" title="Move directly to Review & Drafts">
-                       <span>Move to Review</span>
+                       <span>Review</span>
                      </button>
-                     <button class="btn btn-spam-quick" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫 Spam</span>
+                     <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
+                       <span>🚫</span>
                      </button>
-                     <button class="btn btn-cancel-quick" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕ Cancel</span>
+                     <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
+                       <span>✕</span>
                      </button>
                   `
           }
@@ -894,9 +922,50 @@ function applyFilters() {
   if (srcSelect) {
     state.sourceFilter = srcSelect.value;
   }
+  const dateSelect = document.getElementById('selectDateFilter');
+  if (dateSelect) {
+    state.dateFilter = dateSelect.value;
+  }
+  const sortSelect = document.getElementById('selectSortBy');
+  if (sortSelect) {
+    state.sortBy = sortSelect.value;
+    updateSortIndicators();
+  }
   state.searchQuery = document.getElementById('inputSearch').value.trim();
   state.page = 1;
   fetchDiscoveredPosts();
+}
+
+function handleSortSelectChange(val) {
+  state.sortBy = val;
+  updateSortIndicators();
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
+function toggleSort(col) {
+  if (col === 'exp') {
+    state.sortBy = state.sortBy === 'exp_asc' ? 'exp_desc' : 'exp_asc';
+  } else if (col === 'date') {
+    state.sortBy = state.sortBy === 'date_desc' ? 'date_asc' : 'date_desc';
+  } else if (col === 'author') {
+    state.sortBy = state.sortBy === 'author_asc' ? 'author_desc' : 'author_asc';
+  }
+  const sortSel = document.getElementById('selectSortBy');
+  if (sortSel) sortSel.value = state.sortBy;
+  updateSortIndicators();
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
+function updateSortIndicators() {
+  const expInd = document.getElementById('sortExpIndicator');
+  const dateInd = document.getElementById('sortDateIndicator');
+  const authorInd = document.getElementById('sortAuthorIndicator');
+
+  if (expInd) expInd.textContent = state.sortBy === 'exp_asc' ? '▲' : state.sortBy === 'exp_desc' ? '▼' : '';
+  if (dateInd) dateInd.textContent = state.sortBy === 'date_asc' ? '▲' : state.sortBy === 'date_desc' ? '▼' : '';
+  if (authorInd) authorInd.textContent = state.sortBy === 'author_asc' ? '▲' : state.sortBy === 'author_desc' ? '▼' : '';
 }
 
 function handleSearchKeyUp(e) {
@@ -923,6 +992,15 @@ function clearDiscoveredFilters() {
   state.sourceFilter = 'ALL';
   const srcSel = document.getElementById('selectSource');
   if (srcSel) srcSel.value = 'ALL';
+
+  state.dateFilter = 'ALL';
+  const dateSel = document.getElementById('selectDateFilter');
+  if (dateSel) dateSel.value = 'ALL';
+
+  state.sortBy = 'default';
+  const sortSel = document.getElementById('selectSortBy');
+  if (sortSel) sortSel.value = 'default';
+  updateSortIndicators();
 
   state.searchQuery = '';
   const searchInput = document.getElementById('inputSearch');
@@ -1572,12 +1650,59 @@ function clearSentFilters() {
     pill.classList.toggle('active', pill.dataset.others === 'ALL');
   });
 
+  state.othersReason = 'ALL';
+  const reasonSel = document.getElementById('selectReasonFilter');
+  if (reasonSel) reasonSel.value = 'ALL';
+
   state.searchSent = '';
   const searchInput = document.getElementById('inputSearchSent');
   if (searchInput) searchInput.value = '';
 
   state.sentPage = 1;
   fetchSentPosts();
+}
+
+async function loadRejectionReasonsFilter(selectedReason = null) {
+  try {
+    const res = await fetch('/api/reasons');
+    if (!res.ok) return;
+    const data = await res.json();
+    const select = document.getElementById('selectReasonFilter');
+    if (!select) return;
+    const currentVal = selectedReason || state.othersReason || 'ALL';
+    select.innerHTML = '<option value="ALL">All Reasons</option>';
+    (data.reasons || []).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r;
+      opt.textContent = r;
+      if (r === currentVal) opt.selected = true;
+      select.appendChild(opt);
+    });
+    state.othersReason = currentVal;
+  } catch (e) {
+    console.error('Error loading rejection reasons:', e);
+  }
+}
+
+function applySentReasonFilter() {
+  const select = document.getElementById('selectReasonFilter');
+  if (select) {
+    state.othersReason = select.value;
+  }
+  state.sentPage = 1;
+  fetchSentPosts();
+}
+
+function filterOthersByReason(reason) {
+  switchTab('tabSent');
+  setOthersFilter('REJECTED');
+  loadRejectionReasonsFilter(reason).then(() => {
+    state.othersReason = reason;
+    const select = document.getElementById('selectReasonFilter');
+    if (select) select.value = reason;
+    state.sentPage = 1;
+    fetchSentPosts();
+  });
 }
 
 async function fetchSentPosts() {
@@ -1595,6 +1720,9 @@ async function fetchSentPosts() {
     if (state.searchSent) {
       params.append('search', state.searchSent);
     }
+    if (state.othersReason && state.othersReason !== 'ALL') {
+      params.append('reason', state.othersReason);
+    }
 
     const res = await fetch(`/api/posts?${params.toString()}`);
     const data = await res.json();
@@ -1605,7 +1733,7 @@ async function fetchSentPosts() {
     if (countSentEl) countSentEl.textContent = state.sentTotal;
 
     const sentBadge = document.getElementById('sentResultsBadge');
-    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '');
+    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '') || (state.othersReason && state.othersReason !== 'ALL');
     if (sentBadge) {
       if (isSentFiltered) {
         sentBadge.textContent = `${state.sentTotal} result${state.sentTotal === 1 ? '' : 's'}`;
@@ -2007,12 +2135,18 @@ async function pollTaskStatus() {
 
       if (task.status === 'completed') {
         fillEl.style.width = '100%';
-        subEl.textContent = '✓ Completed successfully';
+        if (task.crawl_stats) {
+          const s = task.crawl_stats;
+          subEl.textContent = `✓ Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+          showCrawlSummaryModal(task.task_name, s);
+        } else {
+          subEl.textContent = '✓ Completed successfully';
+        }
         setTimeout(() => {
           card.classList.add('hidden');
           fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
           loadDashboardData();
-        }, 1500);
+        }, task.crawl_stats ? 3000 : 1500);
       } else {
         const firstLine = (task.error || 'Operation failed').split('\n')[0];
         subEl.textContent = `✗ Failed: ${firstLine}`;
@@ -2040,6 +2174,56 @@ async function pollTaskStatus() {
     console.error('Task poll error:', err);
     stopTaskPolling();
   }
+}
+
+function showCrawlSummaryModal(taskName, stats) {
+  const modal = document.getElementById('crawlSummaryModal');
+  const title = document.getElementById('crawlSummaryTitle');
+  const grid = document.getElementById('crawlSummaryGrid');
+  if (!modal || !grid) return;
+
+  title.textContent = `${taskName || 'Crawler'} Summary`;
+
+  const total = stats.total_crawled !== undefined ? stats.total_crawled : 0;
+  const added = stats.newly_added !== undefined ? stats.newly_added : 0;
+  const emailOutreach = stats.new_email_outreach !== undefined ? stats.new_email_outreach : 0;
+  const draftPortal = stats.new_draft_portal !== undefined ? stats.new_draft_portal : 0;
+  const skippedInDb = stats.skipped_already_added !== undefined ? stats.skipped_already_added : 0;
+  const skippedOther = stats.skipped_other !== undefined ? stats.skipped_other : 0;
+
+  grid.innerHTML = `
+    <div class="crawl-stat-card" style="border-left: 3px solid #38bdf8;">
+      <div class="crawl-stat-val" style="color: #38bdf8;">${total}</div>
+      <div class="crawl-stat-lbl">Total Posts Scanned</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #34d399;">
+      <div class="crawl-stat-val" style="color: #34d399;">${added}</div>
+      <div class="crawl-stat-lbl">Newly Added Jobs</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #818cf8;">
+      <div class="crawl-stat-val" style="color: #818cf8;">${emailOutreach}</div>
+      <div class="crawl-stat-lbl">Direct Email Outreach</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #f59e0b;">
+      <div class="crawl-stat-val" style="color: #f59e0b;">${draftPortal}</div>
+      <div class="crawl-stat-lbl">Drafts & Portals</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #94a3b8;">
+      <div class="crawl-stat-val" style="color: #94a3b8;">${skippedInDb}</div>
+      <div class="crawl-stat-lbl">Skipped (Already in DB)</div>
+    </div>
+    <div class="crawl-stat-card" style="border-left: 3px solid #f43f5e;">
+      <div class="crawl-stat-val" style="color: #f43f5e;">${skippedOther}</div>
+      <div class="crawl-stat-lbl">Skipped (No Match / Filtered)</div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+}
+
+function closeCrawlSummaryModal() {
+  const modal = document.getElementById('crawlSummaryModal');
+  if (modal) modal.classList.add('hidden');
 }
 
 function toggleTaskLogs() {
@@ -2492,8 +2676,41 @@ function renderRejectionReasonsChart(reasons) {
   }
   const cleanReasons = (reasons && reasons.length > 0) ? reasons : [{ reason: 'No cancellations recorded', count: 0 }];
 
-  // Truncate Y-axis labels to max 30 chars for display; full text shown in tooltip
-  const truncLabel = (s) => s.length > 30 ? s.slice(0, 27).trimEnd() + '...' : s;
+  // Dynamic height adjustment: comfortable spacing per reason bar so all reasons render cleanly
+  const container = document.getElementById('chartReasonsContainer');
+  const dynamicHeight = Math.max(260, cleanReasons.length * 36);
+  if (container) {
+    container.style.height = `${dynamicHeight}px`;
+  }
+
+  // Populate companion analytical breakdown list
+  const listEl = document.getElementById('reasonsAnalyticsList');
+  if (listEl) {
+    const totalCancellations = cleanReasons.reduce((acc, r) => acc + (r.count || 0), 0);
+    if (!reasons || reasons.length === 0 || totalCancellations === 0) {
+      listEl.innerHTML = '<div style="font-size:0.78rem; color:#64748b; padding:0.5rem;">No cancellation reasons recorded yet.</div>';
+    } else {
+      listEl.innerHTML = cleanReasons.map((r, idx) => {
+        const pct = totalCancellations > 0 ? Math.round((r.count / totalCancellations) * 100) : 0;
+        return `
+          <div class="reasons-analytics-row">
+            <span class="reasons-rank-badge">#${idx + 1}</span>
+            <span class="reasons-name" title="${escapeHtml(r.reason)}">${escapeHtml(r.reason)}</span>
+            <div class="reasons-stats">
+              <span class="reasons-pct-badge">${pct}%</span>
+              <span class="reasons-count-badge">${r.count}</span>
+              <button class="reasons-filter-btn" onclick="filterOthersByReason('${escapeHtml(r.reason).replace(/'/g, "\\'")}')" title="Filter applications in Others by this reason">
+                Filter Others ↗
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // Truncate Y-axis labels to max 35 chars for display; full text shown in tooltip
+  const truncLabel = (s) => s.length > 35 ? s.slice(0, 32).trimEnd() + '...' : s;
   const fullLabels = cleanReasons.map(r => r.reason);
   const displayLabels = fullLabels.map(truncLabel);
 
@@ -2511,6 +2728,7 @@ function renderRejectionReasonsChart(reasons) {
     },
     options: {
       ...chartDefaultOptions,
+      maintainAspectRatio: false,
       indexAxis: 'y',
       plugins: {
         ...((chartDefaultOptions.plugins) || {}),

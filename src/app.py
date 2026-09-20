@@ -29,6 +29,7 @@ from src.db import (
     revert_post_to_draft,
     move_post_to_review,
     upsert_post,
+    get_distinct_rejection_reasons,
 )
 from src.experience_extractor import extract_experience
 from src.config import load_config, save_config
@@ -216,10 +217,12 @@ def api_get_posts(
     max_exp: Optional[float] = None,
     search: Optional[str] = None,
     order_by: Optional[str] = None,
+    reason: Optional[str] = None,
+    date_filter: Optional[str] = None,
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """Retrieve posts with filtering, search, and pagination."""
+    """Retrieve posts with filtering, search, sorting, and pagination."""
     try:
         limit_val = getattr(limit, "default", limit)
         offset_val = getattr(offset, "default", offset)
@@ -235,10 +238,22 @@ def api_get_posts(
             max_exp=max_exp,
             search=search,
             order_by=order_by,
+            reason=reason,
+            date_filter=date_filter,
             limit=safe_limit,
             offset=safe_offset,
         )
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/reasons")
+def api_get_reasons():
+    """Retrieve distinct cancellation/rejection reasons for filtering."""
+    try:
+        reasons = get_distinct_rejection_reasons()
+        return {"reasons": reasons}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
