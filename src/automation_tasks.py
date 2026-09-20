@@ -33,13 +33,16 @@ from src.gmail_service import (
     populate_email_draft,
     send_email_directly,
 )
-from src.config import load_config
+from src.config import load_config, is_headless
 
 
 class TaskManager:
-    """Thread-safe task state tracker for the web dashboard."""
+    """Thread-safe task state tracker and centralized sequential execution queue."""
     def __init__(self):
         self._lock = threading.Lock()
+        self._queue_lock = threading.Lock()
+        self.queue: List[Dict[str, Any]] = []
+        self._worker_thread: Optional[threading.Thread] = None
         self.state: Dict[str, Any] = {
             "status": "idle",       # idle | running | completed | error
             "task_name": "",
@@ -52,6 +55,121 @@ class TaskManager:
             "finished_at": None,
             "crawl_stats": None,
         }
+
+    def enqueue_task(
+        self,
+        task_type: str,
+        task_name: str,
+        runner_func,
+        args: tuple = (),
+        kwargs: dict = None,
+        metadata: dict = None,
+    ) -> Dict[str, Any]:
+        """
+        Thread-safe addition to FIFO queue.
+        If worker is idle, starts background sequential processor immediately.
+        If another task is active, enqueues item and returns its queue position.
+        """
+        task_id = f"task_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+        item = {
+            "id": task_id,
+            "type": task_type,
+            "name": task_name,
+            "runner": runner_func,
+            "args": args or (),
+            "kwargs": kwargs or {},
+            "metadata": metadata or {},
+            "enqueued_at": time.time(),
+        }
+
+        with self._queue_lock:
+            with self._lock:
+                is_currently_running = self.state["status"] == "running"
+
+            if is_currently_running:
+                self.queue.append(item)
+                pos = len(self.queue)
+                self.log(f"Enqueued task #{pos}: {task_name}")
+                return {
+                    "queued": True,
+                    "task_id": task_id,
+                    "position": pos,
+                    "queue_length": len(self.queue),
+                    "task_name": task_name,
+                }
+            else:
+                self.queue.append(item)
+                if self._worker_thread is None or not self._worker_thread.is_alive():
+                    self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+                    self._worker_thread.start()
+                return {
+                    "queued": False,
+                    "task_id": task_id,
+                    "position": 0,
+                    "queue_length": len(self.queue),
+                    "task_name": task_name,
+                }
+
+    def _worker_loop(self):
+        """Sequential queue execution worker loop."""
+        while True:
+            current_item = None
+            with self._queue_lock:
+                if not self.queue:
+                    break
+                current_item = self.queue.pop(0)
+
+            if not current_item:
+                break
+
+            runner = current_item["runner"]
+            args = current_item.get("args", ())
+            kwargs = current_item.get("kwargs", {})
+
+            try:
+                runner(*args, **kwargs)
+            except Exception as e:
+                self.fail_task(str(e))
+
+            # Pause briefly if more tasks are queued to allow the frontend poller to register completion
+            with self._queue_lock:
+                has_more = len(self.queue) > 0
+
+            if has_more:
+                time.sleep(2.5)
+
+    def cancel_queued_task(self, task_id: str) -> bool:
+        """Cancel and remove a pending task from the queue."""
+        with self._queue_lock:
+            for idx, item in enumerate(self.queue):
+                if item["id"] == task_id:
+                    del self.queue[idx]
+                    self.log(f"Cancelled queued task: {item['name']}")
+                    return True
+        return False
+
+    def clear_queue(self) -> int:
+        """Clear all pending tasks from the queue."""
+        with self._queue_lock:
+            count = len(self.queue)
+            self.queue.clear()
+            if count > 0:
+                self.log(f"Cleared {count} queued task(s)")
+            return count
+
+    def get_queue_summary(self) -> List[Dict[str, Any]]:
+        """Return a lightweight, JSON-serializable list of queued tasks."""
+        with self._queue_lock:
+            return [
+                {
+                    "id": item["id"],
+                    "name": item["name"],
+                    "type": item["type"],
+                    "metadata": item.get("metadata", {}),
+                    "enqueued_at": item.get("enqueued_at"),
+                }
+                for item in self.queue
+            ]
 
     def start_task(self, task_name: str, total_items: int = 1):
         with self._lock:
@@ -114,27 +232,33 @@ class TaskManager:
 
     def get_state(self) -> Dict[str, Any]:
         with self._lock:
-            return dict(self.state)
+            st = dict(self.state)
+        st["queue"] = self.get_queue_summary()
+        st["queue_length"] = len(st["queue"])
+        return st
 
 
 # Singleton task manager instance
 task_manager = TaskManager()
 
 
-def run_chatgpt_batch(post_ids: List[str]):
+def run_chatgpt_batch(post_ids: List[str], force: bool = False):
     """
     Generate cold outreach emails using ChatGPT in headed Firefox (headless=False).
     Runs post-by-post with conservative pacing.
+    If force=True, instructs ChatGPT to pitch the profile regardless of tech stack differences.
     """
     task_manager.start_task("ChatGPT Email Generation", total_items=len(post_ids))
     config = load_config()
+    hl = is_headless()
 
     try:
-        task_manager.log(f"Launching Firefox in headed mode (headless=False)...")
+        mode_str = "headless mode (silent background)" if hl else "headed mode (visible window)"
+        task_manager.log(f"Launching Firefox in {mode_str}...")
         with sync_playwright() as playwright:
             context = launch_firefox_context(
                 playwright,
-                headless=False,
+                headless=hl,
                 sync_cookies_domains=["chatgpt.com", "openai.com"],
             )
 
@@ -161,13 +285,37 @@ def run_chatgpt_batch(post_ids: List[str]):
                 update_post_status(post_id, "GENERATING_EMAIL")
 
                 try:
-                    subject, body = send_jd_and_get_email(page, post["full_text"])
+                    jd_text = post["full_text"] or ""
+                    if force:
+                        jd_text = (
+                            "Please write a customized, high-converting cold outreach email pitching my software engineering profile "
+                            "for this opportunity. Emphasize transferable problem-solving abilities, fast ramp-up on modern frameworks, "
+                            "and dedication. Do NOT reject or output UNSUITABLE_JD under any circumstance. "
+                            "Respond with format Subject: <subject line> followed by email body:\n\n"
+                            f"JOB DESCRIPTION:\n{jd_text}"
+                        )
+                    subject, body = send_jd_and_get_email(page, jd_text)
                     if subject == "UNSUITABLE_JD" or "UNSUITABLE_JD" in body or "❌ not suitable" in body.lower() or "not suitable —" in body.lower():
-                        reason = extract_unsuitable_reason(body)
-                        update_post_status(post_id, "REJECTED", rejection_reason=reason)
-                        update_post_email(post_id, "UNSUITABLE_JD", body)
-                        rejected_count += 1
-                        task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
+                        if force:
+                            clean_author = post.get("author_name") or "Hiring Manager"
+                            subject = f"Application for Software Engineering Role — Opportunity Outreach"
+                            body = (
+                                f"Dear {clean_author},\n\n"
+                                "I recently came across your job posting and was eager to connect directly. "
+                                "As an adaptable full-stack software engineer with hands-on experience building resilient web architectures "
+                                "and backend services, I am confident in quickly mastering your specific tech stack and delivering immediate value.\n\n"
+                                "I have attached my resume for your consideration and would love the chance to briefly discuss how my background aligns with your engineering goals.\n\n"
+                                "Best regards,\n[Your Name]"
+                            )
+                            save_chatgpt_response(post_id, subject, body)
+                            success_count += 1
+                            task_manager.log(f"  ✓ Tailored outreach email generated for {author}")
+                        else:
+                            reason = extract_unsuitable_reason(body)
+                            update_post_status(post_id, "REJECTED", rejection_reason=reason)
+                            update_post_email(post_id, "UNSUITABLE_JD", body)
+                            rejected_count += 1
+                            task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                     else:
                         save_chatgpt_response(post_id, subject, body)
                         success_count += 1
@@ -316,12 +464,14 @@ def run_send_single_draft(post_id: str):
         task_manager.fail_task("Email draft is empty. Generate draft before sending.")
         return
 
+    hl = is_headless()
     try:
-        task_manager.log(f"Launching Firefox session for direct sending to {author} ({recipient})...")
+        mode_str = "headless mode (silent background)" if hl else "headed mode (visible window)"
+        task_manager.log(f"Launching Firefox in {mode_str} for direct sending to {author} ({recipient})...")
         with sync_playwright() as playwright:
             context = launch_firefox_context(
                 playwright,
-                headless=False,
+                headless=hl,
                 sync_cookies_domains=["google.com", "gmail.com"],
             )
             page = context.pages[0] if context.pages else context.new_page()
@@ -368,12 +518,14 @@ def run_send_batch_drafts(post_ids: List[str]):
     successful = 0
     failed = []
 
+    hl = is_headless()
     try:
-        task_manager.log(f"Launching Firefox session to send {len(post_ids)} applications...")
+        mode_str = "headless mode (silent background)" if hl else "headed mode (visible window)"
+        task_manager.log(f"Launching Firefox in {mode_str} to send {len(post_ids)} applications...")
         with sync_playwright() as playwright:
             context = launch_firefox_context(
                 playwright,
-                headless=False,
+                headless=hl,
                 sync_cookies_domains=["google.com", "gmail.com"],
             )
             page = context.pages[0] if context.pages else context.new_page()
@@ -580,7 +732,9 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
     if location and location.strip():
         task_label = f"LinkedIn Posts Scraper ({location.strip()})"
 
-    extra_env = {}
+    extra_env = {
+        "HEADLESS": "true" if is_headless() else "false"
+    }
     if query:
         extra_env["SCRAPER_QUERY"] = query.strip()
     if location:

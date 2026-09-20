@@ -79,11 +79,11 @@ function showConfirm(title, message, options = {}) {
 
     if (options.danger) {
       confirmBtn.className = 'btn btn-danger';
-      iconCircle.textContent = '⚠️';
+      iconCircle.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
       iconCircle.style.background = 'rgba(244, 63, 94, 0.15)';
     } else {
       confirmBtn.className = 'btn btn-primary';
-      iconCircle.textContent = '⚡';
+      iconCircle.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
       iconCircle.style.background = 'rgba(99, 102, 241, 0.15)';
     }
 
@@ -324,8 +324,506 @@ function showAlert(title, message, options = {}) {
   }
 }
 
+// --- Multi-Channel In-App & Desktop Notification System ---
+let notificationState = {
+  list: [],
+  unreadCount: 0,
+  audioCtx: null,
+  swRegistration: null,
+};
+
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+}
+
+function registerReachServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => {
+        notificationState.swRegistration = reg;
+      })
+      .catch((err) => {
+        console.debug('Service Worker register notice:', err);
+      });
+  }
+}
+
+function unlockMobileAudioAndHaptics() {
+  const unlock = () => {
+    try {
+      const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtxClass) {
+        if (!notificationState.audioCtx || notificationState.audioCtx.state === 'closed') {
+          notificationState.audioCtx = new AudioCtxClass();
+        }
+        if (notificationState.audioCtx.state === 'suspended') {
+          notificationState.audioCtx.resume();
+        }
+      }
+    } catch (_) {}
+    window.removeEventListener('touchstart', unlock, true);
+    window.removeEventListener('touchend', unlock, true);
+    window.removeEventListener('click', unlock, true);
+  };
+  window.addEventListener('touchstart', unlock, true);
+  window.addEventListener('touchend', unlock, true);
+  window.addEventListener('click', unlock, true);
+}
+
+function triggerHapticVibration(type = 'info') {
+  if (!('vibrate' in navigator)) return;
+  try {
+    if (type === 'error') {
+      navigator.vibrate([180, 80, 180, 80, 250]);
+    } else if (type === 'success') {
+      navigator.vibrate([120, 60, 140]);
+    } else {
+      navigator.vibrate([80]);
+    }
+  } catch (_) {}
+}
+
+let notifTitleFlashTimer = null;
+function flashDocumentTitle(alertText) {
+  if (!document.hidden) return;
+  clearInterval(notifTitleFlashTimer);
+  const originalTitle = document.title || 'Reach Job Automation';
+  let flipped = false;
+  let count = 0;
+  notifTitleFlashTimer = setInterval(() => {
+    document.title = flipped ? `🔔 ${alertText}` : originalTitle;
+    flipped = !flipped;
+    count++;
+    if (count > 24) {
+      clearInterval(notifTitleFlashTimer);
+      document.title = originalTitle;
+    }
+  }, 900);
+
+  const clearFlash = () => {
+    if (!document.hidden) {
+      clearInterval(notifTitleFlashTimer);
+      document.title = originalTitle;
+      document.removeEventListener('visibilitychange', clearFlash);
+    }
+  };
+  document.addEventListener('visibilitychange', clearFlash);
+}
+
+function initNotificationSystem() {
+  registerReachServiceWorker();
+  unlockMobileAudioAndHaptics();
+  try {
+    const saved = localStorage.getItem('reach_notifications');
+    if (saved) {
+      notificationState.list = JSON.parse(saved);
+      notificationState.unreadCount = notificationState.list.filter(n => !n.read).length;
+    }
+  } catch (_) {
+    notificationState.list = [];
+  }
+  updateNotificationBadgeUI();
+  updateDesktopPermButtonUI();
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    const wrapper = document.querySelector('.notification-center-wrapper');
+    const dropdown = document.getElementById('notificationDropdown');
+    if (wrapper && dropdown && !wrapper.contains(e.target)) {
+      dropdown.classList.add('hidden');
+    }
+  });
+}
+
+function updateDesktopPermButtonUI() {
+  const btn = document.getElementById('btnDesktopPerm');
+  if (!btn) return;
+  const isMobile = isMobileDevice();
+
+  if (!('Notification' in window)) {
+    btn.textContent = isMobile ? 'Mobile Sound & Haptic' : 'Sound Alerts';
+    btn.className = 'btn-link-xs text-success';
+    btn.disabled = false;
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    btn.textContent = isMobile ? 'Mobile Alerts: On' : 'Desktop: On';
+    btn.className = 'btn-link-xs text-success';
+    btn.disabled = false;
+    btn.title = 'Alerts are active. Tap to test or manage.';
+  } else if (perm === 'denied') {
+    btn.textContent = isMobile ? 'Mobile: Blocked (Fix)' : 'Desktop: Blocked (Fix)';
+    btn.className = 'btn-link-xs text-danger';
+    btn.disabled = false;
+    btn.title = 'Notification permission blocked. Tap for guide on unblocking.';
+  } else {
+    btn.textContent = isMobile ? 'Enable Mobile Alerts' : 'Enable Desktop Alerts';
+    btn.className = 'btn-link-xs';
+    btn.disabled = false;
+    btn.title = 'Enable browser notifications';
+  }
+}
+
+async function handleNotificationPermClick() {
+  if (!('Notification' in window)) {
+    openNotificationHelpModal();
+    return;
+  }
+  if (Notification.permission === 'denied' || Notification.permission === 'granted') {
+    openNotificationHelpModal();
+  } else {
+    await requestNotificationPermission();
+  }
+}
+
+function openNotificationHelpModal() {
+  const modal = document.getElementById('notifHelpModal');
+  if (!modal) return;
+
+  const sysBadge = document.getElementById('notifStatusSystem');
+  const vibBadge = document.getElementById('notifStatusVibration');
+  const httpNotice = document.getElementById('notifHttpNotice');
+
+  if (sysBadge) {
+    if (!('Notification' in window)) {
+      sysBadge.textContent = 'Not Supported';
+      sysBadge.className = 'notif-status-badge';
+    } else if (Notification.permission === 'granted') {
+      sysBadge.textContent = 'Allowed';
+      sysBadge.className = 'notif-status-badge badge-active';
+    } else if (Notification.permission === 'denied') {
+      sysBadge.textContent = 'Blocked';
+      sysBadge.className = 'notif-status-badge badge-blocked';
+    } else {
+      sysBadge.textContent = 'Prompt Needed';
+      sysBadge.className = 'notif-status-badge badge-prompt';
+    }
+  }
+
+  if (vibBadge) {
+    if ('vibrate' in navigator) {
+      vibBadge.textContent = 'Active';
+      vibBadge.className = 'notif-status-badge badge-active';
+    } else {
+      vibBadge.textContent = 'Desktop / N/A';
+      vibBadge.className = 'notif-status-badge';
+    }
+  }
+
+  if (httpNotice) {
+    const isHttpsOrLocalhost = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+    httpNotice.style.display = isHttpsOrLocalhost ? 'none' : 'block';
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeNotificationHelpModal() {
+  const modal = document.getElementById('notifHelpModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function testNotificationAlert() {
+  playNotificationSound();
+  triggerHapticVibration('success');
+  flashDocumentTitle('Test Alert Received!');
+
+  if ('Notification' in window && Notification.permission === 'granted') {
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification('Reach Automation Alert', {
+          body: 'Test notification verified! Alerts, sound & vibration are active.',
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'reach-test-' + Date.now(),
+          renotify: true,
+        }).catch(() => {
+          try {
+            new Notification('Reach Automation Alert', {
+              body: 'Test notification verified! Alerts, sound & vibration are active.',
+              icon: '/favicon.ico',
+            });
+          } catch (_) {}
+        });
+      }).catch(() => {});
+    } else {
+      try {
+        new Notification('Reach Automation Alert', {
+          body: 'Test notification verified! Alerts, sound & vibration are active.',
+          icon: '/favicon.ico',
+        });
+      } catch (_) {}
+    }
+  }
+
+  showToast('🔊 Test alert fired! Sound, vibration & notifications active.', 'success');
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    showToast('Browser does not support system notifications', 'warn');
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    updateDesktopPermButtonUI();
+    if (perm === 'granted') {
+      showToast('Notifications enabled successfully!', 'success');
+      playNotificationSound();
+      triggerHapticVibration('success');
+    } else if (perm === 'denied') {
+      showToast('Notifications blocked. Tap to view unblock instructions.', 'warn');
+      openNotificationHelpModal();
+    }
+  } catch (err) {
+    console.warn('Notification permission error:', err);
+  }
+}
+
+function playNotificationSound() {
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxClass) return;
+    if (!notificationState.audioCtx || notificationState.audioCtx.state === 'closed') {
+      notificationState.audioCtx = new AudioCtxClass();
+    }
+    const ctx = notificationState.audioCtx;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const now = ctx.currentTime;
+
+    // Harmonic double chime (D5: 587.33Hz -> A5: 880Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.001, now);
+    gain1.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.12);
+    gain2.gain.setValueAtTime(0.001, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.2, now + 0.16);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.6);
+  } catch (err) {
+    console.debug('Audio chime notice:', err);
+  }
+}
+
+function sendAppNotification({ title, message, type = 'info' }) {
+  const item = {
+    id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    title: title || 'System Update',
+    message: message || '',
+    type: type, // 'success', 'info', 'warn', 'error'
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    date: new Date().toLocaleDateString(),
+    read: false,
+  };
+
+  notificationState.list.unshift(item);
+  if (notificationState.list.length > 50) {
+    notificationState.list = notificationState.list.slice(0, 50);
+  }
+  notificationState.unreadCount = notificationState.list.filter(n => !n.read).length;
+
+  try {
+    localStorage.setItem('reach_notifications', JSON.stringify(notificationState.list));
+  } catch (_) {}
+
+  updateNotificationBadgeUI();
+  renderNotificationCenter();
+  playNotificationSound();
+  triggerHapticVibration(type);
+  flashDocumentTitle(item.title);
+
+  // System notification via Service Worker (Android Chrome) or Notification API (Desktop)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification(item.title, {
+          body: item.message,
+          icon: '/favicon.ico',
+          badge: '/favicon.ico',
+          tag: 'reach-task-' + Date.now(),
+          renotify: true,
+        }).catch(() => {
+          try {
+            new Notification(item.title, {
+              body: item.message,
+              icon: '/favicon.ico',
+            });
+          } catch (_) {}
+        });
+      }).catch(() => {});
+    } else {
+      try {
+        new Notification(item.title, {
+          body: item.message,
+          icon: '/favicon.ico',
+        });
+      } catch (_) {}
+    }
+  }
+}
+
+function updateNotificationBadgeUI() {
+  const badge = document.getElementById('notificationBadge');
+  const countBadge = document.getElementById('notificationCountBadge');
+  const unread = notificationState.unreadCount;
+
+  if (badge) {
+    badge.textContent = unread > 99 ? '99+' : unread;
+    badge.classList.toggle('hidden', unread === 0);
+  }
+  if (countBadge) {
+    countBadge.textContent = notificationState.list.length;
+  }
+}
+
+function toggleNotificationCenter() {
+  const dropdown = document.getElementById('notificationDropdown');
+  if (!dropdown) return;
+  const isHidden = dropdown.classList.contains('hidden');
+  if (isHidden) {
+    renderNotificationCenter();
+    dropdown.classList.remove('hidden');
+    // Mark items as read
+    notificationState.list.forEach(n => { n.read = true; });
+    notificationState.unreadCount = 0;
+    try {
+      localStorage.setItem('reach_notifications', JSON.stringify(notificationState.list));
+    } catch (_) {}
+    updateNotificationBadgeUI();
+  } else {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function renderNotificationCenter() {
+  const listEl = document.getElementById('notificationList');
+  if (!listEl) return;
+
+  if (notificationState.list.length === 0) {
+    listEl.innerHTML = '<div class="notification-empty">No notifications yet</div>';
+    return;
+  }
+
+  const icons = {
+    success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+    error: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+    warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+  };
+
+  listEl.innerHTML = notificationState.list.map(n => `
+    <div class="notification-item ${n.read ? '' : 'unread'}">
+      <div class="notification-item-icon ${n.type || 'info'}">${icons[n.type] || icons.info}</div>
+      <div class="notification-item-body">
+        <div class="notification-item-title">${escapeHtml(n.title)}</div>
+        <div class="notification-item-msg">${escapeHtml(n.message)}</div>
+        <div class="notification-item-time">${n.date === new Date().toLocaleDateString() ? n.time : n.date + ' ' + n.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function clearAllNotifications() {
+  notificationState.list = [];
+  notificationState.unreadCount = 0;
+  try {
+    localStorage.removeItem('reach_notifications');
+  } catch (_) {}
+  updateNotificationBadgeUI();
+  renderNotificationCenter();
+}
+
+// --- Sidebar Collapsible Mode ---
+function handleBrandLogoClick() {
+  const sidebar = document.getElementById('appSidebar');
+  if (sidebar && sidebar.classList.contains('collapsed')) {
+    toggleSidebarCollapse();
+  } else {
+    switchTab('tabAnalytics');
+  }
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('appSidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (sidebar) sidebar.classList.add('collapsed');
+  if (backdrop) backdrop.classList.add('hidden');
+  updateSidebarCollapseUI();
+}
+
+function toggleSidebarCollapse() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.toggle('collapsed');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (backdrop) {
+    if (window.innerWidth <= 768 && !isCollapsed) {
+      backdrop.classList.remove('hidden');
+    } else {
+      backdrop.classList.add('hidden');
+    }
+  }
+  try {
+    localStorage.setItem('reach_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+  } catch (_) {}
+  updateSidebarCollapseUI();
+}
+
+function initSidebarCollapse() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  try {
+    const saved = localStorage.getItem('reach_sidebar_collapsed');
+    if (saved === 'false') {
+      sidebar.classList.remove('collapsed');
+    } else {
+      sidebar.classList.add('collapsed');
+    }
+  } catch (_) {
+    sidebar.classList.add('collapsed');
+  }
+  updateSidebarCollapseUI();
+}
+
+function updateSidebarCollapseUI() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.contains('collapsed');
+  const toggleBtn = document.getElementById('btnToggleSidebar');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('title', isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar');
+    toggleBtn.innerHTML = isCollapsed
+      ? '<svg class="sidebar-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>'
+      : '<svg class="sidebar-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  }
+  const topbarBtn = document.getElementById('btnTopbarSidebarToggle');
+  if (topbarBtn) {
+    topbarBtn.setAttribute('title', isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar');
+  }
+}
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+  initSidebarCollapse();
   const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
@@ -348,6 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
   }
 
+  initNotificationSystem();
   switchTab(startTab);
   initCrawlerControls();
   fetchLocations();
@@ -363,6 +862,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function switchTab(tabId) {
   state.activeTab = tabId;
 
+  if (window.innerWidth <= 768) {
+    closeMobileSidebar();
+  }
+
   try {
     localStorage.setItem('reach_active_tab', tabId);
     const tabToHash = {
@@ -375,6 +878,19 @@ function switchTab(tabId) {
       history.replaceState(null, '', tabToHash[tabId]);
     }
   } catch (_) {}
+
+  // Update Topbar Title & Breadcrumb
+  const pageMeta = {
+    tabAnalytics: { title: 'Dashboard Overview', breadcrumb: 'Real-time database intelligence & automation metrics' },
+    tabDiscovered: { title: 'Discovered Jobs', breadcrumb: 'Explore, filter, and review crawled job postings' },
+    tabReview: { title: 'Review & Drafts', breadcrumb: 'Approve AI cover letters and dispatch outreach' },
+    tabSent: { title: 'Sent & History', breadcrumb: 'Track dispatched applications and historical outreach' },
+  };
+  const meta = pageMeta[tabId] || { title: 'Dashboard', breadcrumb: '' };
+  const titleEl = document.getElementById('pageTitleDisplay');
+  if (titleEl) titleEl.textContent = meta.title;
+  const breadcrumbEl = document.getElementById('pageBreadcrumbDisplay');
+  if (breadcrumbEl) breadcrumbEl.textContent = meta.breadcrumb;
 
   const btnDiscovered = document.getElementById('btnTabDiscovered');
   if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
@@ -406,6 +922,40 @@ function switchTab(tabId) {
   } else if (tabId === 'tabAnalytics') {
     loadAnalytics(state.analyticsDays || 30);
   }
+}
+
+// --- Interactive Jump Links from Dashboard KPI Cards ---
+function jumpToSentApplications() {
+  switchTab('tabSent');
+}
+
+function jumpToOutreachReady() {
+  switchTab('tabDiscovered');
+  const catEl = document.getElementById('selectCategory');
+  if (catEl) catEl.value = 'EMAIL_OUTREACH';
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'ALL';
+  applyFilters();
+}
+
+function jumpToReviewDrafts() {
+  switchTab('tabReview');
+}
+
+function jumpToDiscovered() {
+  switchTab('tabDiscovered');
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'PENDING';
+  const catEl = document.getElementById('selectCategory');
+  if (catEl) catEl.value = 'ALL';
+  applyFilters();
+}
+
+function jumpToScreenedApplications() {
+  switchTab('tabDiscovered');
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'REJECTED';
+  applyFilters();
 }
 
 // --- Health Status & Indicators ---
@@ -446,6 +996,14 @@ function updateHealthPill(elementId, serviceData) {
   } else {
     el.classList.add('warn');
     el.title = `${serviceData.label || 'Not Logged In'}`;
+  }
+
+  // Also update corresponding status label in dashboard section if present
+  const suffix = elementId.replace('health', '');
+  const labelEl = document.getElementById(`healthLabel${suffix}`);
+  if (labelEl) {
+    labelEl.textContent = serviceData.label || (serviceData.connected ? 'Online' : 'Not Connected');
+    labelEl.style.color = serviceData.connected ? '#a7f3d0' : '#fde68a';
   }
 }
 
@@ -507,18 +1065,24 @@ async function fetchStats() {
     const elSent = document.getElementById('statSent');
     if (elSent) elSent.textContent = othersCount;
 
-    // Tab Header Count Badges
+    // Sidebar Navigation Badges: Pending generation for Discovered, Ready count for Review, None for History
     const countDiscEl = document.getElementById('countDiscovered');
-    if (countDiscEl && state.activeTab !== 'tabDiscovered') {
-      countDiscEl.textContent = discoveredTotal;
+    if (countDiscEl) {
+      const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : (stats.discovered_total || 0);
+      countDiscEl.textContent = pendingCount;
+      countDiscEl.title = `${pendingCount} jobs yet to generate emails`;
     }
 
     const countRevEl = document.getElementById('countReview');
-    if (countRevEl) countRevEl.textContent = draftsReady;
+    if (countRevEl) {
+      countRevEl.textContent = draftsReady;
+      countRevEl.title = `${draftsReady} drafts ready for review`;
+    }
 
     const countSentEl = document.getElementById('countSent');
-    if (countSentEl && state.activeTab !== 'tabSent') {
-      countSentEl.textContent = othersCount;
+    if (countSentEl) {
+      countSentEl.textContent = '';
+      countSentEl.style.display = 'none';
     }
 
     const cancelledCount = stats.rejected_total || 0;
@@ -581,6 +1145,8 @@ async function fetchSettings() {
         crawlerLocSelect.value = state.config.search_location;
       }
     }
+
+    updateHeadlessUI(state.config ? state.config.headless_mode : false);
   } catch (err) {
     console.error('Error loading settings:', err);
   }
@@ -673,9 +1239,6 @@ async function fetchDiscoveredPosts() {
     state.posts = data.posts || [];
     state.total = data.total || 0;
 
-    const countDiscEl = document.getElementById('countDiscovered');
-    if (countDiscEl) countDiscEl.textContent = state.total;
-
     const discBadge = document.getElementById('discoveredResultsBadge');
     // Clear Filters button: visible whenever any filter is not default/ALL
     const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default') || (state.locationFilter && state.locationFilter !== 'ALL') || (state.discoveredReason && state.discoveredReason !== 'ALL');
@@ -739,13 +1302,13 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
 
   let badge = '';
   if (url.startsWith('direct://') || url.includes('direct')) {
-    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">✉ Direct Outreach</span>`;
+    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">Direct Outreach</span>`;
   } else if (url.includes('infopark.in')) {
-    badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">⚡ Infopark Kochi</span>`;
+    badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">Infopark Kochi</span>`;
   } else if (url.startsWith('manual://') || url.includes('manual')) {
-    badge = `<span class="source-pill source-manual" title="Source: Manually Added">✍️ Manual</span>`;
+    badge = `<span class="source-pill source-manual" title="Source: Manually Added">Manual</span>`;
   } else {
-    badge = `<span class="source-pill source-linkedin" title="Source: LinkedIn Job Post">in LinkedIn</span>`;
+    badge = `<span class="source-pill source-linkedin" title="Source: LinkedIn Job Post">LinkedIn</span>`;
   }
 
   const isScam = rejReason && (rejReason.toLowerCase().includes('scam') || rejReason.toLowerCase().includes('spam'));
@@ -753,10 +1316,10 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
 
   if (isScam) {
     const why = rejReason || 'Flagged as scam recruiter';
-    badge += `<span class="badge-scam-alert" title="🛑 Scam: ${escapeHtml(why)}">🛑 Scam</span>`;
+    badge += `<span class="badge-scam-alert" title="Scam: ${escapeHtml(why)}">Scam</span>`;
   } else if (isPotential) {
     const why = potentialReason || rejReason || 'Suspicious contact domain or flagged recruiter activity';
-    badge += `<span class="badge-spam-warning" title="⚠️ Potential Scam: ${escapeHtml(why)}">⚠️ Potential Scam</span>`;
+    badge += `<span class="badge-spam-warning" title="Potential Scam: ${escapeHtml(why)}">Potential Scam</span>`;
   }
 
   return badge;
@@ -797,7 +1360,7 @@ function renderPostsTable() {
     const primaryEmail = (post.contact_emails && post.contact_emails[0]) || '';
     const emailHtml = primaryEmail
       ? `<span class="email-copy-pill" onclick="copyEmailToClipboard('${escapeHtml(primaryEmail)}')" title="Click to copy email">
-           <span>✉</span> ${escapeHtml(primaryEmail)}
+           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>${escapeHtml(primaryEmail)}
          </span>`
       : `<span style="color: #64748b; font-size: 0.72rem;">—</span>`;
 
@@ -812,7 +1375,7 @@ function renderPostsTable() {
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
             <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
             ${getSourceBadgeHtml(post)}
-            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
           </div>
           <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
         </div>
@@ -842,24 +1405,24 @@ function renderPostsTable() {
           }
           ${
             post.status === 'SENT'
-              ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem;">✓ Sent</span>
+              ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Sent</span>
                  <button class="btn btn-icon-only" onclick="switchTab('tabSent')" title="View in Sent History">
-                   <span>✉</span>
+                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                  </button>`
               : post.status === 'REJECTED'
-                ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">🚫 Cancelled</span>
+                ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>
                    <button class="btn btn-icon-only btn-restore" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
-                     <span>↺</span>
+                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path></svg>
                    </button>`
                 : isGenerated
                   ? `<button class="btn btn-outline btn-sm" onclick="openPostInReview('${post.id}')" title="Review Generated Draft">
                        <span>Review Draft</span>
                      </button>
                      <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                      </button>
                      <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                      </button>`
                   : `
                      ${primaryEmail ? `<button class="btn btn-primary btn-sm" onclick="generateSingleChatGPT('${post.id}')" title="Generate with ChatGPT"><span>Generate</span></button>` : ''}
@@ -867,10 +1430,10 @@ function renderPostsTable() {
                        <span>Review</span>
                      </button>
                      <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                      </button>
                      <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                      </button>
                   `
           }
@@ -1219,9 +1782,9 @@ async function fetchReviewPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <span class="queue-author">${escapeHtml(post.author_name)}</span>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem;" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem; display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
             </div>
-            <span class="queue-email">✉ ${escapeHtml(email)}</span>
+            <span class="queue-email" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>${escapeHtml(email)}</span>
           </div>
         </div>
       `;
@@ -1325,6 +1888,59 @@ async function saveActiveDraftEdits() {
   }
 }
 
+async function generateEmailForActiveDraft() {
+  if (!state.activeReviewPost || !state.activePostId) {
+    showToast('Please select a job post from the left queue to generate outreach email.', 'warn');
+    return;
+  }
+  const postId = state.activePostId;
+  const author = state.activeReviewPost.author_name || 'the job poster';
+
+  const confirmed = await showConfirm(
+    'Generate Outreach Email from JD',
+    `This will submit the full job description for "${author}" to ChatGPT and generate a tailored cold outreach subject & body, replacing the current draft. Proceed?`,
+    'Generate Now'
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById('btnGenerateMailFromJd');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `
+      <svg class="spin-fast" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+      <span>Generating...</span>
+    `;
+  }
+
+  try {
+    const res = await fetch(`/api/generate-email/${postId}?force=true`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued email generation (Queue #${data.position})`, 'info');
+      } else {
+        showToast('ChatGPT email generation launched!', 'info');
+      }
+      startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Cannot Start', err.detail || 'Failed to start email generator.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    setTimeout(() => {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span>Generate Mail from JD</span>
+        `;
+      }
+    }, 2500);
+  }
+}
+
 // --- Batch & Direct Sending Functions ---
 
 function toggleSelectDraft(postId) {
@@ -1370,7 +1986,7 @@ async function sendActiveDraftDirectly() {
 
   const recipient = (state.activeReviewPost.contact_emails && state.activeReviewPost.contact_emails[0]) || state.activeReviewPost.author_name;
   const confirmed = await showConfirm(
-    '🚀 Direct Send Application',
+    'Direct Send Application',
     `Send application email directly to ${recipient} via Gmail without manual interaction? Your active resume will be attached and this post will be moved to Sent history.`,
     { confirmText: 'Send Directly' }
   );
@@ -1381,7 +1997,12 @@ async function sendActiveDraftDirectly() {
   try {
     const res = await fetch(`/api/send-direct/${state.activeReviewPost.id}`, { method: 'POST' });
     if (res.ok) {
-      showToast('🚀 Sending email directly via Gmail...', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued direct send (Position #${data.position})`, 'info');
+      } else {
+        showToast('Sending email directly via Gmail...', 'info');
+      }
       state.selectedDraftIds.delete(state.activeReviewPost.id);
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -1402,7 +2023,7 @@ async function sendBatchSelectedDrafts() {
   }
 
   const confirmed = await showConfirm(
-    '🚀 Batch Direct Send',
+    'Batch Direct Send',
     `Send ${ids.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
     { confirmText: `Send ${ids.length} Emails` }
   );
@@ -1415,7 +2036,12 @@ async function sendBatchSelectedDrafts() {
       body: JSON.stringify({ post_ids: ids })
     });
     if (res.ok) {
-      showToast(`🚀 Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued batch send for ${ids.length} emails (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      }
       state.selectedDraftIds.clear();
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -1495,7 +2121,12 @@ async function openActivePostInGmail() {
     state.awaitingSentPost = { ...state.activeReviewPost };
     const res = await fetch(`/api/open-gmail/${state.activeReviewPost.id}`, { method: 'POST' });
     if (res.ok) {
-      showToast('Launching Gmail compose in headed Firefox...', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued Gmail draft opening (Position #${data.position})`, 'info');
+      } else {
+        showToast('Launching Gmail compose in headed Firefox...', 'info');
+      }
       startTaskPolling();
     } else {
       state.awaitingSentPost = null;
@@ -1866,9 +2497,9 @@ async function fetchSentPosts() {
 
       let statusBadge = '';
       if (isSent) {
-        statusBadge = `<span class="badge-status-sent">✉ Sent</span>`;
+        statusBadge = `<span class="badge-status-sent" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>Sent</span>`;
       } else if (isRejected) {
-        statusBadge = `<span class="badge-status-rejected">🚫 Cancelled</span>`;
+        statusBadge = `<span class="badge-status-rejected" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>`;
         if (post.rejection_reason) {
           statusBadge += `<span class="badge-rejection-reason" title="${escapeHtml(post.rejection_reason)}">${escapeHtml(post.rejection_reason)}</span>`;
         }
@@ -1884,7 +2515,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -2155,7 +2786,12 @@ async function triggerSelectedCrawl() {
       body: JSON.stringify(payload),
     });
     if (res.ok) {
-      showToast(`${sourceName} crawler started`, 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued ${sourceName} crawler (Position #${data.position})`, 'info');
+      } else {
+        showToast(`${sourceName} crawler started`, 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2209,7 +2845,12 @@ async function generateSingleChatGPT(postId) {
   try {
     const res = await fetch(`/api/generate-email/${postId}`, { method: 'POST' });
     if (res.ok) {
-      showToast('ChatGPT email generation launched in headed Firefox', 'info');
+      const data = await res.json();
+      if (data.queued) {
+        showToast(`Enqueued email generation (Position #${data.position})`, 'info');
+      } else {
+        showToast('ChatGPT email generation launched in headed Firefox', 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2239,9 +2880,14 @@ async function generateBatchChatGPT() {
     });
 
     if (res.ok) {
+      const data = await res.json();
       state.selectedIds.clear();
       updateSelectedCountUI();
-      showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      if (data.queued) {
+        showToast(`Enqueued batch generation for ${ids.length} posts (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      }
       startTaskPolling();
     } else {
       const err = await res.json();
@@ -2279,6 +2925,34 @@ async function pollTaskStatus() {
     const fillEl = document.getElementById('taskProgressFill');
     const logsEl = document.getElementById('logsStream');
 
+    // Render task queue drawer if queued tasks exist
+    const queueSection = document.getElementById('taskQueueSection');
+    const queueBadge = document.getElementById('taskQueueCountBadge');
+    const queueList = document.getElementById('taskQueueList');
+    const queue = task.queue || [];
+
+    if (queueSection && queueList) {
+      if (queue.length > 0) {
+        queueSection.classList.remove('hidden');
+        if (queueBadge) queueBadge.textContent = queue.length;
+        queueList.innerHTML = queue.map((item, idx) => `
+          <div class="task-queue-card" id="queueItem_${escapeHtml(item.id)}">
+            <div class="task-queue-card-left">
+              <span class="queue-pos-badge">#${idx + 1}</span>
+              <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+            </div>
+            <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        `).join('');
+      } else {
+        queueSection.classList.add('hidden');
+        if (queueBadge) queueBadge.textContent = '0';
+        queueList.innerHTML = '';
+      }
+    }
+
     if (task.status === 'running') {
       if (!state.pollingTimer) {
         state.pollingTimer = setInterval(pollTaskStatus, 1500);
@@ -2300,55 +2974,118 @@ async function pollTaskStatus() {
       // Reset handled task event key while running
       state.lastHandledTaskKey = null;
     } else if (task.status === 'completed' || task.status === 'error') {
+      const hasQueuedItems = (queue.length > 0);
       const taskEventKey = `${task.task_name}_${task.started_at}_${task.status}`;
-      if (state.lastHandledTaskKey === taskEventKey) {
-        // Already handled! Stop polling and do not reload again
-        stopTaskPolling();
-        return;
-      }
-      state.lastHandledTaskKey = taskEventKey;
-      stopTaskPolling();
+      const isNewCompletion = (state.lastHandledTaskKey !== taskEventKey);
 
-      if (task.status === 'completed') {
-        fillEl.style.width = '100%';
-        if (task.crawl_stats) {
-          const s = task.crawl_stats;
-          subEl.textContent = `✓ Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
-          showCrawlSummaryModal(task.task_name, s);
+      if (isNewCompletion) {
+        state.lastHandledTaskKey = taskEventKey;
+        if (task.status === 'completed') {
+          fillEl.style.width = '100%';
+          let notifMsg = `${task.task_name || 'Automation'} completed successfully.`;
+          if (task.crawl_stats) {
+            const s = task.crawl_stats;
+            subEl.textContent = `Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+            notifMsg = `Crawled ${s.total_crawled || 0} posts: ${s.newly_added || 0} new jobs added, ${s.skipped_already_added || 0} existing skipped.`;
+            showCrawlSummaryModal(task.task_name, s);
+          } else {
+            subEl.textContent = 'Completed successfully';
+            if (task.completed_items) {
+              notifMsg = `${task.task_name || 'Task'} finished: ${task.completed_items}/${task.total_items || task.completed_items} processed.`;
+            }
+          }
+
+          sendAppNotification({
+            title: task.task_name || 'Task Complete',
+            message: notifMsg,
+            type: 'success',
+          });
         } else {
-          subEl.textContent = '✓ Completed successfully';
+          const firstLine = (task.error || 'Operation failed').split('\n')[0];
+          subEl.textContent = `Failed: ${firstLine}`;
+
+          sendAppNotification({
+            title: task.task_name || 'Task Failed',
+            message: firstLine,
+            type: 'error',
+          });
+
+          showSnackbar({
+            title: `Task Error: ${task.task_name || 'Automation'}`,
+            message: firstLine,
+            details: task.error,
+            type: 'error',
+          });
+          showCenterAlert(
+            `Automation Stopped: ${task.task_name || 'Task'}`,
+            task.error || 'The automation task encountered an issue and stopped.'
+          );
         }
-        setTimeout(() => {
-          card.classList.add('hidden');
-          fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
-          loadDashboardData();
-        }, task.crawl_stats ? 3000 : 1500);
+        loadDashboardData();
+      }
+
+      if (hasQueuedItems) {
+        card.classList.remove('hidden');
+        subEl.textContent = `✓ ${task.task_name} finished. Next queued task starting...`;
+        if (!state.pollingTimer) {
+          state.pollingTimer = setInterval(pollTaskStatus, 1500);
+        }
       } else {
-        const firstLine = (task.error || 'Operation failed').split('\n')[0];
-        subEl.textContent = `✗ Failed: ${firstLine}`;
-        showSnackbar({
-          title: `Task Error: ${task.task_name || 'Automation'}`,
-          message: firstLine,
-          details: task.error,
-          type: 'error',
-        });
-        showCenterAlert(
-          `Automation Stopped: ${task.task_name || 'Task'}`,
-          task.error || 'The automation task encountered an issue and stopped.'
-        );
+        stopTaskPolling();
         setTimeout(() => {
-          card.classList.add('hidden');
-          fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
-          loadDashboardData();
-        }, 2000);
+          if (!state.pollingTimer) {
+            card.classList.add('hidden');
+            fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
+          }
+        }, task.crawl_stats ? 3000 : 1500);
       }
     } else {
-      card.classList.add('hidden');
-      stopTaskPolling();
+      const hasQueuedItems = (queue.length > 0);
+      if (hasQueuedItems) {
+        card.classList.remove('hidden');
+        titleEl.textContent = 'Queue Active';
+        subEl.textContent = `Waiting for next task to start (${queue.length} in queue)...`;
+        if (!state.pollingTimer) {
+          state.pollingTimer = setInterval(pollTaskStatus, 1500);
+        }
+      } else {
+        card.classList.add('hidden');
+        stopTaskPolling();
+      }
     }
   } catch (err) {
     console.error('Task poll error:', err);
     stopTaskPolling();
+  }
+}
+
+async function cancelQueuedTask(taskId) {
+  try {
+    const res = await fetch(`/api/tasks/queue/cancel/${encodeURIComponent(taskId)}`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Queued task cancelled', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.detail || 'Could not cancel task', 'error');
+    }
+  } catch (err) {
+    showToast('Network error cancelling task: ' + err.message, 'error');
+  }
+}
+
+async function clearTaskQueue() {
+  try {
+    const res = await fetch('/api/tasks/queue/clear', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message || 'Queue cleared', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.detail || 'Could not clear queue', 'error');
+    }
+  } catch (err) {
+    showToast('Network error clearing queue: ' + err.message, 'error');
   }
 }
 
@@ -2453,8 +3190,9 @@ function openPostModal(postId) {
       bannerEl.className = '';
       bannerEl.innerHTML = `
         <div class="modal-scam-box">
-          <div class="modal-scam-box-title">
-            <span>🛑</span> Recruiter Flagged as Scam / Spam
+          <div class="modal-scam-box-title" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+            <span>Recruiter Flagged as Scam / Spam</span>
           </div>
           <div class="modal-scam-box-desc">
             <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(post.rejection_reason || 'Marked as scam recruiter')}
@@ -2466,8 +3204,9 @@ function openPostModal(postId) {
       const whyText = post.potential_spam_reason || post.rejection_reason || 'Suspicious contact domain or flagged recruiter activity';
       bannerEl.innerHTML = `
         <div class="modal-potential-scam-box">
-          <div class="modal-potential-scam-box-title">
-            <span>⚠️</span> Warning: Recruiter Flagged as Potential Scam
+          <div class="modal-potential-scam-box-title" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>Warning: Recruiter Flagged as Potential Scam</span>
           </div>
           <div class="modal-potential-scam-box-desc">
             <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(whyText)}
@@ -2478,7 +3217,7 @@ function openPostModal(postId) {
       bannerEl.className = '';
       bannerEl.innerHTML = `
         <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.65rem 0.85rem; color: #f87171; font-size: 0.82rem;">
-          <strong>🚫 Application Cancelled / Discarded</strong>
+          <strong style="display: flex; align-items: center; gap: 0.35rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Application Cancelled / Discarded</strong>
           ${post.rejection_reason ? `<div style="margin-top: 0.25rem; color: #fca5a5;"><span style="font-weight: 600; color: #fff;">Why:</span> <strong>${escapeHtml(post.rejection_reason)}</strong></div>` : ''}
         </div>
       `;
@@ -2487,7 +3226,7 @@ function openPostModal(postId) {
       const sentTime = post.sent_at ? ` on ${new Date(post.sent_at).toLocaleString()}` : '';
       bannerEl.innerHTML = `
         <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 0.65rem 0.85rem; color: #34d399; font-size: 0.82rem;">
-          <strong>✉ Outreach Email Sent${sentTime}</strong>
+          <strong style="display: flex; align-items: center; gap: 0.35rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Outreach Email Sent${sentTime}</strong>
           ${post.generated_subject ? `<div style="margin-top: 0.25rem; color: #a7f3d0;">Subject: <em>${escapeHtml(post.generated_subject)}</em></div>` : ''}
         </div>
       `;
@@ -2652,11 +3391,85 @@ function openSettingsModal() {
   const settingLoc = document.getElementById('settingSearchLocation');
   if (settingLoc) settingLoc.value = state.config.search_location || '';
   document.getElementById('settingChatGptUrl').value = state.config.chatgpt_url || '';
+  updateHeadlessUI(state.config ? state.config.headless_mode : false);
   document.getElementById('settingsModal').classList.remove('hidden');
 }
 
 function closeSettingsModal() {
   document.getElementById('settingsModal').classList.add('hidden');
+}
+
+// --- Headless Mode Controls ---
+function updateHeadlessUI(isHeadless) {
+  const toggleInput = document.getElementById('settingHeadlessToggle');
+  if (toggleInput) toggleInput.checked = !!isHeadless;
+
+  const statusTitle = document.getElementById('headlessStatusTitle');
+  if (statusTitle) {
+    statusTitle.textContent = isHeadless ? 'Headless Mode (Silent Background)' : 'Headed Mode (Visible Window)';
+  }
+
+  const statusDesc = document.getElementById('headlessStatusDesc');
+  if (statusDesc) {
+    statusDesc.textContent = isHeadless
+      ? 'Browser runs silently in background. Faster execution and zero window interruptions.'
+      : 'Browser opens visibly on screen for monitoring and live inspection.';
+  }
+
+  const quickBtn = document.getElementById('btnQuickHeadlessToggle');
+  if (quickBtn) {
+    quickBtn.classList.toggle('headless-active', !!isHeadless);
+    quickBtn.setAttribute('title', isHeadless
+      ? 'Headless Active (Click to switch to visible window)'
+      : 'Headed Active (Click to switch to silent headless background)');
+  }
+
+  const quickLabel = document.getElementById('quickHeadlessLabel');
+  if (quickLabel) {
+    quickLabel.textContent = isHeadless ? 'Headless' : 'Headed';
+  }
+
+  const iconDisplay = document.getElementById('headlessIconDisplay');
+  if (iconDisplay) {
+    iconDisplay.innerHTML = isHeadless
+      ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+  }
+
+  const quickSvg = document.getElementById('quickHeadlessSvg');
+  if (quickSvg) {
+    quickSvg.innerHTML = isHeadless
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
+async function handleHeadlessModalToggle(checked) {
+  try {
+    const res = await fetch('/api/settings/headless', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headless: !!checked }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (state.config) state.config.headless_mode = data.headless;
+      updateHeadlessUI(data.headless);
+      showToast(data.headless ? '✓ Silent Headless mode enabled' : '✓ Visible Headed window mode enabled', 'info');
+    } else {
+      showToast(data.detail || 'Failed to update headless mode', 'error');
+      updateHeadlessUI(state.config ? state.config.headless_mode : false);
+    }
+  } catch (err) {
+    showToast('Network error toggling headless mode: ' + err.message, 'error');
+    updateHeadlessUI(state.config ? state.config.headless_mode : false);
+  }
+}
+
+async function toggleQuickHeadless() {
+  const current = !!(state.config && state.config.headless_mode);
+  const target = !current;
+  await handleHeadlessModalToggle(target);
 }
 
 async function saveSettings() {
@@ -2665,6 +3478,7 @@ async function saveSettings() {
     search_query: document.getElementById('settingSearchQuery').value.trim(),
     search_location: document.getElementById('settingSearchLocation') ? document.getElementById('settingSearchLocation').value.trim() : '',
     chatgpt_url: document.getElementById('settingChatGptUrl').value.trim(),
+    headless_mode: !!(document.getElementById('settingHeadlessToggle') && document.getElementById('settingHeadlessToggle').checked),
   };
 
   try {
@@ -3129,16 +3943,16 @@ async function loadAnalytics(days = 30) {
 
     // Update KPI metrics
     if (data.summary) {
-      document.getElementById('kpiApplied').textContent = data.summary.total_sent || 0;
+      document.getElementById('kpiApplied').textContent = Number(data.summary.total_sent || 0).toLocaleString();
       document.getElementById('kpiConversionRate').textContent = `${data.summary.sent_conversion_pct || 0}% conversion`;
-      document.getElementById('kpiScraped').textContent = data.summary.total_scraped || 0;
+      document.getElementById('kpiScraped').textContent = Number(data.summary.total_scraped || 0).toLocaleString();
       document.getElementById('kpiEmailRate').textContent = `${data.summary.email_rate_pct || 0}% emails found`;
-      document.getElementById('kpiDirectEmails').textContent = `${data.summary.with_emails || 0} outreach ready`;
-      document.getElementById('kpiDrafted').textContent = data.summary.total_drafted || 0;
-      document.getElementById('kpiDraftReady').textContent = `${data.summary.total_drafted || 0} ready to send`;
-      document.getElementById('kpiPendingGen').textContent = `${data.summary.pending_review || 0} pending AI`;
-      document.getElementById('kpiRejected').textContent = data.summary.total_rejected || 0;
-      document.getElementById('kpiSpamFlagged').textContent = `${data.summary.potential_spam_total || 0} potential spam`;
+      document.getElementById('kpiDirectEmails').textContent = Number(data.summary.with_emails || 0).toLocaleString();
+      document.getElementById('kpiDrafted').textContent = Number(data.summary.total_drafted || 0).toLocaleString();
+      document.getElementById('kpiDraftReady').textContent = `${Number(data.summary.total_drafted || 0).toLocaleString()} ready to send`;
+      document.getElementById('kpiPendingGen').textContent = `${Number(data.summary.pending_review || 0).toLocaleString()} pending AI`;
+      document.getElementById('kpiRejected').textContent = Number(data.summary.total_rejected || 0).toLocaleString();
+      document.getElementById('kpiSpamFlagged').textContent = `${Number(data.summary.potential_spam_total || 0).toLocaleString()} potential spam`;
     }
 
     // Update timeline badges
