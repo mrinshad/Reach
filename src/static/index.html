@@ -7,203 +7,259 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.4" />
+  <link rel="stylesheet" href="/static/style.css?v=3.0" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <!-- Clean Top Navigation Bar -->
-  <header class="navbar">
-    <div class="navbar-left">
-      <div class="logo">
-        <span class="logo-mark">⚡</span>
-        <span class="logo-text">Reach</span>
-      </div>
-
-
-    </div>
-
-    <div class="navbar-right">
-      <!-- Quick Resume Replacement Pill -->
-      <div class="resume-pill" id="resumePill">
-        <span class="pill-icon">📎</span>
-        <span class="resume-filename" id="resumeFileName">Loading...</span>
-        <label class="icon-btn sm" title="Upload Replacement Resume (.pdf)" for="resumeFileInput">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        </label>
-        <input type="file" id="resumeFileInput" accept=".pdf,.docx" style="display: none;" onchange="handleResumeUpload(this.files)" />
-      </div>
-
-      <!-- Settings Icon Button -->
-      <button class="icon-btn" onclick="openSettingsModal()" title="System Settings">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      </button>
-
-      <!-- Refresh Data Button -->
-      <button class="icon-btn" onclick="loadDashboardData()" title="Refresh Data">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-      </button>
-
-      <!-- Extensible Crawler Source Selector & Trigger -->
-      <div class="crawler-control-group">
-        <div class="crawler-select-wrapper">
-          <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source" onchange="handleCrawlerSourceChange()">
-            <option value="linkedin">💼 LinkedIn Posts</option>
-            <option value="infopark">🏢 Infopark Kochi</option>
-          </select>
-        </div>
-        <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
-          <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
-            <option value="" selected>📍 Anywhere (No Area Filter)</option>
-            <optgroup label="Middle East">
-              <option value="Dubai">🇦🇪 Dubai</option>
-              <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
-              <option value="Riyadh">🇸🇦 Riyadh</option>
-              <option value="Doha">🇶🇦 Doha</option>
-              <option value="Manama">🇧🇭 Manama</option>
-              <option value="Kuwait City">🇰🇼 Kuwait City</option>
-              <option value="Muscat">🇴🇲 Muscat</option>
-              <option value="Tel Aviv">🇮🇱 Tel Aviv</option>
-            </optgroup>
-            <optgroup label="India">
-              <option value="Bengaluru">🇮🇳 Bengaluru</option>
-              <option value="Hyderabad">🇮🇳 Hyderabad</option>
-              <option value="Pune">🇮🇳 Pune</option>
-              <option value="Chennai">🇮🇳 Chennai</option>
-              <option value="Mumbai">🇮🇳 Mumbai</option>
-              <option value="Delhi">🇮🇳 Delhi</option>
-              <option value="Kochi">🇮🇳 Kochi</option>
-            </optgroup>
-            <optgroup label="North America">
-              <option value="San Francisco">🇺🇸 San Francisco</option>
-              <option value="Seattle">🇺🇸 Seattle</option>
-              <option value="New York">🇺🇸 New York</option>
-              <option value="Boston">🇺🇸 Boston</option>
-              <option value="Austin">🇺🇸 Austin</option>
-              <option value="Los Angeles">🇺🇸 Los Angeles</option>
-              <option value="Toronto">🇨🇦 Toronto</option>
-              <option value="Vancouver">🇨🇦 Vancouver</option>
-              <option value="Montreal">🇨🇦 Montreal</option>
-            </optgroup>
-            <optgroup label="Europe">
-              <option value="London">🇬🇧 London</option>
-              <option value="Dublin">🇮🇪 Dublin</option>
-              <option value="Amsterdam">🇳🇱 Amsterdam</option>
-              <option value="Berlin">🇩🇪 Berlin</option>
-              <option value="Paris">🇫🇷 Paris</option>
-              <option value="Stockholm">🇸🇪 Stockholm</option>
-              <option value="Copenhagen">🇩🇰 Copenhagen</option>
-              <option value="Zurich">🇨🇭 Zurich</option>
-              <option value="Munich">🇩🇪 Munich</option>
-            </optgroup>
-            <optgroup label="Asia Pacific">
-              <option value="Singapore">🇸🇬 Singapore</option>
-              <option value="Tokyo">🇯🇵 Tokyo</option>
-              <option value="Seoul">🇰🇷 Seoul</option>
-              <option value="Beijing">🇨🇳 Beijing</option>
-              <option value="Shanghai">🇨🇳 Shanghai</option>
-              <option value="Shenzhen">🇨🇳 Shenzhen</option>
-              <option value="Hong Kong">🇭🇰 Hong Kong</option>
-            </optgroup>
-            <optgroup label="Oceania">
-              <option value="Sydney">🇦🇺 Sydney</option>
-              <option value="Melbourne">🇦🇺 Melbourne</option>
-              <option value="Auckland">🇳🇿 Auckland</option>
-            </optgroup>
-            <optgroup label="Latin America">
-              <option value="São Paulo">🇧🇷 São Paulo</option>
-              <option value="Mexico City">🇲🇽 Mexico City</option>
-              <option value="Buenos Aires">🇦🇷 Buenos Aires</option>
-            </optgroup>
-            <optgroup label="Africa">
-              <option value="Cape Town">🇿🇦 Cape Town</option>
-              <option value="Johannesburg">🇿🇦 Johannesburg</option>
-              <option value="Nairobi">🇰🇪 Nairobi</option>
-            </optgroup>
-            <optgroup label="Work Mode">
-              <option value="Remote">🌐 Remote</option>
-            </optgroup>
-          </select>
-        </div>
-        <button id="btnStartCrawl" class="btn btn-primary btn-crawl" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Crawl</span>
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Problem / Error Notice Alert Banner -->
-  <div class="system-alert-banner hidden" id="systemAlertBanner">
-    <div class="alert-content">
-      <span class="alert-icon">⚠️</span>
-      <span class="alert-message" id="systemAlertMessage">Issue detected</span>
-    </div>
-    <button class="alert-close-btn" onclick="dismissSystemAlert()">×</button>
-  </div>
-
-  <!-- Real-Data Real-Time Task Progress Widget -->
-  <div class="live-task-card hidden" id="liveTaskCard">
-    <div class="task-card-header">
-      <div class="task-card-left">
-        <div class="pulse-ring"></div>
-        <div>
-          <div class="task-title" id="taskTitle">Automation Running</div>
-          <div class="task-subtitle" id="taskSubtitle">Processing real post data...</div>
+  <div class="app-layout">
+    <!-- Modern Left Sidebar Navigation -->
+    <aside class="app-sidebar" id="appSidebar">
+      <!-- Brand & Identity -->
+      <div class="sidebar-brand">
+        <div class="brand-logo">
+          <span class="logo-mark">⚡</span>
+          <div class="brand-text-block">
+            <span class="brand-title">Reach</span>
+            <span class="brand-subtitle">Job Outreach OS</span>
+          </div>
         </div>
       </div>
-      <div class="task-card-right">
-        <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
-        <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-        </button>
-      </div>
-    </div>
 
-    <div class="progress-bar-track">
-      <div class="progress-bar-fill" id="taskProgressFill" style="width: 0%;"></div>
-    </div>
+      <!-- Quick Job Crawler Action Card -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Job Crawler</div>
+        <div class="crawler-sidebar-card">
+          <div class="crawler-control-vertical">
+            <div class="field-label-sm">Platform:</div>
+            <div class="crawler-select-wrapper">
+              <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source" onchange="handleCrawlerSourceChange()">
+                <option value="linkedin">💼 LinkedIn Posts</option>
+                <option value="infopark">🏢 Infopark Kochi</option>
+              </select>
+            </div>
 
-    <div class="task-logs-drawer hidden" id="taskLogsDrawer">
-      <div class="logs-stream" id="logsStream"></div>
-    </div>
-  </div>
+            <div class="field-label-sm">Location / Target:</div>
+            <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
+              <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
+                <option value="" selected>📍 Anywhere (No Area Filter)</option>
+                <optgroup label="Middle East">
+                  <option value="Dubai">🇦🇪 Dubai</option>
+                  <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
+                  <option value="Riyadh">🇸🇦 Riyadh</option>
+                  <option value="Doha">🇶🇦 Doha</option>
+                  <option value="Manama">🇧🇭 Manama</option>
+                  <option value="Kuwait City">🇰🇼 Kuwait City</option>
+                  <option value="Muscat">🇴🇲 Muscat</option>
+                  <option value="Tel Aviv">🇮🇱 Tel Aviv</option>
+                </optgroup>
+                <optgroup label="India">
+                  <option value="Bengaluru">🇮🇳 Bengaluru</option>
+                  <option value="Hyderabad">🇮🇳 Hyderabad</option>
+                  <option value="Pune">🇮🇳 Pune</option>
+                  <option value="Chennai">🇮🇳 Chennai</option>
+                  <option value="Mumbai">🇮🇳 Mumbai</option>
+                  <option value="Delhi">🇮🇳 Delhi</option>
+                  <option value="Kochi">🇮🇳 Kochi</option>
+                </optgroup>
+                <optgroup label="North America">
+                  <option value="San Francisco">🇺🇸 San Francisco</option>
+                  <option value="Seattle">🇺🇸 Seattle</option>
+                  <option value="New York">🇺🇸 New York</option>
+                  <option value="Boston">🇺🇸 Boston</option>
+                  <option value="Austin">🇺🇸 Austin</option>
+                  <option value="Los Angeles">🇺🇸 Los Angeles</option>
+                  <option value="Toronto">🇨🇦 Toronto</option>
+                  <option value="Vancouver">🇨🇦 Vancouver</option>
+                  <option value="Montreal">🇨🇦 Montreal</option>
+                </optgroup>
+                <optgroup label="Europe">
+                  <option value="London">🇬🇧 London</option>
+                  <option value="Dublin">🇮🇪 Dublin</option>
+                  <option value="Amsterdam">🇳🇱 Amsterdam</option>
+                  <option value="Berlin">🇩🇪 Berlin</option>
+                  <option value="Paris">🇫🇷 Paris</option>
+                  <option value="Stockholm">🇸🇪 Stockholm</option>
+                  <option value="Copenhagen">🇩🇰 Copenhagen</option>
+                  <option value="Zurich">🇨🇭 Zurich</option>
+                  <option value="Munich">🇩🇪 Munich</option>
+                </optgroup>
+                <optgroup label="Asia Pacific">
+                  <option value="Singapore">🇸🇬 Singapore</option>
+                  <option value="Tokyo">🇯🇵 Tokyo</option>
+                  <option value="Seoul">🇰🇷 Seoul</option>
+                  <option value="Beijing">🇨🇳 Beijing</option>
+                  <option value="Shanghai">🇨🇳 Shanghai</option>
+                  <option value="Shenzhen">🇨🇳 Shenzhen</option>
+                  <option value="Hong Kong">🇭🇰 Hong Kong</option>
+                </optgroup>
+                <optgroup label="Oceania">
+                  <option value="Sydney">🇦🇺 Sydney</option>
+                  <option value="Melbourne">🇦🇺 Melbourne</option>
+                  <option value="Auckland">🇳🇿 Auckland</option>
+                </optgroup>
+                <optgroup label="Latin America">
+                  <option value="São Paulo">🇧🇷 São Paulo</option>
+                  <option value="Mexico City">🇲🇽 Mexico City</option>
+                  <option value="Buenos Aires">🇦🇷 Buenos Aires</option>
+                </optgroup>
+                <optgroup label="Africa">
+                  <option value="Cape Town">🇿🇦 Cape Town</option>
+                  <option value="Johannesburg">🇿🇦 Johannesburg</option>
+                  <option value="Nairobi">🇰🇪 Nairobi</option>
+                </optgroup>
+                <optgroup label="Work Mode">
+                  <option value="Remote">🌐 Remote</option>
+                </optgroup>
+              </select>
+            </div>
 
-  <main class="content-wrapper">
-    <!-- Minimal Top Metrics Summary -->
-    <section class="stats-bar">
-      <div class="stat-pill" onclick="filterSentApplications()" title="View Sent Applications History">
-        <span class="stat-num" id="statApplied">0</span>
-        <span class="stat-name">🚀 Applied</span>
+            <button id="btnStartCrawl" class="btn btn-primary btn-crawl-sidebar" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>Start Crawl</span>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="stat-pill" onclick="switchTab('tabReview')" title="View Ready Outreach Email Drafts">
-        <span class="stat-num" id="statGenerated">0</span>
-        <span class="stat-name">✉️ Drafts Ready</span>
-      </div>
-      <div class="stat-pill" onclick="filterOutreachReady()" title="Filter Discovered Jobs with Direct Contact Emails">
-        <span class="stat-num" id="statOutreach">0</span>
-        <span class="stat-name">🎯 Outreach Ready</span>
-      </div>
-      <div class="stat-pill" onclick="switchTab('tabAnalytics')" title="View Complete Analytics & Lead Velocity">
-        <span class="stat-num" id="statTotalSourced">0</span>
-        <span class="stat-name">🕸️ Total Sourced</span>
-      </div>
-    </section>
 
-    <!-- Navigation Tabs (Analytics is Home) -->
-    <div class="tabs-header">
-      <button class="tab-item active" id="btnTabAnalytics" onclick="switchTab('tabAnalytics')">
-        <span>📊 Analytics<span class="tab-extra"> & Trends</span></span>
-      </button>
-      <button class="tab-item" id="btnTabDiscovered" onclick="switchTab('tabDiscovered')">
-        <span>Discovered<span class="tab-extra"> Posts</span></span> <span class="badge-count" id="countDiscovered">0</span>
-      </button>
-      <button class="tab-item" id="btnTabReview" onclick="switchTab('tabReview')">
-        <span>Review<span class="tab-extra"> & Drafts</span></span> <span class="badge-count" id="countReview">0</span>
-      </button>
-      <button class="tab-item" id="btnTabSent" onclick="switchTab('tabSent')">
-        <span>Others<span class="tab-extra"> / History</span></span> <span class="badge-count" id="countSent">0</span>
-      </button>
-    </div>
+      <!-- Navigation Menu -->
+      <div class="sidebar-section flex-grow">
+        <div class="sidebar-section-title">Navigation</div>
+        <nav class="sidebar-nav">
+          <button class="nav-item active" id="btnTabAnalytics" onclick="switchTab('tabAnalytics')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" id="btnTabDiscovered" onclick="switchTab('tabDiscovered')">
+            <span class="nav-icon">🔍</span>
+            <span class="nav-label">Discovered Jobs</span>
+            <span class="badge-count" id="countDiscovered">0</span>
+          </button>
+          <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')">
+            <span class="nav-icon">✉️</span>
+            <span class="nav-label">Review & Drafts</span>
+            <span class="badge-count" id="countReview">0</span>
+          </button>
+          <button class="nav-item" id="btnTabSent" onclick="switchTab('tabSent')">
+            <span class="nav-icon">📜</span>
+            <span class="nav-label">Sent & History</span>
+            <span class="badge-count" id="countSent">0</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Sidebar Footer: Active Resume & Controls -->
+      <div class="sidebar-footer">
+        <div class="resume-pill-sidebar" id="resumePill">
+          <span class="pill-icon">📎</span>
+          <div class="resume-info">
+            <span class="resume-tag">Active Resume</span>
+            <span class="resume-filename" id="resumeFileName" title="Active configured resume">Loading...</span>
+          </div>
+          <label class="icon-btn sm" title="Upload Replacement Resume (.pdf)" for="resumeFileInput">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </label>
+          <input type="file" id="resumeFileInput" accept=".pdf,.docx" style="display: none;" onchange="handleResumeUpload(this.files)" />
+        </div>
+
+        <div class="sidebar-system-bar">
+          <button class="sidebar-sys-btn" onclick="openSettingsModal()" title="System Settings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
+          </button>
+          <button class="sidebar-sys-btn" onclick="loadDashboardData()" title="Sync & Refresh Dashboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span>Sync</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main View Canvas -->
+    <div class="app-main">
+      <!-- App Header / Topbar -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <h1 class="topbar-page-title" id="pageTitleDisplay">Dashboard Overview</h1>
+          <span class="topbar-breadcrumb" id="pageBreadcrumbDisplay">Real-time database intelligence & automation metrics</span>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-outline btn-sm btn-topbar" onclick="openAddJdModal()" title="Add Job Description Manually">
+            <span>+ Add JD</span>
+          </button>
+          <button class="btn btn-outline btn-sm btn-direct-outreach btn-topbar" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
+            <span>✉ Direct Outreach</span>
+          </button>
+
+          <!-- In-App Notification Center Dropdown -->
+          <div class="notification-center-wrapper">
+            <button class="icon-btn notification-bell-btn" id="btnNotifications" onclick="toggleNotificationCenter()" title="Notifications & Automation Activity">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+              <span class="notification-badge hidden" id="notificationBadge">0</span>
+            </button>
+            <div class="notification-dropdown hidden" id="notificationDropdown">
+              <div class="notification-header">
+                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                  <span style="font-weight: 700; font-size: 0.88rem; color: #fff;">Activity & Alerts</span>
+                  <span class="badge-count" id="notificationCountBadge">0</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <button class="btn-link-xs" onclick="requestNotificationPermission()" id="btnDesktopPerm" title="Enable browser desktop notifications">Enable Desktop Alerts</button>
+                  <button class="btn-link-xs text-muted" onclick="clearAllNotifications()">Clear All</button>
+                </div>
+              </div>
+              <div class="notification-list" id="notificationList">
+                <div class="notification-empty">No notifications yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Problem / Error Notice Alert Banner -->
+      <div class="system-alert-banner hidden" id="systemAlertBanner">
+        <div class="alert-content">
+          <span class="alert-icon">⚠️</span>
+          <span class="alert-message" id="systemAlertMessage">Issue detected</span>
+        </div>
+        <button class="alert-close-btn" onclick="dismissSystemAlert()">×</button>
+      </div>
+
+      <!-- Real-Data Real-Time Task Progress Widget -->
+      <div class="live-task-card hidden" id="liveTaskCard">
+        <div class="task-card-header">
+          <div class="task-card-left">
+            <div class="pulse-ring"></div>
+            <div>
+              <div class="task-title" id="taskTitle">Automation Running</div>
+              <div class="task-subtitle" id="taskSubtitle">Processing real post data...</div>
+            </div>
+          </div>
+          <div class="task-card-right">
+            <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
+            <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="taskProgressFill" style="width: 0%;"></div>
+        </div>
+
+        <div class="task-logs-drawer hidden" id="taskLogsDrawer">
+          <div class="logs-stream" id="logsStream"></div>
+        </div>
+      </div>
+
+      <!-- Backward compatibility hidden metrics -->
+      <div style="display: none;">
+        <span id="statApplied">0</span>
+        <span id="statGenerated">0</span>
+        <span id="statOutreach">0</span>
+        <span id="statTotalSourced">0</span>
+      </div>
+
+      <main class="content-wrapper">
 
     <!-- TAB 1: Discovered Posts (Paginated Table) -->
     <div class="tab-panel hidden" id="tabDiscovered">
@@ -578,53 +634,89 @@
         </div>
       </div>
 
-      <!-- Top KPI Cards Grid -->
-      <div class="analytics-kpi-grid">
-        <div class="kpi-card glow-emerald">
-          <div class="kpi-header">
-            <span class="kpi-label">Jobs Applied (Outreach)</span>
-            <span class="kpi-icon">🚀</span>
-          </div>
-          <div class="kpi-value" id="kpiApplied">0</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge badge-green" id="kpiConversionRate">0.0% conversion</span>
-            <span class="kpi-note">from scraped leads</span>
+      <!-- Section 1: Executive KPI Performance Cards with Direct Jump Links -->
+      <div class="dashboard-section">
+        <div class="dashboard-section-header">
+          <div>
+            <h3 class="dashboard-section-title">⚡ Executive Overview & Jump Links</h3>
+            <p class="dashboard-section-subtitle">Click any card to jump directly to that section or filtered workspace</p>
           </div>
         </div>
 
-        <div class="kpi-card glow-sky">
-          <div class="kpi-header">
-            <span class="kpi-label">Total JDs Scraped</span>
-            <span class="kpi-icon">🕸️</span>
+        <div class="analytics-kpi-grid">
+          <div class="kpi-card glow-emerald clickable-kpi" onclick="jumpToSentApplications()" title="Click to view Sent Applications History">
+            <div class="kpi-header">
+              <span class="kpi-label">Jobs Applied (Outreach)</span>
+              <span class="kpi-icon">🚀</span>
+            </div>
+            <div class="kpi-value" id="kpiApplied">0</div>
+            <div class="kpi-footer">
+              <span class="kpi-badge badge-green" id="kpiConversionRate">0.0% conversion</span>
+              <span class="kpi-note">from scraped leads</span>
+            </div>
+            <div class="kpi-jump-action">
+              <span>View Sent History →</span>
+            </div>
           </div>
-          <div class="kpi-value" id="kpiScraped">0</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge badge-blue" id="kpiEmailRate">0.0% emails found</span>
-            <span class="kpi-note" id="kpiDirectEmails">0 outreach ready</span>
-          </div>
-        </div>
 
-        <div class="kpi-card glow-indigo">
-          <div class="kpi-header">
-            <span class="kpi-label">AI Drafts Generated</span>
-            <span class="kpi-icon">🤖</span>
+          <div class="kpi-card glow-sky clickable-kpi" onclick="jumpToOutreachReady()" title="Click to view Leads with Direct Contact Emails">
+            <div class="kpi-header">
+              <span class="kpi-label">Outreach Ready</span>
+              <span class="kpi-icon">🎯</span>
+            </div>
+            <div class="kpi-value" id="kpiDirectEmails">0</div>
+            <div class="kpi-footer">
+              <span class="kpi-badge badge-blue" id="kpiEmailRate">0.0% emails found</span>
+              <span class="kpi-note">verified contacts</span>
+            </div>
+            <div class="kpi-jump-action">
+              <span>Filter Outreach Ready →</span>
+            </div>
           </div>
-          <div class="kpi-value" id="kpiDrafted">0</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge badge-purple" id="kpiDraftReady">0 ready to send</span>
-            <span class="kpi-note" id="kpiPendingGen">0 pending AI</span>
-          </div>
-        </div>
 
-        <div class="kpi-card glow-rose">
-          <div class="kpi-header">
-            <span class="kpi-label">Screened Out & Spam</span>
-            <span class="kpi-icon">🛡️</span>
+          <div class="kpi-card glow-indigo clickable-kpi" onclick="jumpToReviewDrafts()" title="Click to open Review & Send Workspace">
+            <div class="kpi-header">
+              <span class="kpi-label">AI Drafts Generated</span>
+              <span class="kpi-icon">🤖</span>
+            </div>
+            <div class="kpi-value" id="kpiDrafted">0</div>
+            <div class="kpi-footer">
+              <span class="kpi-badge badge-purple" id="kpiDraftReady">0 ready to send</span>
+              <span class="kpi-note" id="kpiPendingGen">0 pending AI</span>
+            </div>
+            <div class="kpi-jump-action">
+              <span>Review & Send Drafts →</span>
+            </div>
           </div>
-          <div class="kpi-value" id="kpiRejected">0</div>
-          <div class="kpi-footer">
-            <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 potential spam</span>
-            <span class="kpi-note">screened criteria</span>
+
+          <div class="kpi-card glow-blue clickable-kpi" onclick="jumpToDiscovered()" title="Click to browse all discovered job leads">
+            <div class="kpi-header">
+              <span class="kpi-label">Total JDs Scraped</span>
+              <span class="kpi-icon">🕸️</span>
+            </div>
+            <div class="kpi-value" id="kpiScraped">0</div>
+            <div class="kpi-footer">
+              <span class="kpi-badge badge-blue">All sources</span>
+              <span class="kpi-note">in database</span>
+            </div>
+            <div class="kpi-jump-action">
+              <span>Browse Discovered Jobs →</span>
+            </div>
+          </div>
+
+          <div class="kpi-card glow-rose clickable-kpi" onclick="jumpToScreenedApplications()" title="Click to view Screened / Cancelled applications">
+            <div class="kpi-header">
+              <span class="kpi-label">Screened & Cancelled</span>
+              <span class="kpi-icon">🛡️</span>
+            </div>
+            <div class="kpi-value" id="kpiRejected">0</div>
+            <div class="kpi-footer">
+              <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 potential spam</span>
+              <span class="kpi-note">screened criteria</span>
+            </div>
+            <div class="kpi-jump-action">
+              <span>View Cancelled History →</span>
+            </div>
           </div>
         </div>
       </div>
@@ -714,8 +806,65 @@
           </div>
         </div>
       </div>
+
+      <!-- Section 5: Integration & Automation Health -->
+      <div class="dashboard-section" style="margin-top: 1.5rem;">
+        <div class="dashboard-section-header">
+          <div>
+            <h3 class="dashboard-section-title">🔌 Connected Services & Engine Health</h3>
+            <p class="dashboard-section-subtitle">Real-time status of scraping sessions, automated browsers, and database</p>
+          </div>
+          <button class="btn btn-outline btn-xs" onclick="fetchHealth()" title="Refresh connection states">
+            <span>Refresh Health</span>
+          </button>
+        </div>
+        <div class="health-grid" id="dashboardHealthGrid">
+          <div class="health-card">
+            <div class="health-card-top">
+              <span class="health-card-icon">💼</span>
+              <span class="health-status-dot ok" id="healthLinkedin"></span>
+            </div>
+            <div class="health-card-name">LinkedIn Browser</div>
+            <div class="health-card-status" id="healthLabelLinkedin">Checking...</div>
+          </div>
+          <div class="health-card">
+            <div class="health-card-top">
+              <span class="health-card-icon">🏢</span>
+              <span class="health-status-dot ok" id="healthInfopark"></span>
+            </div>
+            <div class="health-card-name">Infopark Kochi</div>
+            <div class="health-card-status" id="healthLabelInfopark">Checking...</div>
+          </div>
+          <div class="health-card">
+            <div class="health-card-top">
+              <span class="health-card-icon">🤖</span>
+              <span class="health-status-dot ok" id="healthChatgpt"></span>
+            </div>
+            <div class="health-card-name">ChatGPT Session</div>
+            <div class="health-card-status" id="healthLabelChatgpt">Checking...</div>
+          </div>
+          <div class="health-card">
+            <div class="health-card-top">
+              <span class="health-card-icon">✉️</span>
+              <span class="health-status-dot ok" id="healthGmail"></span>
+            </div>
+            <div class="health-card-name">Gmail Automation</div>
+            <div class="health-card-status" id="healthLabelGmail">Checking...</div>
+          </div>
+          <div class="health-card">
+            <div class="health-card-top">
+              <span class="health-card-icon">🗄️</span>
+              <span class="health-status-dot ok" id="healthDatabase"></span>
+            </div>
+            <div class="health-card-name">PostgreSQL DB</div>
+            <div class="health-card-status" id="healthLabelDatabase">Checking...</div>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
+</div> <!-- .app-main -->
+</div> <!-- .app-layout -->
 
   <!-- Post Details Expandable Modal -->
   <div class="modal-overlay hidden" id="postModal" onclick="if (event.target === this) closePostModal()">
@@ -991,6 +1140,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=2.4"></script>
+  <script src="/static/app.js?v=3.0"></script>
 </body>
 </html>

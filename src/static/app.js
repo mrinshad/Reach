@@ -324,6 +324,222 @@ function showAlert(title, message, options = {}) {
   }
 }
 
+// --- Multi-Channel In-App & Desktop Notification System ---
+let notificationState = {
+  list: [],
+  unreadCount: 0,
+  audioCtx: null,
+};
+
+function initNotificationSystem() {
+  try {
+    const saved = localStorage.getItem('reach_notifications');
+    if (saved) {
+      notificationState.list = JSON.parse(saved);
+      notificationState.unreadCount = notificationState.list.filter(n => !n.read).length;
+    }
+  } catch (_) {
+    notificationState.list = [];
+  }
+  updateNotificationBadgeUI();
+  updateDesktopPermButtonUI();
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    const wrapper = document.querySelector('.notification-center-wrapper');
+    const dropdown = document.getElementById('notificationDropdown');
+    if (wrapper && dropdown && !wrapper.contains(e.target)) {
+      dropdown.classList.add('hidden');
+    }
+  });
+}
+
+function updateDesktopPermButtonUI() {
+  const btn = document.getElementById('btnDesktopPerm');
+  if (!btn) return;
+  if (!('Notification' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    btn.textContent = 'Desktop: On';
+    btn.style.opacity = '0.7';
+    btn.disabled = true;
+  } else if (Notification.permission === 'denied') {
+    btn.textContent = 'Desktop: Blocked';
+    btn.disabled = true;
+  } else {
+    btn.textContent = 'Enable Desktop Alerts';
+    btn.disabled = false;
+  }
+}
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    showToast('Browser does not support desktop notifications', 'warn');
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    updateDesktopPermButtonUI();
+    if (perm === 'granted') {
+      showToast('Desktop notifications enabled!', 'success');
+      playNotificationSound();
+    }
+  } catch (err) {
+    console.warn('Notification permission error:', err);
+  }
+}
+
+function playNotificationSound() {
+  try {
+    const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtxClass) return;
+    if (!notificationState.audioCtx || notificationState.audioCtx.state === 'closed') {
+      notificationState.audioCtx = new AudioCtxClass();
+    }
+    const ctx = notificationState.audioCtx;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    const now = ctx.currentTime;
+
+    // Harmonic double chime (D5: 587.33Hz -> A5: 880Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, now);
+    gain1.gain.setValueAtTime(0.001, now);
+    gain1.gain.exponentialRampToValueAtTime(0.18, now + 0.04);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.3);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, now + 0.12);
+    gain2.gain.setValueAtTime(0.001, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.2, now + 0.16);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.6);
+  } catch (err) {
+    console.debug('Audio chime error:', err);
+  }
+}
+
+function sendAppNotification({ title, message, type = 'info' }) {
+  const item = {
+    id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    title: title || 'System Update',
+    message: message || '',
+    type: type, // 'success', 'info', 'warn', 'error'
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    date: new Date().toLocaleDateString(),
+    read: false,
+  };
+
+  notificationState.list.unshift(item);
+  if (notificationState.list.length > 50) {
+    notificationState.list = notificationState.list.slice(0, 50);
+  }
+  notificationState.unreadCount = notificationState.list.filter(n => !n.read).length;
+
+  try {
+    localStorage.setItem('reach_notifications', JSON.stringify(notificationState.list));
+  } catch (_) {}
+
+  updateNotificationBadgeUI();
+  renderNotificationCenter();
+  playNotificationSound();
+
+  // Desktop native notification if permitted
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(item.title, {
+        body: item.message,
+        icon: '/favicon.ico',
+      });
+    } catch (_) {}
+  }
+}
+
+function updateNotificationBadgeUI() {
+  const badge = document.getElementById('notificationBadge');
+  const countBadge = document.getElementById('notificationCountBadge');
+  const unread = notificationState.unreadCount;
+
+  if (badge) {
+    badge.textContent = unread > 99 ? '99+' : unread;
+    badge.classList.toggle('hidden', unread === 0);
+  }
+  if (countBadge) {
+    countBadge.textContent = notificationState.list.length;
+  }
+}
+
+function toggleNotificationCenter() {
+  const dropdown = document.getElementById('notificationDropdown');
+  if (!dropdown) return;
+  const isHidden = dropdown.classList.contains('hidden');
+  if (isHidden) {
+    renderNotificationCenter();
+    dropdown.classList.remove('hidden');
+    // Mark items as read
+    notificationState.list.forEach(n => { n.read = true; });
+    notificationState.unreadCount = 0;
+    try {
+      localStorage.setItem('reach_notifications', JSON.stringify(notificationState.list));
+    } catch (_) {}
+    updateNotificationBadgeUI();
+  } else {
+    dropdown.classList.add('hidden');
+  }
+}
+
+function renderNotificationCenter() {
+  const listEl = document.getElementById('notificationList');
+  if (!listEl) return;
+
+  if (notificationState.list.length === 0) {
+    listEl.innerHTML = '<div class="notification-empty">No notifications yet</div>';
+    return;
+  }
+
+  const icons = {
+    success: '✓',
+    error: '✗',
+    warn: '⚠️',
+    info: '⚡',
+  };
+
+  listEl.innerHTML = notificationState.list.map(n => `
+    <div class="notification-item ${n.read ? '' : 'unread'}">
+      <div class="notification-item-icon ${n.type || 'info'}">${icons[n.type] || '⚡'}</div>
+      <div class="notification-item-body">
+        <div class="notification-item-title">${escapeHtml(n.title)}</div>
+        <div class="notification-item-msg">${escapeHtml(n.message)}</div>
+        <div class="notification-item-time">${n.date === new Date().toLocaleDateString() ? n.time : n.date + ' ' + n.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function clearAllNotifications() {
+  notificationState.list = [];
+  notificationState.unreadCount = 0;
+  try {
+    localStorage.removeItem('reach_notifications');
+  } catch (_) {}
+  updateNotificationBadgeUI();
+  renderNotificationCenter();
+}
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
   const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
@@ -348,6 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (_) {}
   }
 
+  initNotificationSystem();
   switchTab(startTab);
   initCrawlerControls();
   fetchLocations();
@@ -375,6 +592,19 @@ function switchTab(tabId) {
       history.replaceState(null, '', tabToHash[tabId]);
     }
   } catch (_) {}
+
+  // Update Topbar Title & Breadcrumb
+  const pageMeta = {
+    tabAnalytics: { title: 'Dashboard Overview', breadcrumb: 'Real-time database intelligence & automation metrics' },
+    tabDiscovered: { title: 'Discovered Jobs', breadcrumb: 'Explore, filter, and review crawled job postings' },
+    tabReview: { title: 'Review & Drafts', breadcrumb: 'Approve AI cover letters and dispatch outreach' },
+    tabSent: { title: 'Sent & History', breadcrumb: 'Track dispatched applications and historical outreach' },
+  };
+  const meta = pageMeta[tabId] || { title: 'Dashboard', breadcrumb: '' };
+  const titleEl = document.getElementById('pageTitleDisplay');
+  if (titleEl) titleEl.textContent = meta.title;
+  const breadcrumbEl = document.getElementById('pageBreadcrumbDisplay');
+  if (breadcrumbEl) breadcrumbEl.textContent = meta.breadcrumb;
 
   const btnDiscovered = document.getElementById('btnTabDiscovered');
   if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
@@ -406,6 +636,40 @@ function switchTab(tabId) {
   } else if (tabId === 'tabAnalytics') {
     loadAnalytics(state.analyticsDays || 30);
   }
+}
+
+// --- Interactive Jump Links from Dashboard KPI Cards ---
+function jumpToSentApplications() {
+  switchTab('tabSent');
+}
+
+function jumpToOutreachReady() {
+  switchTab('tabDiscovered');
+  const catEl = document.getElementById('selectCategory');
+  if (catEl) catEl.value = 'EMAIL_OUTREACH';
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'ALL';
+  applyFilters();
+}
+
+function jumpToReviewDrafts() {
+  switchTab('tabReview');
+}
+
+function jumpToDiscovered() {
+  switchTab('tabDiscovered');
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'PENDING';
+  const catEl = document.getElementById('selectCategory');
+  if (catEl) catEl.value = 'ALL';
+  applyFilters();
+}
+
+function jumpToScreenedApplications() {
+  switchTab('tabDiscovered');
+  const genEl = document.getElementById('selectGenStatus');
+  if (genEl) genEl.value = 'REJECTED';
+  applyFilters();
 }
 
 // --- Health Status & Indicators ---
@@ -446,6 +710,14 @@ function updateHealthPill(elementId, serviceData) {
   } else {
     el.classList.add('warn');
     el.title = `${serviceData.label || 'Not Logged In'}`;
+  }
+
+  // Also update corresponding status label in dashboard section if present
+  const suffix = elementId.replace('health', '');
+  const labelEl = document.getElementById(`healthLabel${suffix}`);
+  if (labelEl) {
+    labelEl.textContent = serviceData.label || (serviceData.connected ? 'Online' : 'Not Connected');
+    labelEl.style.color = serviceData.connected ? '#a7f3d0' : '#fde68a';
   }
 }
 
@@ -2311,13 +2583,25 @@ async function pollTaskStatus() {
 
       if (task.status === 'completed') {
         fillEl.style.width = '100%';
+        let notifMsg = `${task.task_name || 'Automation'} completed successfully.`;
         if (task.crawl_stats) {
           const s = task.crawl_stats;
           subEl.textContent = `✓ Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+          notifMsg = `Crawled ${s.total_crawled || 0} posts: ${s.newly_added || 0} new jobs added, ${s.skipped_already_added || 0} existing skipped.`;
           showCrawlSummaryModal(task.task_name, s);
         } else {
           subEl.textContent = '✓ Completed successfully';
+          if (task.completed_items) {
+            notifMsg = `${task.task_name || 'Task'} finished: ${task.completed_items}/${task.total_items || task.completed_items} processed.`;
+          }
         }
+
+        sendAppNotification({
+          title: `✓ ${task.task_name || 'Task Complete'}`,
+          message: notifMsg,
+          type: 'success',
+        });
+
         setTimeout(() => {
           card.classList.add('hidden');
           fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
@@ -2326,6 +2610,13 @@ async function pollTaskStatus() {
       } else {
         const firstLine = (task.error || 'Operation failed').split('\n')[0];
         subEl.textContent = `✗ Failed: ${firstLine}`;
+
+        sendAppNotification({
+          title: `✗ ${task.task_name || 'Task Failed'}`,
+          message: firstLine,
+          type: 'error',
+        });
+
         showSnackbar({
           title: `Task Error: ${task.task_name || 'Automation'}`,
           message: firstLine,
