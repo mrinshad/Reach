@@ -14,108 +14,121 @@
   <div class="app-layout">
     <!-- Modern Left Sidebar Navigation -->
     <aside class="app-sidebar" id="appSidebar">
-      <!-- Brand & Identity -->
+      <!-- Brand & Identity with Collapse Button -->
       <div class="sidebar-brand">
-        <div class="brand-logo">
-          <span class="logo-mark">⚡</span>
+        <div class="brand-logo" onclick="switchTab('tabAnalytics')" style="cursor: pointer;">
+          <span class="logo-mark" title="Reach — Job Outreach OS">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="url(#brandGrad)"/>
+              <defs>
+                <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#818cf8"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </span>
           <div class="brand-text-block">
             <span class="brand-title">Reach</span>
             <span class="brand-subtitle">Job Outreach OS</span>
           </div>
         </div>
+        <button class="sidebar-collapse-btn" id="btnToggleSidebar" onclick="toggleSidebarCollapse()" title="Toggle Sidebar (Expand/Collapse)">
+          <svg class="sidebar-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
       </div>
 
       <!-- Quick Job Crawler Action Card -->
-      <div class="sidebar-section">
+      <div class="sidebar-section sidebar-crawler-section">
         <div class="sidebar-section-title">Job Crawler</div>
         <div class="crawler-sidebar-card">
           <div class="crawler-control-vertical">
             <div class="field-label-sm">Platform:</div>
             <div class="crawler-select-wrapper">
               <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source" onchange="handleCrawlerSourceChange()">
-                <option value="linkedin">💼 LinkedIn Posts</option>
-                <option value="infopark">🏢 Infopark Kochi</option>
+                <option value="linkedin">LinkedIn Posts</option>
+                <option value="infopark">Infopark Kochi</option>
               </select>
             </div>
 
             <div class="field-label-sm">Location / Target:</div>
             <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
               <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
-                <option value="" selected>📍 Anywhere (No Area Filter)</option>
+                <option value="" selected>Anywhere (No Area Filter)</option>
                 <optgroup label="Middle East">
-                  <option value="Dubai">🇦🇪 Dubai</option>
-                  <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
-                  <option value="Riyadh">🇸🇦 Riyadh</option>
-                  <option value="Doha">🇶🇦 Doha</option>
-                  <option value="Manama">🇧🇭 Manama</option>
-                  <option value="Kuwait City">🇰🇼 Kuwait City</option>
-                  <option value="Muscat">🇴🇲 Muscat</option>
-                  <option value="Tel Aviv">🇮🇱 Tel Aviv</option>
+                  <option value="Dubai">Dubai</option>
+                  <option value="Abu Dhabi">Abu Dhabi</option>
+                  <option value="Riyadh">Riyadh</option>
+                  <option value="Doha">Doha</option>
+                  <option value="Manama">Manama</option>
+                  <option value="Kuwait City">Kuwait City</option>
+                  <option value="Muscat">Muscat</option>
+                  <option value="Tel Aviv">Tel Aviv</option>
                 </optgroup>
                 <optgroup label="India">
-                  <option value="Bengaluru">🇮🇳 Bengaluru</option>
-                  <option value="Hyderabad">🇮🇳 Hyderabad</option>
-                  <option value="Pune">🇮🇳 Pune</option>
-                  <option value="Chennai">🇮🇳 Chennai</option>
-                  <option value="Mumbai">🇮🇳 Mumbai</option>
-                  <option value="Delhi">🇮🇳 Delhi</option>
-                  <option value="Kochi">🇮🇳 Kochi</option>
+                  <option value="Bengaluru">Bengaluru</option>
+                  <option value="Hyderabad">Hyderabad</option>
+                  <option value="Pune">Pune</option>
+                  <option value="Chennai">Chennai</option>
+                  <option value="Mumbai">Mumbai</option>
+                  <option value="Delhi">Delhi</option>
+                  <option value="Kochi">Kochi</option>
                 </optgroup>
                 <optgroup label="North America">
-                  <option value="San Francisco">🇺🇸 San Francisco</option>
-                  <option value="Seattle">🇺🇸 Seattle</option>
-                  <option value="New York">🇺🇸 New York</option>
-                  <option value="Boston">🇺🇸 Boston</option>
-                  <option value="Austin">🇺🇸 Austin</option>
-                  <option value="Los Angeles">🇺🇸 Los Angeles</option>
-                  <option value="Toronto">🇨🇦 Toronto</option>
-                  <option value="Vancouver">🇨🇦 Vancouver</option>
-                  <option value="Montreal">🇨🇦 Montreal</option>
+                  <option value="San Francisco">San Francisco</option>
+                  <option value="Seattle">Seattle</option>
+                  <option value="New York">New York</option>
+                  <option value="Boston">Boston</option>
+                  <option value="Austin">Austin</option>
+                  <option value="Los Angeles">Los Angeles</option>
+                  <option value="Toronto">Toronto</option>
+                  <option value="Vancouver">Vancouver</option>
+                  <option value="Montreal">Montreal</option>
                 </optgroup>
                 <optgroup label="Europe">
-                  <option value="London">🇬🇧 London</option>
-                  <option value="Dublin">🇮🇪 Dublin</option>
-                  <option value="Amsterdam">🇳🇱 Amsterdam</option>
-                  <option value="Berlin">🇩🇪 Berlin</option>
-                  <option value="Paris">🇫🇷 Paris</option>
-                  <option value="Stockholm">🇸🇪 Stockholm</option>
-                  <option value="Copenhagen">🇩🇰 Copenhagen</option>
-                  <option value="Zurich">🇨🇭 Zurich</option>
-                  <option value="Munich">🇩🇪 Munich</option>
+                  <option value="London">London</option>
+                  <option value="Dublin">Dublin</option>
+                  <option value="Amsterdam">Amsterdam</option>
+                  <option value="Berlin">Berlin</option>
+                  <option value="Paris">Paris</option>
+                  <option value="Stockholm">Stockholm</option>
+                  <option value="Copenhagen">Copenhagen</option>
+                  <option value="Zurich">Zurich</option>
+                  <option value="Munich">Munich</option>
                 </optgroup>
                 <optgroup label="Asia Pacific">
-                  <option value="Singapore">🇸🇬 Singapore</option>
-                  <option value="Tokyo">🇯🇵 Tokyo</option>
-                  <option value="Seoul">🇰🇷 Seoul</option>
-                  <option value="Beijing">🇨🇳 Beijing</option>
-                  <option value="Shanghai">🇨🇳 Shanghai</option>
-                  <option value="Shenzhen">🇨🇳 Shenzhen</option>
-                  <option value="Hong Kong">🇭🇰 Hong Kong</option>
+                  <option value="Singapore">Singapore</option>
+                  <option value="Tokyo">Tokyo</option>
+                  <option value="Seoul">Seoul</option>
+                  <option value="Beijing">Beijing</option>
+                  <option value="Shanghai">Shanghai</option>
+                  <option value="Shenzhen">Shenzhen</option>
+                  <option value="Hong Kong">Hong Kong</option>
                 </optgroup>
                 <optgroup label="Oceania">
-                  <option value="Sydney">🇦🇺 Sydney</option>
-                  <option value="Melbourne">🇦🇺 Melbourne</option>
-                  <option value="Auckland">🇳🇿 Auckland</option>
+                  <option value="Sydney">Sydney</option>
+                  <option value="Melbourne">Melbourne</option>
+                  <option value="Auckland">Auckland</option>
                 </optgroup>
                 <optgroup label="Latin America">
-                  <option value="São Paulo">🇧🇷 São Paulo</option>
-                  <option value="Mexico City">🇲🇽 Mexico City</option>
-                  <option value="Buenos Aires">🇦🇷 Buenos Aires</option>
+                  <option value="São Paulo">São Paulo</option>
+                  <option value="Mexico City">Mexico City</option>
+                  <option value="Buenos Aires">Buenos Aires</option>
                 </optgroup>
                 <optgroup label="Africa">
-                  <option value="Cape Town">🇿🇦 Cape Town</option>
-                  <option value="Johannesburg">🇿🇦 Johannesburg</option>
-                  <option value="Nairobi">🇰🇪 Nairobi</option>
+                  <option value="Cape Town">Cape Town</option>
+                  <option value="Johannesburg">Johannesburg</option>
+                  <option value="Nairobi">Nairobi</option>
                 </optgroup>
                 <optgroup label="Work Mode">
-                  <option value="Remote">🌐 Remote</option>
+                  <option value="Remote">Remote</option>
                 </optgroup>
               </select>
             </div>
 
             <button id="btnStartCrawl" class="btn btn-primary btn-crawl-sidebar" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              <span>Start Crawl</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              <span class="btn-crawl-label">Start Crawl</span>
             </button>
           </div>
         </div>
@@ -125,22 +138,30 @@
       <div class="sidebar-section flex-grow">
         <div class="sidebar-section-title">Navigation</div>
         <nav class="sidebar-nav">
-          <button class="nav-item active" id="btnTabAnalytics" onclick="switchTab('tabAnalytics')">
-            <span class="nav-icon">📊</span>
+          <button class="nav-item active" id="btnTabAnalytics" onclick="switchTab('tabAnalytics')" title="Dashboard Overview">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+            </span>
             <span class="nav-label">Dashboard</span>
           </button>
-          <button class="nav-item" id="btnTabDiscovered" onclick="switchTab('tabDiscovered')">
-            <span class="nav-icon">🔍</span>
+          <button class="nav-item" id="btnTabDiscovered" onclick="switchTab('tabDiscovered')" title="Discovered Jobs">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            </span>
             <span class="nav-label">Discovered Jobs</span>
             <span class="badge-count" id="countDiscovered">0</span>
           </button>
-          <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')">
-            <span class="nav-icon">✉️</span>
+          <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')" title="Review & Drafts">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            </span>
             <span class="nav-label">Review & Drafts</span>
             <span class="badge-count" id="countReview">0</span>
           </button>
-          <button class="nav-item" id="btnTabSent" onclick="switchTab('tabSent')">
-            <span class="nav-icon">📜</span>
+          <button class="nav-item" id="btnTabSent" onclick="switchTab('tabSent')" title="Sent & History">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </span>
             <span class="nav-label">Sent & History</span>
             <span class="badge-count" id="countSent">0</span>
           </button>
@@ -149,8 +170,10 @@
 
       <!-- Sidebar Footer: Active Resume & Controls -->
       <div class="sidebar-footer">
-        <div class="resume-pill-sidebar" id="resumePill">
-          <span class="pill-icon">📎</span>
+        <div class="resume-pill-sidebar" id="resumePill" title="Active configured resume">
+          <span class="pill-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          </span>
           <div class="resume-info">
             <span class="resume-tag">Active Resume</span>
             <span class="resume-filename" id="resumeFileName" title="Active configured resume">Loading...</span>
@@ -179,15 +202,22 @@
       <!-- App Header / Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
-          <h1 class="topbar-page-title" id="pageTitleDisplay">Dashboard Overview</h1>
-          <span class="topbar-breadcrumb" id="pageBreadcrumbDisplay">Real-time database intelligence & automation metrics</span>
+          <button class="icon-btn sm sidebar-topbar-toggle" id="btnTopbarSidebarToggle" onclick="toggleSidebarCollapse()" title="Toggle Sidebar (Expand/Collapse)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="topbar-title-text-group">
+            <h1 class="topbar-page-title" id="pageTitleDisplay">Dashboard Overview</h1>
+            <span class="topbar-breadcrumb" id="pageBreadcrumbDisplay">Real-time database intelligence & automation metrics</span>
+          </div>
         </div>
         <div class="topbar-right">
           <button class="btn btn-outline btn-sm btn-topbar" onclick="openAddJdModal()" title="Add Job Description Manually">
-            <span>+ Add JD</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Add JD</span>
           </button>
           <button class="btn btn-outline btn-sm btn-direct-outreach btn-topbar" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
-            <span>✉ Direct Outreach</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <span>Direct Outreach</span>
           </button>
 
           <!-- In-App Notification Center Dropdown -->
@@ -218,7 +248,9 @@
       <!-- Problem / Error Notice Alert Banner -->
       <div class="system-alert-banner hidden" id="systemAlertBanner">
         <div class="alert-content">
-          <span class="alert-icon">⚠️</span>
+          <span class="alert-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
           <span class="alert-message" id="systemAlertMessage">Issue detected</span>
         </div>
         <button class="alert-close-btn" onclick="dismissSystemAlert()">×</button>
@@ -281,16 +313,19 @@
             </div>
 
             <button class="btn btn-add-jd" onclick="openAddJdModal()" title="Add Job Description Manually">
-              <span>+ Add JD</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Add JD</span>
             </button>
 
             <button class="btn btn-outline btn-direct-outreach" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
-              <span>✉ Direct Outreach</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <span>Direct Outreach</span>
             </button>
 
             <!-- Batch Action Trigger -->
             <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
-              🤖 Generate (<span id="batchCountBadge">0</span>)
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
+              <span>Generate (<span id="batchCountBadge">0</span>)</span>
             </button>
           </div>
         </div>
@@ -301,18 +336,18 @@
             <span class="filters-label">Filters:</span>
             <select id="selectSource" class="select-clean" onchange="applyFilters()" title="Filter by Job Source">
               <option value="ALL" selected>All Sources</option>
-              <option value="INFOPARK">⚡ Infopark Kochi</option>
-              <option value="LINKEDIN">in LinkedIn</option>
-              <option value="MANUAL">✍️ Manual JDs</option>
-              <option value="DIRECT">✉ Direct Outreach</option>
+              <option value="INFOPARK">Infopark Kochi</option>
+              <option value="LINKEDIN">LinkedIn</option>
+              <option value="MANUAL">Manual JDs</option>
+              <option value="DIRECT">Direct Outreach</option>
             </select>
 
             <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
-              <option value="PENDING" selected>⚡ Yet to Generate (Default)</option>
+              <option value="PENDING" selected>Yet to Generate (Default)</option>
               <option value="ALL">All Status (Pending First)</option>
-              <option value="GENERATED">✓ Already Generated</option>
-              <option value="SENT">✉ Sent Applications</option>
-              <option value="REJECTED">🚫 Cancelled / Screened</option>
+              <option value="GENERATED">Already Generated</option>
+              <option value="SENT">Sent Applications</option>
+              <option value="REJECTED">Cancelled / Screened</option>
             </select>
 
             <select id="selectCategory" class="select-clean" onchange="applyFilters()">
@@ -331,9 +366,9 @@
 
             <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
               <option value="ALL" selected>All Dates</option>
-              <option value="TODAY">📅 Today</option>
-              <option value="YESTERDAY">📅 Yesterday</option>
-              <option value="WEEK">📅 Past 7 Days</option>
+              <option value="TODAY">Today</option>
+              <option value="YESTERDAY">Yesterday</option>
+              <option value="WEEK">Past 7 Days</option>
             </select>
 
             <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
@@ -438,7 +473,8 @@
               <span>Select All</span>
             </label>
             <button id="btnSendBatchDrafts" class="btn btn-primary btn-xs hidden" onclick="sendBatchSelectedDrafts()" title="Send selected applications directly">
-              <span>🚀 Send (<span id="selectedDraftsCount">0</span>)</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              <span>Send (<span id="selectedDraftsCount">0</span>)</span>
             </button>
           </div>
           <div class="queue-list" id="reviewQueueList">
@@ -449,7 +485,9 @@
         <!-- Main Review Workspace -->
         <section class="review-main" id="reviewMainWorkspace">
           <div class="empty-state" id="emptyReviewState">
-            <div class="empty-icon">✉️</div>
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            </div>
             <h3>No Draft Selected</h3>
             <p>Select a generated post from the left queue to review, edit, and open in Gmail.</p>
           </div>
@@ -468,17 +506,20 @@
                   <span>Save</span>
                 </button>
                 <button class="btn btn-primary btn-sm" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail without manual clicking">
-                  <span>🚀 Send Directly</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  <span>Send Directly</span>
                 </button>
                 <button class="btn btn-outline btn-sm" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft with resume for manual inspection">
-                  <span>👁️ Open Gmail</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  <span>Open Gmail</span>
                 </button>
                 <button class="btn btn-success btn-sm" onclick="markActivePostSent()" title="Mark as successfully sent">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                   <span>Mark Sent</span>
                 </button>
                 <button class="btn btn-outline btn-sm btn-spam-action" onclick="markActivePostSpam()" title="Mark this JD as Spam / Scam and discard">
-                  <span>🚫 Spam</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                  <span>Spam</span>
                 </button>
                 <button class="btn btn-cancel-app btn-sm" onclick="cancelActiveApplication()" title="Cancel & Discard this application">
                   <span>✕ Cancel</span>
@@ -638,7 +679,10 @@
       <div class="dashboard-section">
         <div class="dashboard-section-header">
           <div>
-            <h3 class="dashboard-section-title">⚡ Executive Overview & Jump Links</h3>
+            <h3 class="dashboard-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              <span>Executive Overview & Jump Links</span>
+            </h3>
             <p class="dashboard-section-subtitle">Click any card to jump directly to that section or filtered workspace</p>
           </div>
         </div>
@@ -647,7 +691,9 @@
           <div class="kpi-card glow-emerald clickable-kpi" onclick="jumpToSentApplications()" title="Click to view Sent Applications History">
             <div class="kpi-header">
               <span class="kpi-label">Jobs Applied (Outreach)</span>
-              <span class="kpi-icon">🚀</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"></path><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-2.05 9a22 22 0 0 1-3.95 2l-4 2z"></path></svg>
+              </span>
             </div>
             <div class="kpi-value" id="kpiApplied">0</div>
             <div class="kpi-footer">
@@ -662,7 +708,9 @@
           <div class="kpi-card glow-sky clickable-kpi" onclick="jumpToOutreachReady()" title="Click to view Leads with Direct Contact Emails">
             <div class="kpi-header">
               <span class="kpi-label">Outreach Ready</span>
-              <span class="kpi-icon">🎯</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+              </span>
             </div>
             <div class="kpi-value" id="kpiDirectEmails">0</div>
             <div class="kpi-footer">
@@ -677,7 +725,9 @@
           <div class="kpi-card glow-indigo clickable-kpi" onclick="jumpToReviewDrafts()" title="Click to open Review & Send Workspace">
             <div class="kpi-header">
               <span class="kpi-label">AI Drafts Generated</span>
-              <span class="kpi-icon">🤖</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
+              </span>
             </div>
             <div class="kpi-value" id="kpiDrafted">0</div>
             <div class="kpi-footer">
@@ -692,7 +742,9 @@
           <div class="kpi-card glow-blue clickable-kpi" onclick="jumpToDiscovered()" title="Click to browse all discovered job leads">
             <div class="kpi-header">
               <span class="kpi-label">Total JDs Scraped</span>
-              <span class="kpi-icon">🕸️</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+              </span>
             </div>
             <div class="kpi-value" id="kpiScraped">0</div>
             <div class="kpi-footer">
@@ -707,7 +759,9 @@
           <div class="kpi-card glow-rose clickable-kpi" onclick="jumpToScreenedApplications()" title="Click to view Screened / Cancelled applications">
             <div class="kpi-header">
               <span class="kpi-label">Screened & Cancelled</span>
-              <span class="kpi-icon">🛡️</span>
+              <span class="kpi-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><line x1="9.5" y1="9.5" x2="14.5" y2="14.5"></line><line x1="14.5" y1="9.5" x2="9.5" y2="14.5"></line></svg>
+              </span>
             </div>
             <div class="kpi-value" id="kpiRejected">0</div>
             <div class="kpi-footer">
@@ -726,7 +780,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">📈 Jobs Applied Each Day</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                <span>Jobs Applied Each Day</span>
+              </h3>
               <p class="chart-subtitle">Direct cold email applications sent over time</p>
             </div>
             <span class="chart-badge" id="chartAppliedTotalBadge">0 Applications</span>
@@ -739,7 +796,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">⚡ Scraping & Discovery Inflow</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Scraping & Discovery Inflow</span>
+              </h3>
               <p class="chart-subtitle">New job opportunities discovered per day</p>
             </div>
             <span class="chart-badge" id="chartScrapedTotalBadge">0 Discovered</span>
@@ -755,7 +815,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">🎯 Application Status Breakdown</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>
+                <span>Application Status Breakdown</span>
+              </h3>
               <p class="chart-subtitle">Current distribution across the funnel</p>
             </div>
           </div>
@@ -767,7 +830,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">🌐 Scraping Sources</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span>Scraping Sources</span>
+              </h3>
               <p class="chart-subtitle">Performance by crawling origin</p>
             </div>
           </div>
@@ -779,7 +845,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">🎓 Experience Demographics</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                <span>Experience Demographics</span>
+              </h3>
               <p class="chart-subtitle">Experience requirements of discovered jobs</p>
             </div>
           </div>
@@ -794,7 +863,10 @@
         <div class="chart-card">
           <div class="chart-header">
             <div>
-              <h3 class="chart-title">🛑 Cancellation & Screening Reasons</h3>
+              <h3 class="chart-title">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                <span>Cancellation & Screening Reasons</span>
+              </h3>
               <p class="chart-subtitle">Why jobs were marked unsuitable, scam, or cancelled</p>
             </div>
           </div>
@@ -811,7 +883,10 @@
       <div class="dashboard-section" style="margin-top: 1.5rem;">
         <div class="dashboard-section-header">
           <div>
-            <h3 class="dashboard-section-title">🔌 Connected Services & Engine Health</h3>
+            <h3 class="dashboard-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+              <span>Connected Services & Engine Health</span>
+            </h3>
             <p class="dashboard-section-subtitle">Real-time status of scraping sessions, automated browsers, and database</p>
           </div>
           <button class="btn btn-outline btn-xs" onclick="fetchHealth()" title="Refresh connection states">
@@ -821,7 +896,9 @@
         <div class="health-grid" id="dashboardHealthGrid">
           <div class="health-card">
             <div class="health-card-top">
-              <span class="health-card-icon">💼</span>
+              <span class="health-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+              </span>
               <span class="health-status-dot ok" id="healthLinkedin"></span>
             </div>
             <div class="health-card-name">LinkedIn Browser</div>
@@ -829,7 +906,9 @@
           </div>
           <div class="health-card">
             <div class="health-card-top">
-              <span class="health-card-icon">🏢</span>
+              <span class="health-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="22" x2="9" y2="22.01"></line><line x1="15" y1="22" x2="15" y2="22.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="15" y1="6" x2="15" y2="6.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="15" y1="10" x2="15" y2="10.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><line x1="15" y1="14" x2="15" y2="14.01"></line><line x1="9" y1="18" x2="9" y2="18.01"></line><line x1="15" y1="18" x2="15" y2="18.01"></line></svg>
+              </span>
               <span class="health-status-dot ok" id="healthInfopark"></span>
             </div>
             <div class="health-card-name">Infopark Kochi</div>
@@ -837,7 +916,9 @@
           </div>
           <div class="health-card">
             <div class="health-card-top">
-              <span class="health-card-icon">🤖</span>
+              <span class="health-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
+              </span>
               <span class="health-status-dot ok" id="healthChatgpt"></span>
             </div>
             <div class="health-card-name">ChatGPT Session</div>
@@ -845,7 +926,9 @@
           </div>
           <div class="health-card">
             <div class="health-card-top">
-              <span class="health-card-icon">✉️</span>
+              <span class="health-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              </span>
               <span class="health-status-dot ok" id="healthGmail"></span>
             </div>
             <div class="health-card-name">Gmail Automation</div>
@@ -853,7 +936,9 @@
           </div>
           <div class="health-card">
             <div class="health-card-top">
-              <span class="health-card-icon">🗄️</span>
+              <span class="health-card-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              </span>
               <span class="health-status-dot ok" id="healthDatabase"></span>
             </div>
             <div class="health-card-name">PostgreSQL DB</div>
@@ -880,10 +965,12 @@
       <div class="modal-scroll" id="modalPostContent"></div>
       <div class="modal-bottom" style="justify-content: flex-end; align-items: center; gap: 0.65rem;">
         <a id="modalPostLink" href="#" target="_blank" class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem;">
-          <span>View Source</span> ↗
+          <span>View Source</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
         </a>
-        <button id="modalPostSpamBtn" class="btn btn-outline btn-sm hidden" onclick="markPostModalSpam()" title="Mark as Spam / Scam" style="color: #fda4af; border-color: rgba(244, 63, 94, 0.4);">
-          <span>🚫 Mark Spam</span>
+        <button id="modalPostSpamBtn" class="btn btn-outline btn-sm hidden" onclick="markPostModalSpam()" title="Mark as Spam / Scam" style="color: #fda4af; border-color: rgba(244, 63, 94, 0.4); display: inline-flex; align-items: center; gap: 0.35rem;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+          <span>Mark Spam</span>
         </button>
         <button id="modalPostRestoreBtn" class="btn btn-outline btn-sm hidden">Restore to Active</button>
         <button class="btn btn-primary btn-sm" onclick="closePostModal()">Close</button>
@@ -911,7 +998,10 @@
         <div class="form-block">
           <label style="display: flex; align-items: center; justify-content: space-between;">
             <span>ChatGPT Custom GPT Chat Link:</span>
-            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              Database
+            </span>
           </label>
           <input type="text" id="settingChatGptUrl" class="input-clean" placeholder="https://chatgpt.com/g/..." />
         </div>
@@ -919,7 +1009,10 @@
         <div class="form-block">
           <label style="display: flex; align-items: center; justify-content: space-between;">
             <span>Target LinkedIn Search Keywords:</span>
-            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              Database
+            </span>
           </label>
           <input type="text" id="settingSearchQuery" class="input-clean" placeholder="e.g. Full stack developer" />
         </div>
@@ -927,13 +1020,18 @@
         <div class="form-block">
           <label style="display: flex; align-items: center; justify-content: space-between;">
             <span>Default Target Job Location / Area:</span>
-            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              Database
+            </span>
           </label>
           <input type="text" id="settingSearchLocation" class="input-clean" placeholder="e.g. Dubai, Bengaluru, or leave blank for anywhere" />
         </div>
 
         <div class="headed-info-card">
-          <span class="info-icon">🖥</span>
+          <span class="info-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          </span>
           <div>
             <strong>Strictly Headed Mode (headless=False)</strong>
             <p>Every browser action opens Firefox visibly so you can inspect interactions live.</p>
@@ -952,7 +1050,10 @@
   <div class="modal-overlay hidden" id="modalAddJd">
     <div class="modal-box modal-md">
       <div class="modal-top">
-        <h3>✍️ Add Job Description Manually</h3>
+        <h3 style="display: flex; align-items: center; gap: 0.5rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          Add Job Description Manually
+        </h3>
         <button class="close-x" onclick="closeAddJdModal()">×</button>
       </div>
       <div class="modal-body">
@@ -988,8 +1089,9 @@
     <div class="modal-box modal-md">
       <div class="modal-top">
         <div style="display: flex; flex-direction: column; gap: 0.2rem;">
-          <h3 style="font-size: 1.05rem; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 0.4rem;">
-            <span>✉</span> Direct Opportunity Outreach
+          <h3 style="font-size: 1.05rem; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            Direct Opportunity Outreach
           </h3>
           <span style="font-size: 0.78rem; color: var(--text-muted);">Send speculative cold application directly to a recruiter or company contact</span>
         </div>
@@ -1023,17 +1125,20 @@
           </label>
           <textarea id="directOutreachBody" rows="9" class="textarea-clean" style="font-size: 0.82rem; line-height: 1.45;"></textarea>
         </div>
-        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
-          <span>📎</span> Active configured resume will be automatically attached in Gmail Playwright session.
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 0.4rem;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          <span>Active configured resume will be automatically attached in Gmail Playwright session.</span>
         </p>
       </div>
       <div class="modal-bottom" style="justify-content: flex-end; align-items: center; gap: 0.65rem;">
         <button class="btn btn-outline btn-sm" onclick="closeDirectOutreachModal()">Cancel</button>
-        <button class="btn btn-outline btn-sm" onclick="submitDirectOutreach('draft')" title="Create draft in Gmail and keep Firefox window open on screen for review">
-          👁️ Open Draft in Gmail
+        <button class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem;" onclick="submitDirectOutreach('draft')" title="Create draft in Gmail and keep Firefox window open on screen for review">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          <span>Open Draft in Gmail</span>
         </button>
-        <button class="btn btn-primary btn-sm" style="background: #6366f1; border-color: #6366f1;" onclick="submitDirectOutreach('send')" title="Send directly via Playwright automated Gmail session">
-          ⚡ Send via Gmail Directly
+        <button class="btn btn-primary btn-sm" style="background: #6366f1; border-color: #6366f1; display: inline-flex; align-items: center; gap: 0.35rem;" onclick="submitDirectOutreach('send')" title="Send directly via Playwright automated Gmail session">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          <span>Send via Gmail Directly</span>
         </button>
       </div>
     </div>
@@ -1058,31 +1163,31 @@
         <!-- Quick Pre-made Suggestion Pills -->
         <div class="quick-reasons-grid">
           <button type="button" class="reason-chip" data-reason="Not enough experience" onclick="selectPreMadeReason('Not enough experience')">
-            ⚠️ Not enough experience
+            Not enough experience
           </button>
           <button type="button" class="reason-chip" data-reason="Not a job" onclick="selectPreMadeReason('Not a job')">
-            🚫 Not a job
+            Not a job
           </button>
           <button type="button" class="reason-chip" data-reason="Scam" onclick="selectPreMadeReason('Scam')">
-            🛑 Scam
+            Scam
           </button>
           <button type="button" class="reason-chip" data-reason="Potential Scam" onclick="selectPreMadeReason('Potential Scam')">
-            ⚠️ Potential Scam
+            Potential Scam
           </button>
           <button type="button" class="reason-chip" data-reason="Female candidates only" onclick="selectPreMadeReason('Female candidates only')">
-            👩 Female candidates only
+            Female candidates only
           </button>
           <button type="button" class="reason-chip" data-reason="Irrelevant tech stack" onclick="selectPreMadeReason('Irrelevant tech stack')">
-            ⚡ Irrelevant tech stack
+            Irrelevant tech stack
           </button>
           <button type="button" class="reason-chip" data-reason="Low budget / Unrealistic salary" onclick="selectPreMadeReason('Low budget / Unrealistic salary')">
-            💰 Low budget / Unrealistic salary
+            Low budget / Unrealistic salary
           </button>
           <button type="button" class="reason-chip" data-reason="Location mismatch / On-site" onclick="selectPreMadeReason('Location mismatch / On-site')">
-            📍 Location mismatch / On-site
+            Location mismatch / On-site
           </button>
           <button type="button" class="reason-chip" data-reason="Freelance / Part-time only" onclick="selectPreMadeReason('Freelance / Part-time only')">
-            ⏳ Freelance / Part-time only
+            Freelance / Part-time only
           </button>
         </div>
 
@@ -1094,8 +1199,9 @@
 
       <div class="modal-bottom" style="justify-content: flex-end; gap: 0.65rem;">
         <button class="btn btn-outline btn-sm" onclick="closeCancelReasonModal()">Keep Application</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmCancelWithReason()" id="btnConfirmCancelModal">
-          ✕ Cancel & Discard
+        <button class="btn btn-danger btn-sm" onclick="confirmCancelWithReason()" id="btnConfirmCancelModal" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <span>Cancel & Discard</span>
         </button>
       </div>
     </div>
@@ -1106,7 +1212,7 @@
     <div class="modal-box modal-md">
       <div class="modal-top">
         <div style="display: flex; align-items: center; gap: 0.5rem;">
-          <span style="font-size: 1.25rem;">📊</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           <h3 id="crawlSummaryTitle" style="font-size: 1.05rem; font-weight: 700;">Crawl Summary</h3>
         </div>
         <button class="close-x" onclick="closeCrawlSummaryModal()">×</button>
@@ -1126,7 +1232,9 @@
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">
       <div class="dialog-header">
-        <div class="dialog-icon-circle" id="dialogIconCircle">❓</div>
+        <div class="dialog-icon-circle" id="dialogIconCircle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </div>
         <h3 class="dialog-title" id="dialogTitle">Confirmation</h3>
       </div>
       <div class="dialog-message" id="dialogMessage">Are you sure you want to proceed?</div>

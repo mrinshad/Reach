@@ -79,11 +79,11 @@ function showConfirm(title, message, options = {}) {
 
     if (options.danger) {
       confirmBtn.className = 'btn btn-danger';
-      iconCircle.textContent = '⚠️';
+      iconCircle.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
       iconCircle.style.background = 'rgba(244, 63, 94, 0.15)';
     } else {
       confirmBtn.className = 'btn btn-primary';
-      iconCircle.textContent = '⚡';
+      iconCircle.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
       iconCircle.style.background = 'rgba(99, 102, 241, 0.15)';
     }
 
@@ -512,15 +512,15 @@ function renderNotificationCenter() {
   }
 
   const icons = {
-    success: '✓',
-    error: '✗',
-    warn: '⚠️',
-    info: '⚡',
+    success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>',
+    error: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
+    warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
+    info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
   };
 
   listEl.innerHTML = notificationState.list.map(n => `
     <div class="notification-item ${n.read ? '' : 'unread'}">
-      <div class="notification-item-icon ${n.type || 'info'}">${icons[n.type] || '⚡'}</div>
+      <div class="notification-item-icon ${n.type || 'info'}">${icons[n.type] || icons.info}</div>
       <div class="notification-item-body">
         <div class="notification-item-title">${escapeHtml(n.title)}</div>
         <div class="notification-item-msg">${escapeHtml(n.message)}</div>
@@ -540,8 +540,49 @@ function clearAllNotifications() {
   renderNotificationCenter();
 }
 
+// --- Sidebar Collapsible Mode ---
+function toggleSidebarCollapse() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.toggle('collapsed');
+  try {
+    localStorage.setItem('reach_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+  } catch (_) {}
+  updateSidebarCollapseUI();
+}
+
+function initSidebarCollapse() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  try {
+    const saved = localStorage.getItem('reach_sidebar_collapsed');
+    if (saved === 'true') {
+      sidebar.classList.add('collapsed');
+    }
+  } catch (_) {}
+  updateSidebarCollapseUI();
+}
+
+function updateSidebarCollapseUI() {
+  const sidebar = document.getElementById('appSidebar');
+  if (!sidebar) return;
+  const isCollapsed = sidebar.classList.contains('collapsed');
+  const toggleBtn = document.getElementById('btnToggleSidebar');
+  if (toggleBtn) {
+    toggleBtn.setAttribute('title', isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar');
+    toggleBtn.innerHTML = isCollapsed
+      ? '<svg class="sidebar-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>'
+      : '<svg class="sidebar-collapse-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  }
+  const topbarBtn = document.getElementById('btnTopbarSidebarToggle');
+  if (topbarBtn) {
+    topbarBtn.setAttribute('title', isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar');
+  }
+}
+
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+  initSidebarCollapse();
   const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
@@ -1011,13 +1052,13 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
 
   let badge = '';
   if (url.startsWith('direct://') || url.includes('direct')) {
-    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">✉ Direct Outreach</span>`;
+    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">Direct Outreach</span>`;
   } else if (url.includes('infopark.in')) {
-    badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">⚡ Infopark Kochi</span>`;
+    badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">Infopark Kochi</span>`;
   } else if (url.startsWith('manual://') || url.includes('manual')) {
-    badge = `<span class="source-pill source-manual" title="Source: Manually Added">✍️ Manual</span>`;
+    badge = `<span class="source-pill source-manual" title="Source: Manually Added">Manual</span>`;
   } else {
-    badge = `<span class="source-pill source-linkedin" title="Source: LinkedIn Job Post">in LinkedIn</span>`;
+    badge = `<span class="source-pill source-linkedin" title="Source: LinkedIn Job Post">LinkedIn</span>`;
   }
 
   const isScam = rejReason && (rejReason.toLowerCase().includes('scam') || rejReason.toLowerCase().includes('spam'));
@@ -1025,10 +1066,10 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
 
   if (isScam) {
     const why = rejReason || 'Flagged as scam recruiter';
-    badge += `<span class="badge-scam-alert" title="🛑 Scam: ${escapeHtml(why)}">🛑 Scam</span>`;
+    badge += `<span class="badge-scam-alert" title="Scam: ${escapeHtml(why)}">Scam</span>`;
   } else if (isPotential) {
     const why = potentialReason || rejReason || 'Suspicious contact domain or flagged recruiter activity';
-    badge += `<span class="badge-spam-warning" title="⚠️ Potential Scam: ${escapeHtml(why)}">⚠️ Potential Scam</span>`;
+    badge += `<span class="badge-spam-warning" title="Potential Scam: ${escapeHtml(why)}">Potential Scam</span>`;
   }
 
   return badge;
@@ -1069,7 +1110,7 @@ function renderPostsTable() {
     const primaryEmail = (post.contact_emails && post.contact_emails[0]) || '';
     const emailHtml = primaryEmail
       ? `<span class="email-copy-pill" onclick="copyEmailToClipboard('${escapeHtml(primaryEmail)}')" title="Click to copy email">
-           <span>✉</span> ${escapeHtml(primaryEmail)}
+           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>${escapeHtml(primaryEmail)}
          </span>`
       : `<span style="color: #64748b; font-size: 0.72rem;">—</span>`;
 
@@ -1084,7 +1125,7 @@ function renderPostsTable() {
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
             <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
             ${getSourceBadgeHtml(post)}
-            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
           </div>
           <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
         </div>
@@ -1114,24 +1155,24 @@ function renderPostsTable() {
           }
           ${
             post.status === 'SENT'
-              ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem;">✓ Sent</span>
+              ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.12); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 0.72rem; padding: 0.2rem 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Sent</span>
                  <button class="btn btn-icon-only" onclick="switchTab('tabSent')" title="View in Sent History">
-                   <span>✉</span>
+                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
                  </button>`
               : post.status === 'REJECTED'
-                ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem;">🚫 Cancelled</span>
+                ? `<span class="badge-status-rejected" style="font-size: 0.72rem; padding: 0.2rem 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>
                    <button class="btn btn-icon-only btn-restore" onclick="revertPostToDraft('${post.id}')" title="Restore Post">
-                     <span>↺</span>
+                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path></svg>
                    </button>`
                 : isGenerated
                   ? `<button class="btn btn-outline btn-sm" onclick="openPostInReview('${post.id}')" title="Review Generated Draft">
                        <span>Review Draft</span>
                      </button>
                      <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                      </button>
                      <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                      </button>`
                   : `
                      ${primaryEmail ? `<button class="btn btn-primary btn-sm" onclick="generateSingleChatGPT('${post.id}')" title="Generate with ChatGPT"><span>Generate</span></button>` : ''}
@@ -1139,10 +1180,10 @@ function renderPostsTable() {
                        <span>Review</span>
                      </button>
                      <button class="btn btn-icon-only btn-spam-icon" onclick="markPostAsSpam('${post.id}')" title="Mark as Spam / Scam">
-                       <span>🚫</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
                      </button>
                      <button class="btn btn-icon-only btn-cancel-icon" onclick="cancelDiscoveredPost('${post.id}')" title="Cancel opening with reason">
-                       <span>✕</span>
+                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                      </button>
                   `
           }
@@ -1491,9 +1532,9 @@ async function fetchReviewPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <span class="queue-author">${escapeHtml(post.author_name)}</span>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem;" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem; display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
             </div>
-            <span class="queue-email">✉ ${escapeHtml(email)}</span>
+            <span class="queue-email" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>${escapeHtml(email)}</span>
           </div>
         </div>
       `;
@@ -1642,7 +1683,7 @@ async function sendActiveDraftDirectly() {
 
   const recipient = (state.activeReviewPost.contact_emails && state.activeReviewPost.contact_emails[0]) || state.activeReviewPost.author_name;
   const confirmed = await showConfirm(
-    '🚀 Direct Send Application',
+    'Direct Send Application',
     `Send application email directly to ${recipient} via Gmail without manual interaction? Your active resume will be attached and this post will be moved to Sent history.`,
     { confirmText: 'Send Directly' }
   );
@@ -1653,7 +1694,7 @@ async function sendActiveDraftDirectly() {
   try {
     const res = await fetch(`/api/send-direct/${state.activeReviewPost.id}`, { method: 'POST' });
     if (res.ok) {
-      showToast('🚀 Sending email directly via Gmail...', 'info');
+      showToast('Sending email directly via Gmail...', 'info');
       state.selectedDraftIds.delete(state.activeReviewPost.id);
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -1674,7 +1715,7 @@ async function sendBatchSelectedDrafts() {
   }
 
   const confirmed = await showConfirm(
-    '🚀 Batch Direct Send',
+    'Batch Direct Send',
     `Send ${ids.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
     { confirmText: `Send ${ids.length} Emails` }
   );
@@ -1687,7 +1728,7 @@ async function sendBatchSelectedDrafts() {
       body: JSON.stringify({ post_ids: ids })
     });
     if (res.ok) {
-      showToast(`🚀 Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+      showToast(`Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
       state.selectedDraftIds.clear();
       updateSelectedDraftsUI();
       startTaskPolling();
@@ -2138,9 +2179,9 @@ async function fetchSentPosts() {
 
       let statusBadge = '';
       if (isSent) {
-        statusBadge = `<span class="badge-status-sent">✉ Sent</span>`;
+        statusBadge = `<span class="badge-status-sent" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>Sent</span>`;
       } else if (isRejected) {
-        statusBadge = `<span class="badge-status-rejected">🚫 Cancelled</span>`;
+        statusBadge = `<span class="badge-status-rejected" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>`;
         if (post.rejection_reason) {
           statusBadge += `<span class="badge-rejection-reason" title="${escapeHtml(post.rejection_reason)}">${escapeHtml(post.rejection_reason)}</span>`;
         }
@@ -2156,7 +2197,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -2586,18 +2627,18 @@ async function pollTaskStatus() {
         let notifMsg = `${task.task_name || 'Automation'} completed successfully.`;
         if (task.crawl_stats) {
           const s = task.crawl_stats;
-          subEl.textContent = `✓ Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
+          subEl.textContent = `Crawled ${s.total_crawled || 0} posts • Added ${s.newly_added || 0} new • Skipped ${s.skipped_already_added || 0} existing`;
           notifMsg = `Crawled ${s.total_crawled || 0} posts: ${s.newly_added || 0} new jobs added, ${s.skipped_already_added || 0} existing skipped.`;
           showCrawlSummaryModal(task.task_name, s);
         } else {
-          subEl.textContent = '✓ Completed successfully';
+          subEl.textContent = 'Completed successfully';
           if (task.completed_items) {
             notifMsg = `${task.task_name || 'Task'} finished: ${task.completed_items}/${task.total_items || task.completed_items} processed.`;
           }
         }
 
         sendAppNotification({
-          title: `✓ ${task.task_name || 'Task Complete'}`,
+          title: task.task_name || 'Task Complete',
           message: notifMsg,
           type: 'success',
         });
@@ -2609,10 +2650,10 @@ async function pollTaskStatus() {
         }, task.crawl_stats ? 3000 : 1500);
       } else {
         const firstLine = (task.error || 'Operation failed').split('\n')[0];
-        subEl.textContent = `✗ Failed: ${firstLine}`;
+        subEl.textContent = `Failed: ${firstLine}`;
 
         sendAppNotification({
-          title: `✗ ${task.task_name || 'Task Failed'}`,
+          title: task.task_name || 'Task Failed',
           message: firstLine,
           type: 'error',
         });
@@ -2744,8 +2785,9 @@ function openPostModal(postId) {
       bannerEl.className = '';
       bannerEl.innerHTML = `
         <div class="modal-scam-box">
-          <div class="modal-scam-box-title">
-            <span>🛑</span> Recruiter Flagged as Scam / Spam
+          <div class="modal-scam-box-title" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+            <span>Recruiter Flagged as Scam / Spam</span>
           </div>
           <div class="modal-scam-box-desc">
             <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(post.rejection_reason || 'Marked as scam recruiter')}
@@ -2757,8 +2799,9 @@ function openPostModal(postId) {
       const whyText = post.potential_spam_reason || post.rejection_reason || 'Suspicious contact domain or flagged recruiter activity';
       bannerEl.innerHTML = `
         <div class="modal-potential-scam-box">
-          <div class="modal-potential-scam-box-title">
-            <span>⚠️</span> Warning: Recruiter Flagged as Potential Scam
+          <div class="modal-potential-scam-box-title" style="display: flex; align-items: center; gap: 0.4rem;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>Warning: Recruiter Flagged as Potential Scam</span>
           </div>
           <div class="modal-potential-scam-box-desc">
             <span style="font-weight: 700; color: #ffffff;">Why:</span> ${escapeHtml(whyText)}
@@ -2769,7 +2812,7 @@ function openPostModal(postId) {
       bannerEl.className = '';
       bannerEl.innerHTML = `
         <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 0.65rem 0.85rem; color: #f87171; font-size: 0.82rem;">
-          <strong>🚫 Application Cancelled / Discarded</strong>
+          <strong style="display: flex; align-items: center; gap: 0.35rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Application Cancelled / Discarded</strong>
           ${post.rejection_reason ? `<div style="margin-top: 0.25rem; color: #fca5a5;"><span style="font-weight: 600; color: #fff;">Why:</span> <strong>${escapeHtml(post.rejection_reason)}</strong></div>` : ''}
         </div>
       `;
@@ -2778,7 +2821,7 @@ function openPostModal(postId) {
       const sentTime = post.sent_at ? ` on ${new Date(post.sent_at).toLocaleString()}` : '';
       bannerEl.innerHTML = `
         <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; padding: 0.65rem 0.85rem; color: #34d399; font-size: 0.82rem;">
-          <strong>✉ Outreach Email Sent${sentTime}</strong>
+          <strong style="display: flex; align-items: center; gap: 0.35rem;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Outreach Email Sent${sentTime}</strong>
           ${post.generated_subject ? `<div style="margin-top: 0.25rem; color: #a7f3d0;">Subject: <em>${escapeHtml(post.generated_subject)}</em></div>` : ''}
         </div>
       `;
