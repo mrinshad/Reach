@@ -177,11 +177,13 @@ Network stalls or dynamic infinite scroll locks can cause scrapers to hang indef
    - Dispatches `POST /api/posts/{post_id}/spam`.
    - Immediately sets `status = 'REJECTED'` and `rejection_reason = 'Spam / Scam'`.
 2. **Auto-Reject Ingestion Rule**:
-   - When new posts are scraped, their contact emails are checked against rejected spam records.
-   - If an exact email match exists in known spam records, the post is automatically rejected upon ingestion with `rejection_reason = 'Auto-rejected: Email marked as Spam'`.
-3. **Potential Spam Heuristic**:
-   - If the domain matches a spam record but the prefix differs, the post is flagged as `Potential Spam`.
-   - Standard public providers (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`) are excluded from domain matching to prevent false positives.
+   - When new posts are scraped, their contact emails and domains are checked against rejected spam/scam records.
+   - If a custom corporate domain was previously reported as scam/spam, the post is automatically rejected upon ingestion with the prior reason and matched recruiter.
+   - If an exact email was reported as scam/spam (including on mainstream providers), it is auto-rejected.
+3. **Scam & Potential Scam Tooltip & Modal Display**:
+   - Recruiters labeled as `🛑 Scam` or `⚠️ Potential Scam` display actionable hover tooltips explaining the reason why.
+   - Clicking "View" opens the application modal featuring dedicated Scam or Potential Scam banner alerts with full explanations.
+   - Mainstream public providers (`gmail.com`, `yahoo.com`, `hotmail.com`, `outlook.com`, `proton.me`, `icloud.com`) are excluded from domain-level blocking to prevent false positives.
 
 ---
 
