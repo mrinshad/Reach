@@ -37,6 +37,8 @@ const state = {
   sortBy: 'default',
   dateFilter: 'ALL',
   othersReason: 'ALL',
+  locationFilter: 'ALL',
+  discoveredReason: 'ALL',
 };
 
 // --- Custom Dialog System (Replaces Native Alert & Confirm) ---
@@ -329,6 +331,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   switchTab(startTab);
+  initCrawlerControls();
+  fetchLocations();
+  loadRejectionReasonsFilter();
   loadDashboardData();
   fetchHealth();
   fetchScrapers();
@@ -435,6 +440,8 @@ async function loadDashboardData() {
   await Promise.all([
     fetchStats(),
     fetchSettings(),
+    fetchLocations(),
+    loadRejectionReasonsFilter(),
   ]);
 
   if (state.activeTab === 'tabDiscovered') {
@@ -546,6 +553,16 @@ async function fetchSettings() {
     const filename = resumePath.split('/').pop() || 'No Resume Selected';
     document.getElementById('resumeFileName').textContent = filename;
     document.getElementById('resumePill').title = `Active Resume: ${resumePath}`;
+
+    const crawlerLocSelect = document.getElementById('crawlerLocationSelect');
+    if (crawlerLocSelect) {
+      const savedCrawlerLoc = localStorage.getItem('reach_selected_crawler_location');
+      if (savedCrawlerLoc !== null) {
+        crawlerLocSelect.value = savedCrawlerLoc;
+      } else if (state.config.search_location) {
+        crawlerLocSelect.value = state.config.search_location;
+      }
+    }
   } catch (err) {
     console.error('Error loading settings:', err);
   }
@@ -615,6 +632,14 @@ async function fetchDiscoveredPosts() {
       params.append('date_filter', state.dateFilter);
     }
 
+    if (state.locationFilter && state.locationFilter !== 'ALL') {
+      params.append('location', state.locationFilter);
+    }
+
+    if (state.discoveredReason && state.discoveredReason !== 'ALL') {
+      params.append('reason', state.discoveredReason);
+    }
+
     if (state.expFilter === 'FRESHER') {
       params.append('max_exp', '1.0');
     } else if (state.expFilter === 'MID') {
@@ -635,7 +660,7 @@ async function fetchDiscoveredPosts() {
 
     const discBadge = document.getElementById('discoveredResultsBadge');
     // Clear Filters button: visible whenever any filter is not default/ALL
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default');
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default') || (state.locationFilter && state.locationFilter !== 'ALL') || (state.discoveredReason && state.discoveredReason !== 'ALL');
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -775,6 +800,7 @@ function renderPostsTable() {
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
             <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
             ${getSourceBadgeHtml(post)}
+            ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
           </div>
           <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
         </div>
@@ -926,6 +952,14 @@ function applyFilters() {
   if (dateSelect) {
     state.dateFilter = dateSelect.value;
   }
+  const locSelect = document.getElementById('selectLocationFilter');
+  if (locSelect) {
+    state.locationFilter = locSelect.value;
+  }
+  const discReasonSelect = document.getElementById('selectReasonFilterDiscovered');
+  if (discReasonSelect) {
+    state.discoveredReason = discReasonSelect.value;
+  }
   const sortSelect = document.getElementById('selectSortBy');
   if (sortSelect) {
     state.sortBy = sortSelect.value;
@@ -963,9 +997,24 @@ function updateSortIndicators() {
   const dateInd = document.getElementById('sortDateIndicator');
   const authorInd = document.getElementById('sortAuthorIndicator');
 
-  if (expInd) expInd.textContent = state.sortBy === 'exp_asc' ? '▲' : state.sortBy === 'exp_desc' ? '▼' : '';
-  if (dateInd) dateInd.textContent = state.sortBy === 'date_asc' ? '▲' : state.sortBy === 'date_desc' ? '▼' : '';
-  if (authorInd) authorInd.textContent = state.sortBy === 'author_asc' ? '▲' : state.sortBy === 'author_desc' ? '▼' : '';
+  if (expInd) {
+    const isAsc = state.sortBy === 'exp_asc';
+    const isDesc = state.sortBy === 'exp_desc';
+    expInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    expInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
+  if (dateInd) {
+    const isAsc = state.sortBy === 'date_asc';
+    const isDesc = state.sortBy === 'date_desc';
+    dateInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    dateInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
+  if (authorInd) {
+    const isAsc = state.sortBy === 'author_asc';
+    const isDesc = state.sortBy === 'author_desc';
+    authorInd.textContent = isAsc ? '▲' : isDesc ? '▼' : '↕';
+    authorInd.className = 'sort-indicator' + (isAsc || isDesc ? ' active' : '');
+  }
 }
 
 function handleSearchKeyUp(e) {
@@ -996,6 +1045,14 @@ function clearDiscoveredFilters() {
   state.dateFilter = 'ALL';
   const dateSel = document.getElementById('selectDateFilter');
   if (dateSel) dateSel.value = 'ALL';
+
+  state.locationFilter = 'ALL';
+  const locSel = document.getElementById('selectLocationFilter');
+  if (locSel) locSel.value = 'ALL';
+
+  state.discoveredReason = 'ALL';
+  const discReasonSel = document.getElementById('selectReasonFilterDiscovered');
+  if (discReasonSel) discReasonSel.value = 'ALL';
 
   state.sortBy = 'default';
   const sortSel = document.getElementById('selectSortBy');
@@ -1150,6 +1207,7 @@ async function fetchReviewPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <span class="queue-author">${escapeHtml(post.author_name)}</span>
               ${getSourceBadgeHtml(post)}
+              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem;" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="queue-email">✉ ${escapeHtml(email)}</span>
           </div>
@@ -1186,7 +1244,7 @@ function selectReviewPost(post) {
 
   const authorEl = document.getElementById('reviewAuthorName');
   if (authorEl) {
-    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)}`;
+    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)} ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}`;
   }
   document.getElementById('reviewHeadline').textContent = post.author_headline || 'N/A';
   document.getElementById('reviewTargetEmail').textContent = (post.contact_emails || []).join(', ') || 'None';
@@ -1667,18 +1725,39 @@ async function loadRejectionReasonsFilter(selectedReason = null) {
     const res = await fetch('/api/reasons');
     if (!res.ok) return;
     const data = await res.json();
-    const select = document.getElementById('selectReasonFilter');
-    if (!select) return;
-    const currentVal = selectedReason || state.othersReason || 'ALL';
-    select.innerHTML = '<option value="ALL">All Reasons</option>';
-    (data.reasons || []).forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
-      if (r === currentVal) opt.selected = true;
-      select.appendChild(opt);
-    });
-    state.othersReason = currentVal;
+    const items = data.counts || (data.reasons || []).map(r => ({ reason: r, count: null }));
+
+    // Update Sent / Cancelled tab reason filter
+    const sentSelect = document.getElementById('selectReasonFilter');
+    if (sentSelect) {
+      const currentSentVal = selectedReason || state.othersReason || 'ALL';
+      let html = '<option value="ALL">All Reasons</option>';
+      items.forEach(item => {
+        const countTxt = item.count !== null && item.count !== undefined ? ` (${item.count})` : '';
+        const isSel = item.reason === currentSentVal ? 'selected' : '';
+        html += `<option value="${escapeHtml(item.reason)}" ${isSel}>${escapeHtml(item.reason)}${countTxt}</option>`;
+      });
+      sentSelect.innerHTML = html;
+      sentSelect.value = currentSentVal;
+    }
+
+    // Update Discovered tab reason filter
+    const discSelect = document.getElementById('selectReasonFilterDiscovered');
+    if (discSelect) {
+      const currentDiscVal = state.discoveredReason || 'ALL';
+      let html = '<option value="ALL">All Reasons</option>';
+      items.forEach(item => {
+        const countTxt = item.count !== null && item.count !== undefined ? ` (${item.count})` : '';
+        const isSel = item.reason === currentDiscVal ? 'selected' : '';
+        html += `<option value="${escapeHtml(item.reason)}" ${isSel}>${escapeHtml(item.reason)}${countTxt}</option>`;
+      });
+      discSelect.innerHTML = html;
+      discSelect.value = currentDiscVal;
+    }
+
+    if (selectedReason) {
+      state.othersReason = selectedReason;
+    }
   } catch (e) {
     console.error('Error loading rejection reasons:', e);
   }
@@ -1795,6 +1874,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
+              ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -1938,6 +2018,34 @@ async function triggerInfoparkScrape() {
   }
 }
 
+function handleCrawlerSourceChange() {
+  const sourceSelect = document.getElementById('crawlerSourceSelect');
+  const locSelect = document.getElementById('crawlerLocationSelect');
+  if (!sourceSelect || !locSelect) return;
+  const sourceId = sourceSelect.value;
+  if (sourceId === 'infopark') {
+    locSelect.disabled = true;
+    locSelect.title = "Infopark crawler discovers jobs in Kochi, Kerala";
+  } else {
+    locSelect.disabled = false;
+    locSelect.title = "Target Job Location / Area";
+  }
+}
+
+function initCrawlerControls() {
+  const locSelect = document.getElementById('crawlerLocationSelect');
+  if (locSelect) {
+    const saved = localStorage.getItem('reach_selected_crawler_location');
+    if (saved !== null) {
+      locSelect.value = saved;
+    }
+    locSelect.onchange = () => {
+      localStorage.setItem('reach_selected_crawler_location', locSelect.value);
+    };
+  }
+  handleCrawlerSourceChange();
+}
+
 async function fetchScrapers() {
   try {
     const res = await fetch('/api/scrapers');
@@ -1953,30 +2061,88 @@ async function fetchScrapers() {
       `).join('');
       select.onchange = () => {
         localStorage.setItem('reach_selected_crawler_source', select.value);
+        handleCrawlerSourceChange();
       };
+      handleCrawlerSourceChange();
     }
   } catch (err) {
     console.error('Error fetching scrapers:', err);
   }
 }
 
+async function fetchLocations() {
+  try {
+    const res = await fetch('/api/locations');
+    if (!res.ok) return;
+    const data = await res.json();
+    const savedLocations = data.locations || [];
+    const presets = data.presets || [];
+
+    const filterSelect = document.getElementById('selectLocationFilter');
+    if (!filterSelect) return;
+
+    const currentVal = state.locationFilter || 'ALL';
+
+    let html = `<option value="ALL">All Locations</option>`;
+    if (savedLocations.length > 0) {
+      html += `<optgroup label="Locations with Discovered Posts">`;
+      savedLocations.forEach((loc) => {
+        html += `<option value="${escapeHtml(loc)}" ${currentVal === loc ? 'selected' : ''}>📍 ${escapeHtml(loc)}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    const remainingPresets = presets.filter((p) => !savedLocations.includes(p));
+    if (remainingPresets.length > 0) {
+      html += `<optgroup label="Major Job Hubs">`;
+      remainingPresets.forEach((loc) => {
+        html += `<option value="${escapeHtml(loc)}" ${currentVal === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`;
+      });
+      html += `</optgroup>`;
+    }
+
+    filterSelect.innerHTML = html;
+    filterSelect.value = currentVal;
+  } catch (err) {
+    console.error('Error loading locations:', err);
+  }
+}
+
 async function triggerSelectedCrawl() {
   const select = document.getElementById('crawlerSourceSelect');
+  const locSelect = document.getElementById('crawlerLocationSelect');
   const sourceId = select ? select.value : 'linkedin';
   const sourceName = select ? select.options[select.selectedIndex]?.text.trim() : 'Selected Source';
+  const selectedLocation = (locSelect && !locSelect.disabled) ? (locSelect.value || '').trim() : '';
+
+  let searchDetails = '';
+  if (sourceId === 'linkedin') {
+    const baseQuery = (state.config && state.config.search_query) || 'Full stack developer';
+    if (selectedLocation) {
+      searchDetails = `\n\nSearch Query: "${baseQuery} ${selectedLocation}"\nSaved Location: "${selectedLocation}"`;
+    } else {
+      searchDetails = `\n\nSearch Query: "${baseQuery}" (No specific location appended)`;
+    }
+  } else if (sourceId === 'infopark') {
+    searchDetails = `\n\nSource: Infopark Kochi Portal\nSaved Location: "Kochi"`;
+  }
 
   const confirmed = await showConfirm(
     `Start Crawling: ${sourceName}`,
-    `Launch the ${sourceName} scraper? It will run visibly with a 90-second inactivity watchdog and automatically save discovered jobs to the database.`,
+    `Launch the ${sourceName} scraper? It will run visibly with a 90-second inactivity watchdog and automatically save discovered jobs to the database.${searchDetails}`,
     { confirmText: `Start Crawl` }
   );
   if (!confirmed) return;
 
   try {
+    const payload = { source: sourceId };
+    if (selectedLocation && sourceId === 'linkedin') {
+      payload.location = selectedLocation;
+    }
     const res = await fetch('/api/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: sourceId }),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       showToast(`${sourceName} crawler started`, 'info');
@@ -2262,7 +2428,8 @@ function openPostModal(postId) {
   if (metaEl) {
     const email = (post.contact_emails && post.contact_emails[0]) ? `Email: ${post.contact_emails[0]}` : 'No email detected';
     const exp = post.raw_experience ? ` • Exp: ${post.raw_experience}` : '';
-    metaEl.textContent = `${email}${exp}`;
+    const loc = post.location ? ` • 📍 Location: ${post.location}` : '';
+    metaEl.textContent = `${email}${exp}${loc}`;
   }
 
   // Status Banner (for Sent / Cancelled / Scam / Potential Scam applications)
@@ -2354,6 +2521,7 @@ function closePostModal() {
 function openAddJdModal() {
   document.getElementById('manualJdTitle').value = '';
   document.getElementById('manualJdCompany').value = '';
+  if (document.getElementById('manualJdLocation')) document.getElementById('manualJdLocation').value = '';
   document.getElementById('manualJdContent').value = '';
   document.getElementById('modalAddJd').classList.remove('hidden');
 }
@@ -2370,6 +2538,7 @@ async function submitManualJd() {
   }
   const title = (document.getElementById('manualJdTitle').value || '').trim();
   const company = (document.getElementById('manualJdCompany').value || '').trim();
+  const location = (document.getElementById('manualJdLocation')?.value || '').trim();
 
   try {
     const res = await fetch('/api/posts/manual', {
@@ -2379,6 +2548,7 @@ async function submitManualJd() {
         title: title || 'Job Opening',
         company: company || 'Recruiter',
         content: content,
+        location: location || null,
       }),
     });
     if (res.ok) {
@@ -2399,6 +2569,8 @@ async function submitManualJd() {
 function openSettingsModal() {
   document.getElementById('settingResumePath').value = state.config.resume_path || '';
   document.getElementById('settingSearchQuery').value = state.config.search_query || '';
+  const settingLoc = document.getElementById('settingSearchLocation');
+  if (settingLoc) settingLoc.value = state.config.search_location || '';
   document.getElementById('settingChatGptUrl').value = state.config.chatgpt_url || '';
   document.getElementById('settingsModal').classList.remove('hidden');
 }
@@ -2411,6 +2583,7 @@ async function saveSettings() {
   const payload = {
     resume_path: document.getElementById('settingResumePath').value.trim(),
     search_query: document.getElementById('settingSearchQuery').value.trim(),
+    search_location: document.getElementById('settingSearchLocation') ? document.getElementById('settingSearchLocation').value.trim() : '',
     chatgpt_url: document.getElementById('settingChatGptUrl').value.trim(),
   };
 

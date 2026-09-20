@@ -86,6 +86,8 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_potential_spam BOOLEAN DEFAULT FALSE;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS potential_spam_reason TEXT;
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(128);
+    CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
     """
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
@@ -366,18 +368,21 @@ def upsert_post(
             is_scam, is_potential_spam, scam_reason, potential_spam_reason = check_email_spam(emails, cur)
             initial_status = "REJECTED" if is_scam else "DISCOVERED"
             initial_reason = scam_reason if is_scam else None
+            location = (post_data.get("location") or "").strip() or None
 
             insert_sql = """
             INSERT INTO posts (
                 id, post_url, author_name, author_headline, author_profile,
                 posted_date_raw, full_text, contact_emails, external_links,
                 min_experience, max_experience, raw_experience, seniority_level,
-                is_fresher, category, status, rejection_reason, is_potential_spam, potential_spam_reason, created_at, updated_at
+                is_fresher, category, status, rejection_reason, is_potential_spam, potential_spam_reason,
+                location, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                %s, %s, %s, %s, %s, %s,
+                %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
             ON CONFLICT (post_url) DO NOTHING
             RETURNING id;
@@ -402,6 +407,7 @@ def upsert_post(
                 initial_reason,
                 is_potential_spam,
                 potential_spam_reason,
+                location,
             ))
             res = cur.fetchone()
             conn.commit()
@@ -420,6 +426,7 @@ def get_posts(
     order_by: Optional[str] = None,
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
+    location: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -472,6 +479,10 @@ def get_posts(
         where_clauses.append("rejection_reason ILIKE %s")
         params.append(f"%{reason}%")
 
+    if location and location != "ALL":
+        where_clauses.append("location ILIKE %s")
+        params.append(f"%{location}%")
+
     if date_filter:
         df_upper = date_filter.upper()
         if df_upper == "TODAY":
@@ -517,11 +528,12 @@ def get_posts(
                 OR COALESCE(generated_subject, '') ILIKE %s 
                 OR COALESCE(rejection_reason, '') ILIKE %s
                 OR COALESCE(posted_date_raw, '') ILIKE %s
+                OR COALESCE(location, '') ILIKE %s
                 OR COALESCE(array_to_string(contact_emails, ' '), '') ILIKE %s
             )
         """)
         s_param = f"%{search}%"
-        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param])
+        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param, s_param])
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -575,6 +587,7 @@ def get_posts_paginated(
     order_by: Optional[str] = None,
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
+    location: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -627,6 +640,10 @@ def get_posts_paginated(
         where_clauses.append("rejection_reason ILIKE %s")
         params.append(f"%{reason}%")
 
+    if location and location != "ALL":
+        where_clauses.append("location ILIKE %s")
+        params.append(f"%{location}%")
+
     if date_filter:
         df_upper = date_filter.upper()
         if df_upper == "TODAY":
@@ -672,11 +689,12 @@ def get_posts_paginated(
                 OR COALESCE(generated_subject, '') ILIKE %s 
                 OR COALESCE(rejection_reason, '') ILIKE %s
                 OR COALESCE(posted_date_raw, '') ILIKE %s
+                OR COALESCE(location, '') ILIKE %s
                 OR COALESCE(array_to_string(contact_emails, ' '), '') ILIKE %s
             )
         """)
         s_param = f"%{search}%"
-        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param])
+        params.extend([s_param, s_param, s_param, s_param, s_param, s_param, s_param, s_param])
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     count_sql = f"SELECT COUNT(*) FROM posts {where_sql};"
@@ -732,15 +750,41 @@ def get_posts_paginated(
     }
 
 
-def get_distinct_rejection_reasons(db_url: str = DEFAULT_DB_URL) -> List[str]:
-    """Retrieve list of distinct cancellation/rejection reasons for dropdown filtering in UI."""
+def get_rejection_reasons_with_counts(db_url: str = DEFAULT_DB_URL) -> List[Dict[str, Any]]:
+    """Retrieve distinct cancellation/rejection reasons with their post counts for dropdown filtering in UI."""
     sql = """
-        SELECT DISTINCT TRIM(rejection_reason) AS reason
+        SELECT TRIM(rejection_reason) AS reason, COUNT(*) AS count
         FROM posts
         WHERE status = 'REJECTED'
           AND rejection_reason IS NOT NULL
           AND TRIM(rejection_reason) != ''
-        ORDER BY reason ASC;
+        GROUP BY TRIM(rejection_reason)
+        ORDER BY count DESC, reason ASC;
+    """
+    try:
+        with get_connection(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                rows = cur.fetchall()
+                return [{"reason": r[0], "count": int(r[1])} for r in rows if r[0]]
+    except Exception as e:
+        print(f"Error fetching rejection reasons with counts: {e}")
+        return []
+
+
+def get_distinct_rejection_reasons(db_url: str = DEFAULT_DB_URL) -> List[str]:
+    """Retrieve list of distinct cancellation/rejection reasons for dropdown filtering in UI."""
+    items = get_rejection_reasons_with_counts(db_url)
+    return [item["reason"] for item in items]
+
+
+def get_distinct_locations(db_url: str = DEFAULT_DB_URL) -> List[str]:
+    """Retrieve list of distinct job locations saved in the database."""
+    sql = """
+        SELECT DISTINCT TRIM(location) AS loc
+        FROM posts
+        WHERE location IS NOT NULL AND TRIM(location) != ''
+        ORDER BY loc ASC;
     """
     try:
         with get_connection(db_url) as conn:
@@ -749,7 +793,7 @@ def get_distinct_rejection_reasons(db_url: str = DEFAULT_DB_URL) -> List[str]:
                 rows = cur.fetchall()
                 return [r[0] for r in rows if r[0]]
     except Exception as e:
-        print(f"Error fetching distinct rejection reasons: {e}")
+        print(f"Error fetching distinct locations: {e}")
         return []
 
 

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=2.2" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -46,9 +46,82 @@
       <!-- Extensible Crawler Source Selector & Trigger -->
       <div class="crawler-control-group">
         <div class="crawler-select-wrapper">
-          <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source">
+          <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source" onchange="handleCrawlerSourceChange()">
             <option value="linkedin">💼 LinkedIn Posts</option>
             <option value="infopark">🏢 Infopark Kochi</option>
+          </select>
+        </div>
+        <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
+          <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
+            <option value="" selected>📍 Anywhere (No Area Filter)</option>
+            <optgroup label="Middle East">
+              <option value="Dubai">🇦🇪 Dubai</option>
+              <option value="Abu Dhabi">🇦🇪 Abu Dhabi</option>
+              <option value="Riyadh">🇸🇦 Riyadh</option>
+              <option value="Doha">🇶🇦 Doha</option>
+              <option value="Manama">🇧🇭 Manama</option>
+              <option value="Kuwait City">🇰🇼 Kuwait City</option>
+              <option value="Muscat">🇴🇲 Muscat</option>
+              <option value="Tel Aviv">🇮🇱 Tel Aviv</option>
+            </optgroup>
+            <optgroup label="India">
+              <option value="Bengaluru">🇮🇳 Bengaluru</option>
+              <option value="Hyderabad">🇮🇳 Hyderabad</option>
+              <option value="Pune">🇮🇳 Pune</option>
+              <option value="Chennai">🇮🇳 Chennai</option>
+              <option value="Mumbai">🇮🇳 Mumbai</option>
+              <option value="Delhi">🇮🇳 Delhi</option>
+              <option value="Kochi">🇮🇳 Kochi</option>
+            </optgroup>
+            <optgroup label="North America">
+              <option value="San Francisco">🇺🇸 San Francisco</option>
+              <option value="Seattle">🇺🇸 Seattle</option>
+              <option value="New York">🇺🇸 New York</option>
+              <option value="Boston">🇺🇸 Boston</option>
+              <option value="Austin">🇺🇸 Austin</option>
+              <option value="Los Angeles">🇺🇸 Los Angeles</option>
+              <option value="Toronto">🇨🇦 Toronto</option>
+              <option value="Vancouver">🇨🇦 Vancouver</option>
+              <option value="Montreal">🇨🇦 Montreal</option>
+            </optgroup>
+            <optgroup label="Europe">
+              <option value="London">🇬🇧 London</option>
+              <option value="Dublin">🇮🇪 Dublin</option>
+              <option value="Amsterdam">🇳🇱 Amsterdam</option>
+              <option value="Berlin">🇩🇪 Berlin</option>
+              <option value="Paris">🇫🇷 Paris</option>
+              <option value="Stockholm">🇸🇪 Stockholm</option>
+              <option value="Copenhagen">🇩🇰 Copenhagen</option>
+              <option value="Zurich">🇨🇭 Zurich</option>
+              <option value="Munich">🇩🇪 Munich</option>
+            </optgroup>
+            <optgroup label="Asia Pacific">
+              <option value="Singapore">🇸🇬 Singapore</option>
+              <option value="Tokyo">🇯🇵 Tokyo</option>
+              <option value="Seoul">🇰🇷 Seoul</option>
+              <option value="Beijing">🇨🇳 Beijing</option>
+              <option value="Shanghai">🇨🇳 Shanghai</option>
+              <option value="Shenzhen">🇨🇳 Shenzhen</option>
+              <option value="Hong Kong">🇭🇰 Hong Kong</option>
+            </optgroup>
+            <optgroup label="Oceania">
+              <option value="Sydney">🇦🇺 Sydney</option>
+              <option value="Melbourne">🇦🇺 Melbourne</option>
+              <option value="Auckland">🇳🇿 Auckland</option>
+            </optgroup>
+            <optgroup label="Latin America">
+              <option value="São Paulo">🇧🇷 São Paulo</option>
+              <option value="Mexico City">🇲🇽 Mexico City</option>
+              <option value="Buenos Aires">🇦🇷 Buenos Aires</option>
+            </optgroup>
+            <optgroup label="Africa">
+              <option value="Cape Town">🇿🇦 Cape Town</option>
+              <option value="Johannesburg">🇿🇦 Johannesburg</option>
+              <option value="Nairobi">🇰🇪 Nairobi</option>
+            </optgroup>
+            <optgroup label="Work Mode">
+              <option value="Remote">🌐 Remote</option>
+            </optgroup>
           </select>
         </div>
         <button id="btnStartCrawl" class="btn btn-primary btn-crawl" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
@@ -178,12 +251,21 @@
               <option value="ALL">All Status (Pending First)</option>
               <option value="GENERATED">✓ Already Generated</option>
               <option value="SENT">✉ Sent Applications</option>
+              <option value="REJECTED">🚫 Cancelled / Screened</option>
             </select>
 
             <select id="selectCategory" class="select-clean" onchange="applyFilters()">
               <option value="EMAIL_OUTREACH">Direct Email Outreach</option>
               <option value="DRAFT_PORTAL">Drafts & Portals</option>
               <option value="ALL">All Categories</option>
+            </select>
+
+            <select id="selectLocationFilter" class="select-clean" onchange="applyFilters()" title="Filter by Job Location">
+              <option value="ALL" selected>All Locations</option>
+            </select>
+
+            <select id="selectReasonFilterDiscovered" class="select-clean" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
+              <option value="ALL" selected>All Reasons</option>
             </select>
 
             <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
@@ -221,17 +303,17 @@
                 <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
               </th>
               <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
-                <span>Recruiter / Author</span> <span class="sort-indicator" id="sortAuthorIndicator"></span>
+                <span>Recruiter / Author</span> <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
               </th>
               <th width="115" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
-                <span>Experience</span> <span class="sort-indicator" id="sortExpIndicator"></span>
+                <span>Experience</span> <span class="sort-indicator" id="sortExpIndicator">↕</span>
               </th>
               <th width="90" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
-                <span>Date</span> <span class="sort-indicator" id="sortDateIndicator"></span>
+                <span>Date</span> <span class="sort-indicator" id="sortDateIndicator">↕</span>
               </th>
               <th width="190">Contact Email</th>
               <th>Post Preview</th>
-              <th width="200" style="text-align: right;">Action</th>
+              <th width="180" style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="postsTableBody">
@@ -676,7 +758,15 @@
             <span>Target LinkedIn Search Keywords:</span>
             <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
           </label>
-          <input type="text" id="settingSearchQuery" class="input-clean" />
+          <input type="text" id="settingSearchQuery" class="input-clean" placeholder="e.g. Full stack developer" />
+        </div>
+
+        <div class="form-block">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Default Target Job Location / Area:</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">🗄️ Database</span>
+          </label>
+          <input type="text" id="settingSearchLocation" class="input-clean" placeholder="e.g. Dubai, Bengaluru, or leave blank for anywhere" />
         </div>
 
         <div class="headed-info-card">
@@ -713,6 +803,10 @@
         <div class="form-block">
           <label>Company / Author Name (Optional):</label>
           <input type="text" id="manualJdCompany" class="input-clean" placeholder="e.g. Acme Corp" />
+        </div>
+        <div class="form-block">
+          <label>Job Location / City (Optional):</label>
+          <input type="text" id="manualJdLocation" class="input-clean" placeholder="e.g. Dubai, Kochi, Bengaluru..." />
         </div>
         <div class="form-block">
           <label>Job Description Text <span style="color:var(--danger-color);">*</span>:</label>
@@ -827,6 +921,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2.2"></script>
 </body>
 </html>

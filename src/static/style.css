@@ -275,6 +275,23 @@ body {
     color: #f1f5f9;
   }
 
+  .crawler-source-select optgroup {
+    background: #0b1120;
+    color: #94a3b8;
+    font-weight: 700;
+  }
+
+  .crawler-location-select {
+    max-width: 170px;
+  }
+
+  .crawler-location-select:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.04);
+  }
+
   .btn-crawl {
     padding: 0.42rem 0.95rem;
     font-size: 0.82rem;
@@ -973,6 +990,17 @@ body {
   .badge-none {
     background: rgba(100, 116, 139, 0.15);
     color: #94a3b8;
+  }
+
+  .badge-location {
+    background: rgba(14, 165, 233, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 165, 233, 0.3);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 600;
   }
 
   .table-actions {
@@ -2992,16 +3020,26 @@ body {
   .sortable-th {
     cursor: pointer;
     user-select: none;
-    transition: color 0.15s ease;
+    transition: all 0.15s ease;
   }
   .sortable-th:hover {
     color: #fff !important;
+    background: rgba(255, 255, 255, 0.04);
   }
   .sort-indicator {
     display: inline-block;
-    font-size: 0.68rem;
-    margin-left: 0.25rem;
-    color: var(--primary-color);
+    font-size: 0.74rem;
+    margin-left: 0.35rem;
+    color: rgba(255, 255, 255, 0.35);
+    transition: all 0.15s ease;
+    vertical-align: middle;
+  }
+  .sortable-th:hover .sort-indicator {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .sort-indicator.active {
+    color: var(--accent-cyan) !important;
+    font-weight: 700;
   }
 
   /* Date Badges */

@@ -370,6 +370,7 @@ def scrape_infopark_jobs(
                 "detected_links": [detail_url],
                 "experience": exp_info,
                 "category": category,
+                "location": "Kochi",
             }
 
             # 5. Pre-screen by role title before ChatGPT (saves API/browser time)

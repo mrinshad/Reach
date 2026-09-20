@@ -30,6 +30,8 @@ from src.db import (
     move_post_to_review,
     upsert_post,
     get_distinct_rejection_reasons,
+    get_rejection_reasons_with_counts,
+    get_distinct_locations,
 )
 from src.experience_extractor import extract_experience
 from src.config import load_config, save_config
@@ -54,6 +56,17 @@ app = FastAPI(title="Reach Automation Hub", version="2.0.0")
 # Mount static files
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def add_cache_control_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path.startswith("/static/") or path == "/" or path == "/index.html":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 
 # Pydantic models for request bodies
@@ -88,11 +101,13 @@ class ManualPostPayload(BaseModel):
     content: Optional[str] = None
     contact_emails: Optional[List[str]] = None
     post_url: Optional[str] = None
+    location: Optional[str] = None
 
 
 class SettingsPayload(BaseModel):
     resume_path: Optional[str] = None
     search_query: Optional[str] = None
+    search_location: Optional[str] = None
     chatgpt_url: Optional[str] = None
     pacing_min_seconds: Optional[float] = None
     pacing_max_seconds: Optional[float] = None
@@ -100,6 +115,21 @@ class SettingsPayload(BaseModel):
 
 class ScrapePayload(BaseModel):
     source: Optional[str] = "linkedin"
+    location: Optional[str] = None
+    search_query: Optional[str] = None
+
+
+MAJOR_JOB_HUBS = [
+    "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",
+    "Toronto", "Vancouver", "Montreal",
+    "London", "Dublin", "Amsterdam", "Berlin", "Paris", "Stockholm", "Copenhagen", "Zurich", "Munich",
+    "Singapore", "Tokyo", "Seoul", "Beijing", "Shanghai", "Shenzhen", "Hong Kong",
+    "Bengaluru", "Hyderabad", "Pune", "Chennai", "Mumbai", "Delhi", "Kochi",
+    "Dubai", "Abu Dhabi", "Riyadh", "Doha", "Manama", "Kuwait City", "Muscat", "Tel Aviv",
+    "Sydney", "Melbourne", "Auckland",
+    "São Paulo", "Mexico City", "Buenos Aires",
+    "Cape Town", "Johannesburg", "Nairobi", "Remote"
+]
 
 
 @app.api_route("/", methods=["GET", "HEAD"])
@@ -176,6 +206,7 @@ def api_create_manual_post(payload: ManualPostPayload):
         "detected_links": [post_url] if post_url.startswith("http") else [],
         "experience": exp_info,
         "category": "EMAIL_OUTREACH" if emails else "DRAFT_PORTAL",
+        "location": payload.location.strip() if payload.location else None,
     }
 
     try:
@@ -219,10 +250,11 @@ def api_get_posts(
     order_by: Optional[str] = None,
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
+    location: Optional[str] = None,
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """Retrieve posts with filtering, search, sorting, and pagination."""
+    """Retrieve posts with filtering, search, sorting, location, and pagination."""
     try:
         limit_val = getattr(limit, "default", limit)
         offset_val = getattr(offset, "default", offset)
@@ -240,6 +272,7 @@ def api_get_posts(
             order_by=order_by,
             reason=reason,
             date_filter=date_filter,
+            location=location,
             limit=safe_limit,
             offset=safe_offset,
         )
@@ -248,12 +281,23 @@ def api_get_posts(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/locations")
+def api_get_locations():
+    """Retrieve distinct locations saved in DB and predefined major job hubs."""
+    try:
+        saved_locs = get_distinct_locations()
+        return {"locations": saved_locs, "presets": MAJOR_JOB_HUBS}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/reasons")
 def api_get_reasons():
-    """Retrieve distinct cancellation/rejection reasons for filtering."""
+    """Retrieve distinct cancellation/rejection reasons with counts for filtering."""
     try:
-        reasons = get_distinct_rejection_reasons()
-        return {"reasons": reasons}
+        counts = get_rejection_reasons_with_counts()
+        reasons = [c["reason"] for c in counts]
+        return {"reasons": reasons, "counts": counts}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -434,13 +478,16 @@ def api_trigger_scrape_infopark():
 
 
 @app.post("/api/scrape/linkedin")
-def api_trigger_scrape_linkedin():
-    """Trigger the LinkedIn scraper in headed Firefox."""
+def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
+    """Trigger the LinkedIn scraper in headed Firefox with optional location and query."""
     current_state = task_manager.get_state()
     if current_state["status"] == "running":
         raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
 
-    thread = threading.Thread(target=run_linkedin_scraper, daemon=True)
+    query = payload.search_query if payload else None
+    loc = payload.location if payload else None
+
+    thread = threading.Thread(target=run_linkedin_scraper, args=(query, loc), daemon=True)
     thread.start()
     return {"success": True, "message": "LinkedIn scraper started in headed Firefox."}
 
@@ -453,10 +500,15 @@ def api_get_scrapers():
 
 @app.post("/api/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Trigger scraper by source using the extensible scraper registry."""
+    """Trigger scraper by source using the extensible scraper registry with optional query and location."""
     src = "linkedin"
-    if payload and payload.source:
-        src = payload.source
+    query = None
+    loc = None
+    if payload:
+        if payload.source:
+            src = payload.source
+        query = payload.search_query
+        loc = payload.location
     elif source:
         src = source
 
@@ -465,7 +517,7 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
         raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
 
     try:
-        thread = threading.Thread(target=run_scraper_by_source, args=(src,), daemon=True)
+        thread = threading.Thread(target=run_scraper_by_source, args=(src, query, loc), daemon=True)
         thread.start()
         return {"success": True, "message": f"Scraper for '{src}' started."}
     except ValueError as e:
