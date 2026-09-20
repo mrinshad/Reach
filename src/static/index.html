@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.2" />
+  <link rel="stylesheet" href="/static/style.css?v=2.3" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -228,6 +228,10 @@
               <span>+ Add JD</span>
             </button>
 
+            <button class="btn btn-outline btn-direct-outreach" onclick="openDirectOutreachModal()" title="Direct Opportunity Outreach">
+              <span>✉ Direct Outreach</span>
+            </button>
+
             <!-- Batch Action Trigger -->
             <button class="btn btn-primary btn-sm hidden" id="btnBatchGenerate" onclick="generateBatchChatGPT()">
               🤖 Generate (<span id="batchCountBadge">0</span>)
@@ -244,6 +248,7 @@
               <option value="INFOPARK">⚡ Infopark Kochi</option>
               <option value="LINKEDIN">in LinkedIn</option>
               <option value="MANUAL">✍️ Manual JDs</option>
+              <option value="DIRECT">✉ Direct Outreach</option>
             </select>
 
             <select id="selectGenStatus" class="select-clean" onchange="applyFilters()" title="Filter by generation status">
@@ -820,6 +825,62 @@
     </div>
   </div>
 
+  <!-- Modal: Direct Opportunity Outreach -->
+  <div class="modal-overlay hidden" id="modalDirectOutreach" onclick="if (event.target === this) closeDirectOutreachModal()">
+    <div class="modal-box modal-md">
+      <div class="modal-top">
+        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+          <h3 style="font-size: 1.05rem; font-weight: 700; color: #818cf8; display: flex; align-items: center; gap: 0.4rem;">
+            <span>✉</span> Direct Opportunity Outreach
+          </h3>
+          <span style="font-size: 0.78rem; color: var(--text-muted);">Send speculative cold application directly to a recruiter or company contact</span>
+        </div>
+        <button class="close-x" onclick="closeDirectOutreachModal()">×</button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem 1.5rem;">
+        <div class="form-block">
+          <label style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>Recipient Email <span style="color: var(--danger-color);">*</span></span>
+          </label>
+          <input type="email" id="directOutreachEmail" class="input-clean" placeholder="recruiter@company.com" required />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-block">
+            <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Company / Recruiter (Optional):</label>
+            <input type="text" id="directOutreachCompany" class="input-clean" placeholder="e.g. Acme Innovations" />
+          </div>
+          <div class="form-block">
+            <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Location (Optional):</label>
+            <input type="text" id="directOutreachLocation" class="input-clean" placeholder="e.g. Dubai, Bengaluru..." />
+          </div>
+        </div>
+        <div class="form-block">
+          <label style="font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">Subject Line:</label>
+          <input type="text" id="directOutreachSubject" class="input-clean" />
+        </div>
+        <div class="form-block">
+          <label style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">
+            <span>Email Body:</span>
+            <button type="button" class="btn-link" style="font-size: 0.75rem; color: #818cf8; background: none; border: none; cursor: pointer; text-decoration: underline;" onclick="resetDirectOutreachBody()">Reset to Default</button>
+          </label>
+          <textarea id="directOutreachBody" rows="9" class="textarea-clean" style="font-size: 0.82rem; line-height: 1.45;"></textarea>
+        </div>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 0.35rem;">
+          <span>📎</span> Active configured resume will be automatically attached in Gmail Playwright session.
+        </p>
+      </div>
+      <div class="modal-bottom" style="justify-content: flex-end; align-items: center; gap: 0.65rem;">
+        <button class="btn btn-outline btn-sm" onclick="closeDirectOutreachModal()">Cancel</button>
+        <button class="btn btn-outline btn-sm" onclick="submitDirectOutreach('draft')" title="Create draft in Gmail and keep Firefox window open on screen for review">
+          👁️ Open Draft in Gmail
+        </button>
+        <button class="btn btn-primary btn-sm" style="background: #6366f1; border-color: #6366f1;" onclick="submitDirectOutreach('send')" title="Send directly via Playwright automated Gmail session">
+          ⚡ Send via Gmail Directly
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Cancellation / Spam Reason Modal with Pre-made Suggestions -->
   <div class="modal-overlay hidden" id="cancelReasonModal" onclick="if (event.target === this) closeCancelReasonModal()">
     <div class="modal-box modal-md">
@@ -921,6 +982,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=2.2"></script>
+  <script src="/static/app.js?v=2.3"></script>
 </body>
 </html>

@@ -434,6 +434,27 @@ body {
     transform: translateY(-1px);
   }
 
+  .btn-direct-outreach {
+    background: rgba(14, 165, 233, 0.12);
+    border: 1px solid rgba(14, 165, 233, 0.3);
+    color: #7dd3fc;
+    padding: 0.42rem 0.85rem;
+    font-size: 0.8rem;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-direct-outreach:hover {
+    background: rgba(14, 165, 233, 0.25);
+    border-color: rgba(14, 165, 233, 0.6);
+    color: #fff;
+    transform: translateY(-1px);
+  }
+
   /* Source Badges */
   .source-pill {
     display: inline-flex;
@@ -463,6 +484,12 @@ body {
     background: rgba(16, 185, 129, 0.15);
     color: #34d399;
     border: 1px solid rgba(16, 185, 129, 0.3);
+  }
+
+  .source-direct {
+    background: rgba(14, 165, 233, 0.15);
+    color: #7dd3fc;
+    border: 1px solid rgba(14, 165, 233, 0.3);
   }
 
   .btn-sm {

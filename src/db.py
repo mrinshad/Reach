@@ -447,9 +447,12 @@ def get_posts(
         elif src_upper == "MANUAL":
             where_clauses.append("(COALESCE(post_url, '') LIKE %s OR COALESCE(post_url, '') LIKE %s)")
             params.extend(["manual://%", "%manual%"])
+        elif src_upper == "DIRECT":
+            where_clauses.append("(COALESCE(post_url, '') LIKE %s OR COALESCE(post_url, '') LIKE %s)")
+            params.extend(["direct://%", "%direct%"])
         elif src_upper == "LINKEDIN":
-            where_clauses.append("(COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s)")
-            params.extend(["%infopark.in%", "manual://%", "%manual%"])
+            where_clauses.append("(COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s)")
+            params.extend(["%infopark.in%", "manual://%", "%manual%", "direct://%", "%direct%"])
 
     if status and status != "ALL":
         if status in ("OTHERS", "HISTORY", "ARCHIVE"):
@@ -608,9 +611,12 @@ def get_posts_paginated(
         elif src_upper == "MANUAL":
             where_clauses.append("(COALESCE(post_url, '') LIKE %s OR COALESCE(post_url, '') LIKE %s)")
             params.extend(["manual://%", "%manual%"])
+        elif src_upper == "DIRECT":
+            where_clauses.append("(COALESCE(post_url, '') LIKE %s OR COALESCE(post_url, '') LIKE %s)")
+            params.extend(["direct://%", "%direct%"])
         elif src_upper == "LINKEDIN":
-            where_clauses.append("(COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s)")
-            params.extend(["%infopark.in%", "manual://%", "%manual%"])
+            where_clauses.append("(COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s AND COALESCE(post_url, '') NOT LIKE %s)")
+            params.extend(["%infopark.in%", "manual://%", "%manual%", "direct://%", "%direct%"])
 
     if status and status != "ALL":
         if status in ("OTHERS", "HISTORY", "ARCHIVE"):
@@ -1139,6 +1145,7 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                     CASE 
                         WHEN post_url LIKE 'https://infopark.in%' THEN 'Infopark Kochi'
                         WHEN post_url LIKE 'manual://%' THEN 'Manual Input'
+                        WHEN post_url LIKE 'direct://%' THEN 'Direct Outreach'
                         ELSE 'LinkedIn'
                     END AS source,
                     COUNT(*) AS total_scraped,

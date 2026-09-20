@@ -41,6 +41,24 @@ const state = {
   discoveredReason: 'ALL',
 };
 
+const DEFAULT_OPPORTUNITY_SUBJECT = "Full-Stack Software Engineer – Job Opportunities";
+const DEFAULT_OPPORTUNITY_BODY = `Hi,
+
+I’m Mohammed Rinshad, a Full-Stack Software Engineer with 3+ years of experience in web and enterprise application development.
+
+My experience includes React, Next.js, Node.js, TypeScript, .NET Core, REST APIs, PostgreSQL, SQL Server, Azure, GCP, CI/CD, authentication, RBAC, and database design. I’ve worked on ERP, accounting, education, and enterprise applications, including both frontend and backend development.
+
+I’m currently looking for opportunities in Frontend, Backend, Full-Stack, DevOps, or Cloud Engineering. I’m open to relocating for the right opportunity and am also interested in remote roles.
+
+I’ve attached my resume for reference. If there are any current or upcoming openings that match my background, I’d be grateful to be considered.
+
+Regards,
+Mohammed Rinshad P
++91 98956 12423
+rinshadmorayur09@gmail.com
+LinkedIn: linkedin.com/in/mrinshad
+GitHub: github.com/mrinshad`;
+
 // --- Custom Dialog System (Replaces Native Alert & Confirm) ---
 let dialogResolver = null;
 
@@ -720,7 +738,9 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
   }
 
   let badge = '';
-  if (url.includes('infopark.in')) {
+  if (url.startsWith('direct://') || url.includes('direct')) {
+    badge = `<span class="source-pill source-direct" title="Source: Direct Opportunity Outreach">✉ Direct Outreach</span>`;
+  } else if (url.includes('infopark.in')) {
     badge = `<span class="source-pill source-infopark" title="Source: Infopark Kochi Portal">⚡ Infopark Kochi</span>`;
   } else if (url.startsWith('manual://') || url.includes('manual')) {
     badge = `<span class="source-pill source-manual" title="Source: Manually Added">✍️ Manual</span>`;
@@ -2562,6 +2582,76 @@ async function submitManualJd() {
     }
   } catch (err) {
     showAlert('Error', err.message);
+  }
+}
+
+// --- Direct Opportunity Outreach Modal ---
+function openDirectOutreachModal() {
+  const emailInput = document.getElementById('directOutreachEmail');
+  const companyInput = document.getElementById('directOutreachCompany');
+  const locInput = document.getElementById('directOutreachLocation');
+  const subInput = document.getElementById('directOutreachSubject');
+  const bodyInput = document.getElementById('directOutreachBody');
+
+  if (emailInput) emailInput.value = '';
+  if (companyInput) companyInput.value = '';
+  if (locInput) locInput.value = '';
+  if (subInput) subInput.value = DEFAULT_OPPORTUNITY_SUBJECT;
+  if (bodyInput) bodyInput.value = DEFAULT_OPPORTUNITY_BODY;
+
+  document.getElementById('modalDirectOutreach')?.classList.remove('hidden');
+  if (emailInput) emailInput.focus();
+}
+
+function closeDirectOutreachModal() {
+  document.getElementById('modalDirectOutreach')?.classList.add('hidden');
+}
+
+function resetDirectOutreachBody() {
+  const subInput = document.getElementById('directOutreachSubject');
+  const bodyInput = document.getElementById('directOutreachBody');
+  if (subInput) subInput.value = DEFAULT_OPPORTUNITY_SUBJECT;
+  if (bodyInput) bodyInput.value = DEFAULT_OPPORTUNITY_BODY;
+}
+
+async function submitDirectOutreach(mode = 'send') {
+  const email = (document.getElementById('directOutreachEmail')?.value || '').trim();
+  if (!email || !email.includes('@')) {
+    showAlert('Invalid Recipient', 'Please enter a valid recipient email address.');
+    return;
+  }
+
+  const company = (document.getElementById('directOutreachCompany')?.value || '').trim();
+  const location = (document.getElementById('directOutreachLocation')?.value || '').trim();
+  const subject = (document.getElementById('directOutreachSubject')?.value || '').trim() || DEFAULT_OPPORTUNITY_SUBJECT;
+  const body = (document.getElementById('directOutreachBody')?.value || '').trim() || DEFAULT_OPPORTUNITY_BODY;
+
+  try {
+    const res = await fetch('/api/direct-outreach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipient_email: email,
+        company_name: company || null,
+        location: location || null,
+        subject: subject,
+        body: body,
+        mode: mode,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      closeDirectOutreachModal();
+      showToast(data.message || `✓ Outreach dispatched to ${email}`, 'success');
+      startTaskPolling();
+      loadDashboardData();
+    } else {
+      const err = await res.json();
+      showAlert('Direct Outreach Error', err.detail || 'Failed to dispatch direct outreach.');
+    }
+  } catch (err) {
+    showAlert('Network Error', err.message);
   }
 }
 

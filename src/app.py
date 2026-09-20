@@ -131,6 +131,33 @@ MAJOR_JOB_HUBS = [
     "Cape Town", "Johannesburg", "Nairobi", "Remote"
 ]
 
+DEFAULT_OPPORTUNITY_SUBJECT = "Full-Stack Software Engineer – Job Opportunities"
+DEFAULT_OPPORTUNITY_BODY = """Hi,
+
+I’m Mohammed Rinshad, a Full-Stack Software Engineer with 3+ years of experience in web and enterprise application development.
+
+My experience includes React, Next.js, Node.js, TypeScript, .NET Core, REST APIs, PostgreSQL, SQL Server, Azure, GCP, CI/CD, authentication, RBAC, and database design. I’ve worked on ERP, accounting, education, and enterprise applications, including both frontend and backend development.
+
+I’m currently looking for opportunities in Frontend, Backend, Full-Stack, DevOps, or Cloud Engineering. I’m open to relocating for the right opportunity and am also interested in remote roles.
+
+I’ve attached my resume for reference. If there are any current or upcoming openings that match my background, I’d be grateful to be considered.
+
+Regards,
+Mohammed Rinshad P
++91 98956 12423
+rinshadmorayur09@gmail.com
+LinkedIn: linkedin.com/in/mrinshad
+GitHub: github.com/mrinshad"""
+
+
+class DirectOutreachPayload(BaseModel):
+    recipient_email: str
+    company_name: Optional[str] = None
+    location: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    mode: Optional[str] = "send"
+
 
 @app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
@@ -462,6 +489,74 @@ def api_send_batch(payload: SendBatchPayload):
     thread = threading.Thread(target=run_send_batch_drafts, args=(payload.post_ids,), daemon=True)
     thread.start()
     return {"success": True, "message": f"Started direct sending for {len(payload.post_ids)} applications."}
+
+
+@app.post("/api/direct-outreach")
+def api_direct_outreach(payload: DirectOutreachPayload):
+    """
+    Direct opportunity cold outreach.
+    Persists a record in PostgreSQL and triggers Gmail automated sending or draft review.
+    """
+    recipient = (payload.recipient_email or "").strip()
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=400, detail="A valid recipient email address is required.")
+
+    current_state = task_manager.get_state()
+    if current_state["status"] == "running":
+        raise HTTPException(status_code=409, detail=f"Another task is already running: {current_state['task_name']}")
+
+    company = (payload.company_name or "").strip()
+    author_name = company if company else recipient
+    subject = (payload.subject or "").strip() or DEFAULT_OPPORTUNITY_SUBJECT
+    body = (payload.body or "").strip() or DEFAULT_OPPORTUNITY_BODY
+    location = (payload.location or "").strip() or None
+    mode = (payload.mode or "send").strip().lower()
+
+    unique_token = uuid.uuid4().hex[:12]
+    post_url = f"direct://{unique_token}"
+
+    post_data = {
+        "author_name": author_name,
+        "author_headline": "Direct Opportunity Outreach",
+        "author_profile": "",
+        "posted_date_raw": datetime.now().strftime("%d-%m-%Y"),
+        "full_text": f"Direct opportunity outreach to {author_name} ({recipient}).\n\nSubject: {subject}\n\n{body}",
+        "contact_emails": [recipient],
+        "external_links": [],
+        "min_experience": 3.0,
+        "max_experience": None,
+        "raw_experience": "3+ years",
+        "seniority_level": "Mid",
+        "is_fresher": False,
+        "category": "EMAIL_OUTREACH",
+        "status": "EMAIL_GENERATED",
+        "generated_subject": subject,
+        "generated_body": body,
+        "post_url": post_url,
+        "location": location,
+    }
+
+    try:
+        post_id, _ = upsert_post(post_data)
+
+        if mode == "draft":
+            thread = threading.Thread(target=run_open_gmail_draft, args=(post_id,), daemon=True)
+            thread.start()
+            return {
+                "success": True,
+                "post_id": post_id,
+                "message": f"Opening Gmail draft for {recipient} in headed Firefox...",
+            }
+        else:
+            thread = threading.Thread(target=run_send_single_draft, args=(post_id,), daemon=True)
+            thread.start()
+            return {
+                "success": True,
+                "post_id": post_id,
+                "message": f"Sending opportunity email to {recipient} directly via Gmail...",
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
