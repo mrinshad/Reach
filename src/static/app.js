@@ -789,16 +789,8 @@ function renderPostsTable() {
       expClass = min < 3 ? 'badge-mid' : 'badge-senior';
     }
 
-    // Date cell
-    let dateStr = post.posted_date_raw || '';
-    if (!dateStr && post.created_at) {
-      try {
-        const d = new Date(post.created_at);
-        dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      } catch (e) {
-        dateStr = '';
-      }
-    }
+    // Date cell: dd/mm/yyyy hh:mm AM/PM (1 hr)
+    const dateStr = formatPostDateTimeWithRelative(post);
     const dateHtml = `<span class="table-date-badge" title="${escapeHtml(post.posted_date_raw || post.created_at || '')}">${escapeHtml(dateStr || '—')}</span>`;
 
     // Email cell
@@ -1867,9 +1859,7 @@ async function fetchSentPosts() {
       };
 
       const email = (post.contact_emails && post.contact_emails[0]) || 'N/A';
-      const updatedDate = post.updated_at
-        ? new Date(post.updated_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-        : 'Recently';
+      const updatedDate = formatDateTime(post.sent_at || post.updated_at || post.created_at);
 
       const isSent = post.status === 'SENT';
       const isRejected = post.status === 'REJECTED';
@@ -1909,6 +1899,13 @@ async function fetchSentPosts() {
         <td style="font-size: 0.76rem; color: var(--text-muted); white-space: nowrap;">${updatedDate}</td>
         <td style="text-align: right;">
           <div class="table-actions" style="justify-content: flex-end; gap: 0.35rem;">
+            ${
+              post.post_url && !post.post_url.startsWith('manual://') && !post.post_url.startsWith('direct://')
+                ? `<a href="${post.post_url}" target="_blank" class="icon-btn sm" title="Open source post">
+                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                   </a>`
+                : ''
+            }
             <button class="btn btn-outline btn-sm" onclick="openPostModal('${post.id}')" title="View details">
               <span>View</span>
             </button>
@@ -1916,13 +1913,6 @@ async function fetchSentPosts() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               <span>Restore</span>
             </button>
-            ${
-              post.post_url && !post.post_url.startsWith('manual://')
-                ? `<a href="${post.post_url}" target="_blank" class="icon-btn sm" title="Open source post">
-                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                   </a>`
-                : ''
-            }
           </div>
         </td>
       `;
@@ -2704,6 +2694,118 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+function formatRelativeLabel(raw) {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const match = trimmed.match(/^(\d+)\s*([a-zA-Z]+)$/);
+  if (!match) return trimmed;
+  const num = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  if (unit === 'h' || unit.startsWith('hr')) {
+    return num === 1 ? '1 hr' : `${num} hrs`;
+  }
+  if (unit === 'm' || unit.startsWith('min')) {
+    return num === 1 ? '1 min' : `${num} mins`;
+  }
+  if (unit === 'd' || unit.startsWith('day')) {
+    return num === 1 ? '1 day' : `${num} days`;
+  }
+  if (unit === 'w' || unit.startsWith('wk') || unit.startsWith('week')) {
+    return num === 1 ? '1 week' : `${num} weeks`;
+  }
+  if (unit === 'mo' || unit.startsWith('mon') || unit.startsWith('month')) {
+    return num === 1 ? '1 mo' : `${num} mos`;
+  }
+  if (unit === 'y' || unit.startsWith('yr') || unit.startsWith('year')) {
+    return num === 1 ? '1 yr' : `${num} yrs`;
+  }
+  return trimmed;
+}
+
+function formatPostDateTimeWithRelative(post) {
+  if (!post) return '—';
+
+  let baseDate = null;
+  if (post.created_at) {
+    baseDate = new Date(post.created_at);
+  }
+  if (!baseDate || isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  const raw = (post.posted_date_raw || '').trim();
+  let computedDate = new Date(baseDate.getTime());
+  let relativeLabel = '';
+
+  if (raw) {
+    // If raw is already a date like "20-09-2026" or "2026-09-20"
+    if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(raw)) {
+      relativeLabel = '';
+    } else {
+      const match = raw.match(/^(\d+)\s*([a-zA-Z]+)$/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        const unit = match[2].toLowerCase();
+        let msOffset = 0;
+
+        if (unit.startsWith('m') && !unit.startsWith('mo')) {
+          msOffset = val * 60 * 1000;
+        } else if (unit.startsWith('h')) {
+          msOffset = val * 60 * 60 * 1000;
+        } else if (unit.startsWith('d')) {
+          msOffset = val * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('w')) {
+          msOffset = val * 7 * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('mo')) {
+          msOffset = val * 30 * 24 * 60 * 60 * 1000;
+        } else if (unit.startsWith('y')) {
+          msOffset = val * 365 * 24 * 60 * 60 * 1000;
+        }
+
+        if (msOffset > 0) {
+          computedDate = new Date(baseDate.getTime() - msOffset);
+        }
+        relativeLabel = formatRelativeLabel(raw);
+      } else {
+        relativeLabel = raw;
+      }
+    }
+  }
+
+  const day = String(computedDate.getDate()).padStart(2, '0');
+  const month = String(computedDate.getMonth() + 1).padStart(2, '0');
+  const year = computedDate.getFullYear();
+
+  let hours = computedDate.getHours();
+  const minutes = String(computedDate.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+
+  const formattedDate = `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
+  if (relativeLabel) {
+    return `${formattedDate} (${relativeLabel})`;
+  }
+  return formattedDate;
+}
+
+function formatDateTime(dateVal) {
+  if (!dateVal) return '—';
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return String(dateVal);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const hoursStr = String(hours).padStart(2, '0');
+  return `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
 }
 
 // ==========================================================================

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=2.3" />
+  <link rel="stylesheet" href="/static/style.css?v=2.4" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -308,13 +308,22 @@
                 <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
               </th>
               <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
-                <span>Recruiter / Author</span> <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                <div class="th-sort-wrapper">
+                  <span>Recruiter / Author</span>
+                  <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                </div>
               </th>
-              <th width="115" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
-                <span>Experience</span> <span class="sort-indicator" id="sortExpIndicator">↕</span>
+              <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                <div class="th-sort-wrapper">
+                  <span>Experience</span>
+                  <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                </div>
               </th>
-              <th width="90" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
-                <span>Date</span> <span class="sort-indicator" id="sortDateIndicator">↕</span>
+              <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                <div class="th-sort-wrapper">
+                  <span>Date</span>
+                  <span class="sort-indicator" id="sortDateIndicator">↕</span>
+                </div>
               </th>
               <th width="190">Contact Email</th>
               <th>Post Preview</th>
@@ -513,7 +522,7 @@
               <th>Subject / Note</th>
               <th>Status & Reason</th>
               <th>Updated</th>
-              <th width="140" style="text-align: right;">Action</th>
+              <th width="175" style="text-align: right;">Action</th>
             </tr>
           </thead>
           <tbody id="sentTableBody">
@@ -982,6 +991,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=2.3"></script>
+  <script src="/static/app.js?v=2.4"></script>
 </body>
 </html>
