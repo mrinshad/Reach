@@ -161,8 +161,63 @@ def extract_emails(text: str) -> list[str]:
     return cleaned
 
 
+def expand_see_more_button(card_element) -> bool:
+    """
+    Click the '…more' expander inside a post card so the full post text
+    is collected instead of LinkedIn's truncated preview.
+    Returns True if an expander was clicked.
+    """
+    # Known LinkedIn expander selectors (feed & search results)
+    see_more_selectors = [
+        'button.feed-shared-inline-show-more-text__see-more-less-toggle',
+        'button.update-components-text__see-more-button',
+        'button.see-more',
+    ]
+    for selector in see_more_selectors:
+        try:
+            buttons = card_element.locator(selector)
+            for i in range(buttons.count()):
+                btn = buttons.nth(i)
+                try:
+                    label = (btn.inner_text() or "").strip().lower()
+                    # Expand only; never collapse an already expanded post
+                    if label and "more" in label and "less" not in label and btn.is_visible():
+                        btn.click(timeout=2000)
+                        human_sleep(0.4, 0.8)
+                        return True
+                except Exception:
+                    continue
+        except Exception:
+            continue
+
+    # Fallback: match any in-card button by its visible label
+    try:
+        all_buttons = card_element.locator('button')
+        for i in range(all_buttons.count()):
+            btn = all_buttons.nth(i)
+            try:
+                label = (btn.inner_text() or "").strip().lower()
+                if label in ("…more", "...more", "… more", "... more", "more", "see more"):
+                    if btn.is_visible():
+                        btn.click(timeout=2000)
+                        human_sleep(0.4, 0.8)
+                        return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return False
+
+
 def extract_post_from_card(page, card_element, index: int = 0) -> dict:
     """Extract structured details from a LinkedIn post card."""
+    # 0. Expand truncated posts ('… more') so the full body is collected
+    try:
+        expand_see_more_button(card_element)
+    except Exception:
+        pass
+
     card_text = card_element.inner_text().strip()
 
     # 1. Author Name & Profile Link
@@ -208,6 +263,13 @@ def extract_post_from_card(page, card_element, index: int = 0) -> dict:
             if re.match(r"^\d+$", line) and len(body_lines) > 3:
                 break
             body_lines.append(line)
+
+    # Strip '… more' / '… less' expander button remnants so they don't pollute the JD
+    body_lines = [
+        line for line in body_lines
+        if not re.fullmatch(r"[…\.]{1,3}\s*(more|less)", line.strip(), re.IGNORECASE)
+        and line.strip().lower() not in ("see more", "show more", "show less")
+    ]
 
     post_body = "\n".join(body_lines) if body_lines else card_text
 
