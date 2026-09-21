@@ -1,46 +1,24 @@
-# Backend & Automation Architecture Guide (`src/AGENTS.md`)
+# Reach Backend & Automation Architecture (`src/AGENTS.md`)
 
-This guide directs AI agents working on Reach's backend, data operations, and automation services.
+This directory contains the FastAPI server, background Playwright automation, database abstraction, and web presentation layer.
 
-## Module Directory
+---
 
-### 1. [`app.py`](file:///Users/apple/Byten/linkedInScrapper/src/app.py)
-- **Role**: FastAPI application, REST endpoints, static asset mounting, dynamic template assembly.
-- **Key Functions / Routes**:
-  - `serve_index()`: Assembles `src/static/index_layout.html` with `src/static/partials/*.html` on the fly.
-  - `/api/stats/summary`: Returns KPI totals, pending counts, and sidebar badge numbers.
-  - `/api/posts`: Paginated, filtered discovered job posts.
-  - `/api/review/queue`: Posts awaiting draft generation or human review.
-  - `POST /api/generate-email/{post_id}`: Generates an AI email draft (supports `?force=true` override).
-  - `POST /api/approve/{post_id}`: Approves and queues email sending.
-  - `POST /api/crawl`: Launches Playwright background job scraping task.
-  - `/api/settings/headless`: Gets/sets headless browser mode in `config.json`.
-  - `/api/health`: Probes LinkedIn, ChatGPT, Gmail, and DB connectivity.
+## Subsystem Navigation Matrix
 
-### 2. [`automation_tasks.py`](file:///Users/apple/Byten/linkedInScrapper/src/automation_tasks.py)
-- **Role**: Background task manager, Playwright browser workers, batch processing.
-- **Key Functions**:
-  - `TaskManager`: Thread-safe active task tracking, logging stream, and cancellation.
-  - `run_crawler_task(source, location)`: Scrapes LinkedIn/Infopark posts.
-  - `run_email_generation_task(post_ids, force)`: Batch AI email generation via ChatGPT service.
-  - `run_batch_send_task(post_ids, mode)`: Automated or manual outreach delivery.
+| Subsystem / Directory | Responsibility | Primary Entrypoints & Modules | Designated Agent Guide |
+|---|---|---|---|
+| [`src/api/`](file:///Users/apple/Byten/linkedInScrapper/src/api/) | FastAPI REST API routers decomposed by domain (posts, tasks, stats, settings). | `posts.py`, `tasks.py`, `stats.py`, `settings.py`, `models.py` | [`src/api/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/api/AGENTS.md) |
+| [`src/services/`](file:///Users/apple/Byten/linkedInScrapper/src/services/) | Sequential FIFO task queue engine, Playwright browser connectors, ChatGPT Custom GPT generator, Gmail automation, and health probes. | `automation_tasks.py`, `chatgpt_service.py`, `gmail_service.py`, `firefox_connector.py`, `health_service.py`, `experience_extractor.py` | [`src/services/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/services/AGENTS.md) |
+| [`src/db/`](file:///Users/apple/Byten/linkedInScrapper/src/db/) | PostgreSQL database models, connection pooling, migrations, post queries, settings, and analytics. | `connection.py`, `posts.py`, `settings.py`, `analytics.py` | [`src/db/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/db/AGENTS.md) |
+| [`src/static/`](file:///Users/apple/Byten/linkedInScrapper/src/static/) | Frontend UI assets: modular stylesheets (`css/`), client scripts (`js/`), component partials (`partials/`), and Service Worker (`sw.js`). | `index_layout.html`, `app.js`, `style.css`, `sw.js` | [`src/static/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/static/AGENTS.md) |
+| [`src/app.py`](file:///Users/apple/Byten/linkedInScrapper/src/app.py) | Master FastAPI application root. Configures CORS, development no-cache middleware, dynamic template compiler, and mounts `api_router`. | `app`, `serve_index`, `get_rendered_index_html` | Root Entrypoint |
+| [`src/config.py`](file:///Users/apple/Byten/linkedInScrapper/src/config.py) | Configuration manager for persistent database settings and local fallback defaults. | `load_config`, `save_config`, `is_headless` | Global Config |
 
-### 3. [`db.py`](file:///Users/apple/Byten/linkedInScrapper/src/db.py)
-- **Role**: PostgreSQL database connection pool, queries, schema setup, analytics calculations.
-- **Key Functions**:
-  - `get_analytics_summary()`: Aggregates metrics (discovered, pending review, sent, conversion rates).
-  - `get_posts_paginated()`: Server-side search, filtering, and pagination.
-  - `update_post_email()`: Saves generated or edited email subject and body.
-  - `mark_post_sent()`: Updates post state to sent with timestamp.
+---
 
-### 4. [`chrome_connector.py`](file:///Users/apple/Byten/linkedInScrapper/src/chrome_connector.py) & [`firefox_connector.py`](file:///Users/apple/Byten/linkedInScrapper/src/firefox_connector.py)
-- **Role**: Browser connection layer (Playwright CDP session attachment, headless/headed launch).
+## Agent Directives for Backend
 
-### 5. [`chatgpt_service.py`](file:///Users/apple/Byten/linkedInScrapper/src/chatgpt_service.py)
-- **Role**: OpenAI API prompt engineering, resume-to-JD matching, personalized cold email generation.
-
-### 6. [`gmail_service.py`](file:///Users/apple/Byten/linkedInScrapper/src/gmail_service.py)
-- **Role**: Gmail API / SMTP delivery, OAuth token refresh, message drafting.
-
-### 7. [`health_service.py`](file:///Users/apple/Byten/linkedInScrapper/src/health_service.py)
-- **Role**: Real-time integration health probes for all connected subsystems.
+1. **Sequential Task Execution**: Automation operations must be enqueued via `task_manager.enqueue_task(...)`. Never launch concurrent Playwright browser sessions on the persistent Firefox profile.
+2. **Clean Modular Imports**: All subsystems and CLI scripts in `scripts/` import directly from designated packages (`src.services.*`, `src.db.*`, `src.api.*`). No legacy shims are used.
+3. **Database-First Data Operations**: Multi-parameter search, pagination, and sorting must be executed in PostgreSQL queries (`src/db/posts.py`), never filtered in-memory in Python.

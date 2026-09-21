@@ -1,0 +1,20 @@
+# Reach HTML Partials Agent Guide (`src/static/partials/`)
+
+This directory contains the modular HTML component partials assembled dynamically by the server via `index_layout.html` markers (`<!-- @include partials/... -->`).
+
+> **CRITICAL DIRECTIVE**: Never edit `src/static/index.html` directly. Edit the designated partial below. `src/app.py` automatically compiles partials and keeps `src/static/index.html` synchronized.
+
+---
+
+## Partials Routing Matrix
+
+| HTML Partial | File Path | Component Scope & Primary Elements |
+|---|---|---|
+| **`sidebar.html`** | [`sidebar.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/sidebar.html) | Brand logo `#appSidebar`, navigation tabs (`#btnTabAnalytics`, `#btnTabDiscovered`, `#btnTabReview`, `#btnTabSent`), crawler card `#crawlerSourceSelect`, `#crawlerLocationSelect`, resume upload pill, and collapse trigger `#btnToggleSidebar`. |
+| **`topbar.html`** | [`topbar.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/topbar.html) | Header title `#pageTitleDisplay`, `#pageBreadcrumbDisplay`, service status badges (`#healthInfopark`, `#healthLinkedin`, etc.), notification center bell `#btnNotificationCenter`, notification dropdown, and settings button. |
+| **`tab_analytics.html`** | [`tab_analytics.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_analytics.html) | Dashboard overview tab (`#tabAnalytics`), KPI summary metrics cards (`#kpiApplied`, `#kpiScraped`, `#kpiDrafted`), Chart.js canvases (`#chartDailyApplied`, `#chartDailyScraped`, `#chartStatusBreakdown`, `#chartRejectionReasons`), and Headless toggle switch. |
+| **`tab_discovered.html`** | [`tab_discovered.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_discovered.html) | Discovered jobs tab (`#tabDiscovered`), 2-tier search & experience filters (`#inputSearch`, `#expPills`, `#selectSource`), discovered posts table (`#postsTableBody`), batch generation trigger, and pagination controls (`#pageButtons`). |
+| **`tab_review.html`** | [`tab_review.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_review.html) | Review & drafts workspace (`#tabReview`), candidate queue list (`#reviewQueueList`), candidate detail card, natural scroll JD viewer (`#reviewFullText`), AI email draft editor (`#draftSubject`, `#draftBody`), `[ ✨ Generate Mail from JD ]` override, and direct dispatch actions. |
+| **`tab_sent.html`** | [`tab_sent.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_sent.html) | Outreach history tab (`#tabSent`), sub-filter pills (`#othersPills`), cancellation reason select (`#selectReasonFilter`), history table (`#sentTableBody`), and application restore buttons. |
+| **`task_drawer.html`** | [`task_drawer.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/task_drawer.html) | Active automation progress card (`#liveTaskCard`), execution queue list (`#taskQueueList`), progress bar (`#taskProgressFill`), and collapsible terminal log drawer (`#logsStream`). |
+| **`modals.html`** | [`modals.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/modals.html) | Dialog overlays: Post Details dialog (`#postModal`), Settings dialog (`#settingsModal`), Add Manual JD dialog (`#modalAddJd`), Direct Outreach dialog (`#modalDirectOutreach`), Cancel Reason dialog (`#cancelReasonModal`), Crawl Summary dialog (`#crawlSummaryModal`), and Notification Help dialog (`#notifHelpModal`). |

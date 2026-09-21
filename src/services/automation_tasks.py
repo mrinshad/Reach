@@ -21,14 +21,14 @@ from src.db import (
     mark_post_sent,
     update_post_status,
 )
-from src.firefox_connector import launch_firefox_context
-from src.chatgpt_service import (
+from .firefox_connector import launch_firefox_context
+from .chatgpt_service import (
     navigate_to_conversation,
     send_jd_and_get_email,
     extract_unsuitable_reason,
     get_default_chatgpt_url,
 )
-from src.gmail_service import (
+from .gmail_service import (
     navigate_to_gmail,
     populate_email_draft,
     send_email_directly,

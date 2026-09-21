@@ -20,9 +20,9 @@ from psycopg2.extras import RealDictCursor
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
-from src.chatgpt_service import navigate_to_conversation, send_jd_and_get_email
-from src.gmail_service import navigate_to_gmail, populate_email_draft
+from src.services.firefox_connector import launch_firefox_context
+from src.services.chatgpt_service import navigate_to_conversation, send_jd_and_get_email
+from src.services.gmail_service import navigate_to_gmail, populate_email_draft
 from src.db import save_chatgpt_response, get_connection
 from src.config import load_config
 

@@ -12,8 +12,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
-from src.chatgpt_service import get_default_chatgpt_url
+from src.services.firefox_connector import launch_firefox_context
+from src.services.chatgpt_service import get_default_chatgpt_url
 
 CHATGPT_CONVERSATION_URL = get_default_chatgpt_url()
 

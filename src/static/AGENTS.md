@@ -1,41 +1,26 @@
-# Frontend Architecture & Component Router (`src/static/AGENTS.md`)
+# Reach Frontend Architecture Agent Guide (`src/static/`)
 
-This guide directs AI agents working on Reach's frontend interface.
+This directory houses the entire client presentation layer for Reach, organized into modular CSS, JavaScript, HTML partials, and Service Worker assets.
 
-## Quick Lookup: DOM Elements, Styles & Methods
+---
 
-| Target UI Element | Element ID / Class | HTML Partial (`partials/`) | CSS Module (`css/`) | JS Handler (`app.js`) |
-|---|---|---|---|---|
-| Sidebar Root | `#appSidebar` | `sidebar.html` | `sidebar.css` | `toggleSidebarCollapse()` |
-| Sidebar Nav Buttons | `.nav-item`, `#btnTabAnalytics`, etc. | `sidebar.html` | `sidebar.css` | `switchTab(tabId)` |
-| Sidebar Unsquashed Buttons | `.app-sidebar.collapsed .nav-item` | `sidebar.html` | `sidebar.css` | `44px × 44px` layout |
-| Sidebar Pending Badges | `.badge-count`, `#navCountDiscovered` | `sidebar.html` | `sidebar.css` | `updateSidebarBadgeCounts()` |
-| Crawler Selector | `#crawlerSourceSelect`, `#crawlerLocationSelect` | `sidebar.html` | `sidebar.css` | `handleCrawlerSourceChange()` |
-| Start Crawl Button | `#btnStartCrawl` | `sidebar.html` | `sidebar.css` | `triggerSelectedCrawl()` |
-| App Main Scroll Area | `#appMain`, `.app-main` | `index_layout.html` | `layout.css` | 100vh stationary container |
-| Sticky Header Bar | `.app-topbar` | `topbar.html` | `layout.css` | Header breadcrumb & actions |
-| Notification Bell | `#btnNotifBell`, `.notification-badge` | `topbar.html` | `layout.css` | `toggleNotificationDropdown()` |
-| Notification Dropdown | `#notifDropdown` | `topbar.html` | `layout.css` | `renderNotifications()` |
-| Notification Help Modal | `#notifHelpModal` | `modals.html` | `modals.css` | `openNotificationHelpModal()` |
-| Headless Browser Switch | `#headlessModeSwitch` | `tab_analytics.html` | `dashboard.css` | `toggleHeadlessMode()` |
-| Dashboard KPI Cards | `.kpi-card`, `.clickable-kpi` | `tab_analytics.html` | `dashboard.css` | `fetchAnalyticsSummary()` |
-| Analytics Charts | `#chartTrends`, `#chartFunnel` | `tab_analytics.html` | `dashboard.css` | `renderCharts()` |
-| Discovered Search Bar | `#searchPostsInput` | `tab_discovered.html` | `discovered.css` | `filterPosts()` |
-| Discovered Posts Table | `#postsTable`, `#postsTableBody` | `tab_discovered.html` | `discovered.css` | `renderPostsTable()` |
-| Discovered Pagination | `#paginationControls` | `tab_discovered.html` | `discovered.css` | `changePage(newPage)` |
-| Review Queue Sidebar | `.review-queue`, `#reviewQueueList` | `tab_review.html` | `review.css` | `loadReviewQueue()` |
-| Review Queue Batch Bar | `#reviewBatchBar` | `tab_review.html` | `review.css` | `toggleBatchSelection()` |
-| Candidate Profile Card | `#reviewCandidateCard` | `tab_review.html` | `review.css` | `renderReviewItem()` |
-| Post Scroll Natural Area | `.post-scroll` | `tab_review.html` | `review.css` | Auto-expanding scroll container |
-| Generate Mail from JD | `#btnGenerateMailJd` | `tab_review.html` | `review.css` | `generateEmailFromJd(postId)` |
-| Email Draft Editor | `#reviewEmailSubject`, `#reviewEmailBody`| `tab_review.html` | `review.css` | `handleDraftInput()` |
-| Outreach History Table | `#sentTableBody` | `tab_sent.html` | `history.css` | `loadSentPosts()` |
-| Task Drawer & Live Console | `.task-queue-section`, `#taskQueueList` | `task_drawer.html` | `tasks.css` | `pollActiveTasks()` |
-| Modals (All 7 Dialogs) | `.modal-overlay` | `modals.html` | `modals.css` | `openModal(id)`, `closeModal(id)` |
-| Toast Snackbars | `#toastContainer`, `.toast` | `index_layout.html` | `modals.css` | `showToast(msg, type)` |
-| Mobile Backdrop & Drawer | `#sidebarBackdrop`, `.app-sidebar` | `index_layout.html` | `responsive.css` | `toggleMobileSidebar()` |
+## Directory Navigation Matrix
 
-## Best Practices
-1. **Never edit `style.css` directly**: All style rules are segregated in `css/*.css`.
-2. **Never edit `index.html` directly**: Modify `partials/*.html` or `index_layout.html`.
-3. **Always preserve IDs**: The JavaScript application logic relies on exact element IDs.
+| Directory / File | Type | Domain Scope | Designated Agent Guide |
+|---|---|---|---|
+| [`css/`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/) | Directory | Modular CSS stylesheets (11 modules): tokens, layout, sidebar, tables, review workspace, modals, responsive breakpoints. | [`src/static/css/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/AGENTS.md) |
+| [`js/`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/) | Directory | Modular client JavaScript (12 modules): state, utils, notifications, sidebar, api, discovered, review, history, crawler, tasks, modals, analytics. | [`src/static/js/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/AGENTS.md) |
+| [`partials/`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/) | Directory | HTML component partials (8 components): sidebar, topbar, tabs, task drawer, and modal overlays. | [`src/static/partials/AGENTS.md`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/AGENTS.md) |
+| [`index_layout.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/index_layout.html) | File | Master HTML assembly template containing CSS imports, partial include directives, and script tags. | Edit this template when adding new global assets or partials. |
+| [`index.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/index.html) | File | Auto-synchronized standalone HTML generated dynamically by `src/app.py`. | **Do NOT edit directly.** Edit `index_layout.html` or `partials/`. |
+| [`app.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/app.js) | File | Master client bootstrapper and event wire-up executing on `DOMContentLoaded`. | Clean coordinator loading modular scripts from `js/`. |
+| [`style.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/style.css) | File | Master CSS bundle importing modular stylesheets from `css/`. | **Do NOT edit directly.** Edit files in `css/`. |
+| [`sw.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/sw.js) | File | Root-scoped Service Worker handling system push notifications and notification click actions. | Served via root route `/sw.js` with `Service-Worker-Allowed: /`. |
+
+---
+
+## Agent Directives for Frontend
+
+1. **No Monolithic Edits**: Never add code back into large legacy files. Always edit the specialized file in `css/`, `js/`, or `partials/`.
+2. **Apply Link Directives**: The user explicitly rolled back the apply link button. Do NOT re-add application link buttons.
+3. **Template Synchronization**: When adding or updating HTML markup, modify the files in `src/static/partials/`. The backend server dynamically compiles them into `index.html`.

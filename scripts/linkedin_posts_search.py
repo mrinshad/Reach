@@ -24,8 +24,8 @@ from urllib.parse import quote
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
-from src.experience_extractor import extract_experience
+from src.services.firefox_connector import launch_firefox_context
+from src.services.experience_extractor import extract_experience
 from src.db import init_db, upsert_post, get_existing_post_identifiers, get_setting
 
 ARTIFACT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")

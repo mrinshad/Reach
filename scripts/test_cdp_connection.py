@@ -20,7 +20,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.chrome_connector import (
+from src.services.chrome_connector import (
     prepare_cdp_profile,
     launch_chrome_with_cdp,
     connect_to_chrome,

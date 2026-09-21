@@ -133,7 +133,7 @@ No credentials, session tokens, or authentication data are stored here.
 **Discovered:** Step 6
 
 ### Architecture & Registration Pattern
-Instead of hardcoding disparate buttons in the UI for every scraping source, the backend manages an extensible dictionary in [`src/automation_tasks.py`](file:///Users/apple/Byten/linkedInScrapper/src/automation_tasks.py):
+Instead of hardcoding disparate buttons in the UI for every scraping source, the backend manages an extensible dictionary in [`src/services/automation_tasks.py`](file:///Users/apple/Byten/linkedInScrapper/src/services/automation_tasks.py):
 ```python
 SCRAPER_REGISTRY = {
     "linkedin_posts": {
@@ -196,9 +196,91 @@ Network stalls or dynamic infinite scroll locks can cause scrapers to hang indef
 - **Synchronized Keys**:
   - `chatgpt_url`: Dedicated custom GPT conversation URL.
   - `search_query`: LinkedIn search keyword string.
+  - `headless_mode`: Browser automation visibility (`"true"` / `"false"`).
 - **Fallback**:
   - If `DATABASE_URL` environment variable is not defined, connection dynamically resolves to `postgresql://{USER}@localhost:5432/linkedin_scrapper`.
   - Zero hardcoded personal URLs or user credentials are stored in code.
 
+---
 
+## 10. Sequential FIFO Task Queue & Live Task Drawer
 
+**Discovered:** Task Engine Architecture
+
+### Mechanics
+- **Thread-Safe Queue (`TaskManager`)**: Prevents `409 Conflict` errors during parallel triggers. Enqueues background jobs in FIFO sequence and executes them one at a time.
+- **Queue Controls**: 
+  - `GET /api/tasks/status`: Returns current active task, status, terminal log stream, and array of pending queue items.
+  - `POST /api/tasks/queue/cancel/{id}`: Cancels a specific pending queued task.
+  - `POST /api/tasks/queue/clear`: Empties all queued background operations.
+- **UI Task Drawer**: Real-time terminal log drawer at the bottom of the screen (`#taskDrawer`), polling status at 1.5s intervals and displaying animated progress indicators.
+
+---
+
+## 11. Headless Browser Mode On/Off Switch
+
+**Discovered:** Background Automation Engine
+
+### Implementation
+- **Configuration Persistence**: Stored in PostgreSQL `settings.headless_mode` (`"true"` or `"false"`).
+- **Toggle API**: `POST /api/settings/headless` flips the mode and returns the updated state.
+- **Browser Contexts**: `get_headless_mode()` in `src/firefox_connector.py` passes the mode to `playwright.firefox.launch_persistent_context(headless=mode)`.
+- **UI Switch**: Toggle button in the sidebar footer and switch in the analytics overview, updating dynamically across all connected devices.
+
+---
+
+## 12. Direct AI Email Generation from JD with Force Override
+
+**Discovered:** Review & Drafts Workflow
+
+### Implementation
+- **Button in UI**: `[ ✨ Generate Mail from JD ]` (`#btnGenerateMailJd`) placed in the Review & Drafts workspace next to the Email Body label.
+- **Endpoint**: `POST /api/generate-email/{post_id}?force=true`.
+- **Behavior**: Bypasses the existing draft check, queues a single-post ChatGPT generation task, and updates the email body live on completion without moving the post between tabs.
+
+---
+
+## 13. Full Codebase Restructuring & Subsystem Modularization
+
+**Discovered:** Architectural Scaling
+
+### Architecture
+1. **Database Decoupling (`src/db/`)**:
+   - `connection.py`: Thread-safe connection pooling with context-managed cursors and auto-migrations.
+   - `settings.py`: PostgreSQL-backed key-value settings store.
+   - `posts.py`: Deduplicated post ingestion, anti-spam heuristics, and paginated searches.
+   - `analytics.py`: KPI counts, daily outreach velocity, and cancellation reason aggregations.
+   - `__init__.py`: Backward-compatible symbol re-exports.
+2. **Services & Workers Layer (`src/services/`)**:
+   - `automation_tasks.py`: Sequential FIFO `TaskManager` and `SCRAPER_REGISTRY`.
+   - `chatgpt_service.py`, `firefox_connector.py`, `gmail_service.py`, `health_service.py`, `experience_extractor.py`.
+   - All CLI scripts in `scripts/` import directly from `src.services.*` with zero legacy shims needed.
+3. **Modular API Routers (`src/api/`)**:
+   - Decomposed monolithic API into domain routers: `posts.py`, `tasks.py`, `stats.py`, `settings.py`, and Pydantic schemas in `models.py`.
+   - Assembled under `api_router` in `src/api/__init__.py`.
+   - Lightweight `src/app.py` root server (~140 lines) focused on startup, CORS, and template assembly.
+
+---
+
+## 14. Mobile Web Push Notifications & Web Audio Alerts
+
+**Discovered:** Multi-Device Accessibility
+
+### Architecture
+- **Root-Scoped Service Worker (`/sw.js`)**: Proxied by `src/app.py` directly from root URL with `Service-Worker-Allowed: /` header to support full-app notification scope on mobile browsers.
+- **Audio Chime**: Uses Web Audio API oscillator synthesis (`440Hz` → `880Hz` dual-tone chime) on task completion. Includes user-interaction audio unlock.
+- **Haptic Feedback**: Triggers `navigator.vibrate([100, 50, 100])` on supported smartphones.
+- **Diagnostics Help Modal (`#notifHelpModal`)**: Step-by-step instructions for unblocking notifications on Safari iOS, Chrome Android, and macOS.
+
+---
+
+## 15. Modular Static Architecture & Dynamic Layout Assembly
+
+**Discovered:** Codebase Maintainability & Agent Routing
+
+### Architecture
+- **CSS Modularity (`src/static/css/`)**: 11 focused stylesheets (`variables.css`, `base.css`, `layout.css`, `sidebar.css`, `dashboard.css`, `discovered.css`, `review.css`, `history.css`, `tasks.css`, `modals.css`, `responsive.css`).
+- **HTML Partials (`src/static/partials/`)**: 8 component partials included dynamically via `<!-- INCLUDE: partials/filename.html -->` in `index_layout.html`.
+- **Client JavaScript Modularity (`src/static/js/`)**: Deconstructed 4,060-line monolith into 12 domain ES modules (`state.js`, `utils.js`, `notifications.js`, `sidebar.js`, `api.js`, `discovered.js`, `review.js`, `history.js`, `crawler.js`, `tasks.js`, `modals.js`, `analytics.js`) orchestrated by a ~60-line `app.js` bootstrapper.
+- **Dynamic Server Assembly**: `get_rendered_index_html()` in `src/app.py` compiles the layout on each server response and keeps `src/static/index.html` synchronized on disk.
+- **Hierarchical Agent Guides**: Dedicated `AGENTS.md` files in every folder across the workspace guide AI coding assistants directly to responsible files without broad directory scans.
