@@ -193,6 +193,10 @@ async function fetchSettings() {
       }
     }
 
+    if (typeof updateCrawlerSearchPlaceholder === 'function') {
+      updateCrawlerSearchPlaceholder();
+    }
+
     if (typeof updateHeadlessUI === 'function') {
       updateHeadlessUI(state.config ? state.config.headless_mode : false);
     }
