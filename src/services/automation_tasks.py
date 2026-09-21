@@ -20,6 +20,8 @@ from src.db import (
     save_chatgpt_response,
     mark_post_sent,
     update_post_status,
+    get_recently_sent_recipients,
+    SEND_COOLDOWN_DAYS,
 )
 from .firefox_connector import launch_firefox_context
 from .chatgpt_service import (
@@ -466,6 +468,17 @@ def run_send_single_draft(post_id: str):
         task_manager.fail_task("Email draft is empty. Generate draft before sending.")
         return
 
+    recent = get_recently_sent_recipients([recipient], cooldown_days=SEND_COOLDOWN_DAYS)
+    if recipient.strip().lower() in recent:
+        hit = recent[recipient.strip().lower()]
+        wait = hit["wait_seconds"]
+        hours = wait // 3600
+        task_manager.fail_task(
+            f"An email was already sent to {recipient} within the last "
+            f"{SEND_COOLDOWN_DAYS} days. Please wait ~{hours}h before sending again."
+        )
+        return
+
     hl = is_headless()
     try:
         mode_str = "headless mode (silent background)" if hl else "headed mode (visible window)"
@@ -519,6 +532,42 @@ def run_send_batch_drafts(post_ids: List[str]):
 
     successful = 0
     failed = []
+
+    # Final cooldown guard: skip any recipients emailed within the cooldown window.
+    posts_cache = {}
+    candidate_emails = []
+    for pid in post_ids:
+        post = get_post_by_id(pid)
+        if post:
+            posts_cache[pid] = post
+            post_emails = post.get("contact_emails", [])
+            if post_emails:
+                candidate_emails.append(post_emails[0])
+    recent = get_recently_sent_recipients(candidate_emails, cooldown_days=SEND_COOLDOWN_DAYS)
+    if recent:
+        skipped = []
+        remaining = []
+        for pid in post_ids:
+            post = posts_cache.get(pid)
+            post_emails = (post or {}).get("contact_emails", [])
+            recipient = post_emails[0].strip().lower() if post_emails else ""
+            if recipient and recipient in recent:
+                wait_h = recent[recipient]["wait_seconds"] // 3600
+                skipped.append((post.get("author_name", pid), recipient, wait_h))
+            else:
+                remaining.append(pid)
+        for author, recipient, wait_h in skipped:
+            task_manager.log(
+                f"  ⏭ Skipping {author} ({recipient}): already emailed within the last "
+                f"{SEND_COOLDOWN_DAYS} days (~{wait_h}h remaining)."
+            )
+            failed.append((author, f"Already emailed recently (~{wait_h}h cooldown remaining)"))
+        post_ids = remaining
+        if not post_ids:
+            task_manager.fail_task(
+                f"All recipients were emailed within the last {SEND_COOLDOWN_DAYS} days. Nothing to send."
+            )
+            return
 
     hl = is_headless()
     try:
