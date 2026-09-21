@@ -18,7 +18,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import (
+from src.services.firefox_connector import (
     launch_firefox_context,
     open_or_get_tab,
     DEFAULT_PROFILE_DIR,

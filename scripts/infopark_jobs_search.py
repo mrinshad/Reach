@@ -31,8 +31,8 @@ if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
 
 from src.db import init_db, upsert_post, get_existing_post_identifiers, update_post_status
-from src.experience_extractor import extract_experience
-from src.chatgpt_service import clean_and_truncate_reason
+from src.services.experience_extractor import extract_experience
+from src.services.chatgpt_service import clean_and_truncate_reason
 
 INFOPARK_JOBS_URL = "https://infopark.in/companies-job"
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"

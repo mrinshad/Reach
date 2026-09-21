@@ -1,0 +1,70 @@
+<!-- TAB 3: Others (Sent & Cancelled Applications History) -->
+    <div class="tab-panel hidden" id="tabSent">
+      <div class="toolbar" style="margin-bottom: 0.85rem;">
+        <div class="filter-pills" id="othersPills">
+          <button class="pill active" data-others="ALL" onclick="setOthersFilter('ALL')">
+            <span>All Others</span> <span class="badge-count" id="countOthersAll">0</span>
+          </button>
+          <button class="pill" data-others="SENT" onclick="setOthersFilter('SENT')">
+            <span>✉ Sent</span> <span class="badge-count" id="countOthersSent">0</span>
+          </button>
+          <button class="pill" data-others="REJECTED" onclick="setOthersFilter('REJECTED')">
+            <span>🚫 Cancelled</span> <span class="badge-count" id="countOthersCancelled">0</span>
+          </button>
+        </div>
+        <div class="toolbar-right">
+          <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
+            <option value="ALL" selected>All Reasons</option>
+          </select>
+          <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
+          <div class="search-box">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
+          </div>
+          <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
+            <span>✕ Clear</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <table class="reach-table">
+          <thead>
+            <tr>
+              <th>Recruiter / Author</th>
+              <th>Recipient Email</th>
+              <th>Subject / Note</th>
+              <th>Status & Reason</th>
+              <th>Updated</th>
+              <th width="175" style="text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="sentTableBody">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+
+        <!-- Sent Table Footer / Pagination Controls -->
+        <div class="table-footer" id="sentTableFooter">
+          <div class="pagination-info" id="sentPaginationInfo">
+            Showing 0–0 of 0 applications
+          </div>
+
+          <div class="pagination-controls">
+            <div class="rows-per-page">
+              <span>Rows:</span>
+              <select id="selectSentLimit" onchange="changeSentRowsPerPage(this.value)">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+
+            <div class="page-buttons" id="sentPageButtons">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

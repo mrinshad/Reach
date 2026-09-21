@@ -85,6 +85,10 @@
 - **Scraping Sources Breakdown**: Relative performance of LinkedIn vs Infopark vs Manual entry vs Direct Outreach.
 - **Cancellation & Spam Analysis**: Visual frequency ranking of rejection reasons (unsuitable criteria, scams, irrelevant tech stack).
 - **Timeframe Filtering**: Instantly toggle between `7 Days`, `14 Days`, `30 Days`, and `All Time` with database-first aggregation.
+### 13. 🗺️ Hierarchical AGENTS.md Navigation & Modular Architecture
+- **Zero-Search Agent Navigation**: Every subfolder across the repository (`src/api/`, `src/db/`, `src/services/`, `src/static/js/`, `src/static/css/`, `src/static/partials/`, `scripts/`, `docs/`) houses a dedicated `AGENTS.md` specifying component routing, responsibilities, and APIs.
+- **Clean Decoupled Subsystems**: Independent architecture separation across database storage (`src/db/`), automation workers (`src/services/`), REST API routers (`src/api/`), and modular vanilla client scripts (`src/static/js/`).
+- **100% Backward Compatibility**: Transparent shims and package re-exports ensure existing scripts, tests, and CLI runners function without modification.
 
 ---
 
@@ -334,10 +338,16 @@ Reach features a dedicated mobile responsive design tested across phone and tabl
 
 ---
 
-## 📂 Project Structure
+## 📂 Project Structure & Modular Architecture
+
+Reach utilizes a clean, decoupled modular architecture with domain-specific backend routers, service abstractions, database submodules, client ES modules, CSS stylesheets, HTML partials, and hierarchical `AGENTS.md` routing maps designed for AI pair-programming efficiency:
 
 ```text
 reach-job-automation/
+├── AGENTS.md                 # Primary Agent navigation map & feature routing matrix
+├── .agents/
+│   └── rules/
+│       └── codebase_map.md   # Antigravity hierarchical workspace rule
 ├── config.example.json       # Template configuration
 ├── config.json               # Local user configuration (git-ignored)
 ├── requirements.txt          # Python dependencies
@@ -345,28 +355,89 @@ reach-job-automation/
 ├── .env.example              # Environment variables template
 ├── .gitignore                # Open-source git-ignore rules
 ├── docs/
+│   ├── AGENTS.md             # Documentation directory guide
 │   ├── file_architecture.md  # Detailed module & API registry
+│   ├── implementation_plan.md# System implementation milestones
 │   └── workflows.md          # Technical workflows & DOM selectors
 ├── resumes/                  # User resumes directory (git-ignored)
 ├── scripts/
+│   ├── AGENTS.md             # Background crawlers guide
 │   ├── linkedin_posts_search.py      # LinkedIn feed scraper with watchdog
 │   ├── infopark_jobs_search.py       # Infopark Kochi portal scraper
 │   ├── process_posts_with_chatgpt.py # Batch ChatGPT generator
 │   └── prepare_gmail_draft.py        # Gmail compose launcher
 └── src/
-    ├── app.py                # FastAPI endpoints & REST API routes
-    ├── automation_tasks.py   # FIFO task queue manager & scraper registry
-    ├── chatgpt_service.py    # ChatGPT prompt & generation logic
+    ├── AGENTS.md             # Backend & automation navigation guide
+    ├── app.py                # FastAPI server, static mounts & template assembly
     ├── config.py             # Database-backed configuration & headless helper
-    ├── db.py                 # PostgreSQL client, settings, & anti-spam filters
-    ├── experience_extractor.py # YOE & seniority parsing
-    ├── firefox_connector.py  # Headed / Headless Playwright Firefox context
-    ├── gmail_service.py      # Gmail draft preparation & direct send
-    ├── health_service.py     # Live session health checks
+    ├── api/                  # Modular REST API Routers
+    │   ├── AGENTS.md         # API router directory guide
+    │   ├── __init__.py       # Combined api_router aggregator
+    │   ├── models.py         # Pydantic request/response schemas
+    │   ├── posts.py          # /api/posts CRUD, spam, review, outreach routes
+    │   ├── tasks.py          # /api/tasks execution, FIFO queue, scrapers
+    │   ├── stats.py          # /api/stats, /api/analytics, /api/health
+    │   └── settings.py       # /api/settings, /api/settings/headless
+    ├── db/                   # Database Access Layer
+    │   ├── AGENTS.md         # Database schema & query guide
+    │   ├── __init__.py       # Re-exports for db functions & symbols
+    │   ├── connection.py     # Connection pool & schema initialization
+    │   ├── settings.py       # Key-value persistent settings queries
+    │   ├── posts.py          # Posts CRUD, deduplication, anti-spam
+    │   └── analytics.py      # Aggregations, daily velocity, reasons
+    ├── services/             # Background Workers & Automation Services
+    │   ├── AGENTS.md         # Automation workers & connectors guide
+    │   ├── __init__.py       # Re-exports for services
+    │   ├── automation_tasks.py # FIFO task queue manager & scraper registry
+    │   ├── chatgpt_service.py# ChatGPT web automation & draft parsing
+    │   ├── firefox_connector.py# Headed / Headless Firefox context
+    │   ├── chrome_connector.py # Chrome CDP connector (reference)
+    │   ├── gmail_service.py  # Gmail draft & direct email sending
+    │   ├── health_service.py # Multi-system health diagnostics
     └── static/
-        ├── app.js            # Frontend client application logic & state
-        ├── index.html        # UI dashboard, sidebar, modals & SVG icons
-        └── style.css         # Responsive dark-theme design system
+        ├── AGENTS.md         # Frontend DOM elements & JS router
+        ├── app.js            # Main bootstrapper & module coordinator (~60 lines)
+        ├── index_layout.html # Master layout with component include markers
+        ├── index.html        # Auto-synchronized complete single-page HTML
+        ├── sw.js             # Root-scoped Service Worker for web push alerts
+        ├── style.css         # Master manifest importing modular stylesheets
+        ├── js/               # Modular Client JavaScript Modules
+        │   ├── AGENTS.md     # JavaScript module guide & symbol index
+        │   ├── state.js      # Global state stores, active tab, filters
+        │   ├── utils.js      # Time formatting, escaping, clipboard, badges
+        │   ├── notifications.js # Toasts, Web Audio chimes, Web Push
+        │   ├── sidebar.js    # Sidebar collapse, navigation, badge counters
+        │   ├── api.js        # Generic fetch API client wrapper
+        │   ├── discovered.js # Discovered jobs table, filters, sorting
+        │   ├── review.js     # Review workspace, JD regeneration, drafts
+        │   ├── history.js    # Sent & cancelled tables, restore actions
+        │   ├── crawler.js    # Crawler source selector & triggering
+        │   ├── tasks.js      # Task drawer polling & terminal stream
+        │   ├── modals.js     # 7 dialog modals management & dialog helpers
+        │   └── analytics.js  # Dashboard charts, metrics, headless toggle
+        ├── css/              # Modular CSS Stylesheets
+        │   ├── AGENTS.md     # CSS selector, tokens & class index
+        │   ├── variables.css # Design tokens, colors, typography
+        │   ├── base.css      # Resets, buttons, badges, skeleton
+        │   ├── layout.css    # 100vh app shell, topbar, activity bell
+        │   ├── sidebar.css   # Collapsible sidebar, 44x44 icons, crawler card
+        │   ├── dashboard.css # Analytics KPI cards, charts, headless toggle
+        │   ├── discovered.css# 2-tier search toolbar, data table, pagination
+        │   ├── review.css    # Review queue, candidate card, draft editor
+        │   ├── history.css   # Sent/cancelled tables, cancellation pills
+        │   ├── tasks.css     # Task drawer, progress bar, terminal stream
+        │   ├── modals.css    # Pinned modal dialogs, diagnostics & toasts
+        │   └── responsive.css# Mobile drawer, compact headers & touch styles
+        └── partials/         # HTML Component Partials
+            ├── AGENTS.md     # HTML partials element guide
+            ├── sidebar.html        # Left navigation sidebar component
+            ├── topbar.html         # Header topbar component
+            ├── task_drawer.html    # Live task drawer component
+            ├── tab_analytics.html  # Dashboard overview tab component
+            ├── tab_discovered.html # Discovered jobs tab component
+            ├── tab_review.html     # Review & drafts workspace tab component
+            ├── tab_sent.html       # Outreach history tab component
+            └── modals.html         # All 7 dialog modals & alert dialogs
 ```
 
 ---
@@ -378,6 +449,7 @@ reach-job-automation/
 | `GET` | `/api/health` | Live connectivity status for LinkedIn, ChatGPT, Gmail, Infopark, and PostgreSQL |
 | `GET` | `/api/stats` | Top-bar summary counters (`applied`, `drafts_ready`, `pending`, `total_sourced`) |
 | `GET` | `/api/analytics` | Aggregated metrics, velocity timeline, conversion stages, and rejection breakdown |
+| `GET` | `/api/notifications` | Active in-app notification center activity feed |
 | `GET` | `/api/scrapers` | List of registered website scrapers (`linkedin`, `infopark`, etc.) |
 | `POST` | `/api/scrape` | Enqueue scraper background task by source with optional query and location |
 | `POST` | `/api/scrape/linkedin` | Enqueue LinkedIn feed crawler with optional location |
@@ -399,7 +471,7 @@ reach-job-automation/
 | `GET` | `/api/reasons` | Dynamic list of cancellation/rejection reasons with real-time post counts |
 | `GET` | `/api/locations` | Distinct job locations present across discovered posts |
 | `GET` | `/sw.js` | Root-scoped Service Worker for mobile browser notifications |
-| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a single post (supports `?force=true`) |
+| `POST` | `/api/generate-email/{id}` | Enqueue ChatGPT email generation for a post (supports `?force=true` override) |
 | `POST` | `/api/generate-batch` | Enqueue ChatGPT email generation for selected post IDs |
 | `POST` | `/api/open-gmail/{id}` | Enqueue opening Gmail compose with resume attached in Playwright Firefox |
 | `POST` | `/api/send-direct/{id}` | Enqueue direct email dispatch via Gmail without manual clicking |
@@ -415,7 +487,7 @@ reach-job-automation/
 
 Adding a new scraper to Reach requires only 3 simple steps:
 1. Create your scraper script in `scripts/your_scraper.py` using `src.db.upsert_post`.
-2. Add a runner function in `src/automation_tasks.py`.
+2. Add a runner function in `src/services/automation_tasks.py`.
 3. Register it in `SCRAPER_REGISTRY`:
    ```python
    SCRAPER_REGISTRY["indeed"] = {

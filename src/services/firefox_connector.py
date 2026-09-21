@@ -170,6 +170,15 @@ def cleanup_stale_profile_locks(profile_dir: str, force: bool = False):
                 pass
 
 
+def get_headless_mode() -> bool:
+    """Return whether headless mode is enabled in user configuration."""
+    try:
+        from src.config import is_headless
+        return is_headless()
+    except Exception:
+        return False
+
+
 def launch_firefox_context(
     playwright: Playwright,
     profile_dir: Optional[str] = None,

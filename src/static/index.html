@@ -166,7 +166,6 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </span>
             <span class="nav-label">Sent & History</span>
-            <span class="badge-count hidden" id="countSent" style="display: none !important;"></span>
           </button>
         </nav>
       </div>
@@ -204,8 +203,9 @@
       </div>
     </aside>
 
+
     <!-- Main View Canvas -->
-    <div class="app-main">
+    <main class="app-main" id="appMain">
       <!-- App Header / Topbar -->
       <header class="app-topbar">
         <div class="topbar-left">
@@ -316,7 +316,7 @@
 
       <main class="content-wrapper">
 
-    <!-- TAB 1: Discovered Posts (Paginated Table) -->
+      <!-- TAB 1: Discovered Posts (Paginated Table) -->
     <div class="tab-panel hidden" id="tabDiscovered">
       <!-- Structured 2-Tier Filter & Search Toolbar -->
       <div class="toolbar-tiered">
@@ -474,7 +474,7 @@
       </div>
     </div>
 
-    <!-- TAB 2: Review & Drafts (Side-by-Side) -->
+      <!-- TAB 2: Review & Drafts (Side-by-Side) -->
     <div class="tab-panel hidden" id="tabReview">
       <div class="review-split">
         <!-- Sidebar: Items Ready -->
@@ -610,7 +610,7 @@
       </div>
     </div>
 
-    <!-- TAB 3: Others (Sent & Cancelled Applications History) -->
+      <!-- TAB 3: Others (Sent & Cancelled Applications History) -->
     <div class="tab-panel hidden" id="tabSent">
       <div class="toolbar" style="margin-bottom: 0.85rem;">
         <div class="filter-pills" id="othersPills">
@@ -681,7 +681,7 @@
       </div>
     </div>
 
-    <!-- TAB 4: Analytics Dashboard (Home) -->
+      <!-- TAB 4: Analytics Dashboard (Home) -->
     <div class="tab-panel" id="tabAnalytics">
       <!-- Analytics Header Toolbar -->
       <div class="analytics-toolbar">
@@ -991,6 +991,9 @@
 </div> <!-- .app-main -->
 </div> <!-- .app-layout -->
 
+    </main>
+  </div>
+
   <!-- Post Details Expandable Modal -->
   <div class="modal-overlay hidden" id="postModal" onclick="if (event.target === this) closePostModal()">
     <div class="modal-box modal-lg">
@@ -1145,7 +1148,7 @@
         </div>
         <button class="close-x" onclick="closeDirectOutreachModal()">×</button>
       </div>
-      <div class="modal-body" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem 1.5rem;">
+      <div class="modal-body">
         <div class="form-block">
           <label style="display: flex; justify-content: space-between; font-weight: 600; font-size: 0.8rem; margin-bottom: 0.25rem;">
             <span>Recipient Email <span style="color: var(--danger-color);">*</span></span>
@@ -1171,14 +1174,14 @@
             <span>Email Body:</span>
             <button type="button" class="btn-link" style="font-size: 0.75rem; color: #818cf8; background: none; border: none; cursor: pointer; text-decoration: underline;" onclick="resetDirectOutreachBody()">Reset to Default</button>
           </label>
-          <textarea id="directOutreachBody" rows="9" class="textarea-clean" style="font-size: 0.82rem; line-height: 1.45;"></textarea>
+          <textarea id="directOutreachBody" rows="7" class="textarea-clean" style="font-size: 0.82rem; line-height: 1.45; min-height: 120px; max-height: 220px; resize: vertical;"></textarea>
         </div>
         <p style="font-size: 0.75rem; color: var(--text-muted); margin: 0; display: flex; align-items: center; gap: 0.4rem;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
           <span>Active configured resume will be automatically attached in Gmail Playwright session.</span>
         </p>
       </div>
-      <div class="modal-bottom" style="justify-content: flex-end; align-items: center; gap: 0.65rem;">
+      <div class="modal-bottom">
         <button class="btn btn-outline btn-sm" onclick="closeDirectOutreachModal()">Cancel</button>
         <button class="btn btn-outline btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem;" onclick="submitDirectOutreach('draft')" title="Create draft in Gmail and keep Firefox window open on screen for review">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
@@ -1356,9 +1359,28 @@
     </div>
   </div>
 
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <script src="/static/app.js?v=5.1"></script>
+  <!-- Audio Element for App Chime Notifications -->
+  <audio id="notifAudio" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Modular Client Architecture Scripts -->
+  <script src="/static/js/state.js?v=5.0"></script>
+  <script src="/static/js/utils.js?v=5.0"></script>
+  <script src="/static/js/notifications.js?v=5.0"></script>
+  <script src="/static/js/sidebar.js?v=5.0"></script>
+  <script src="/static/js/api.js?v=5.0"></script>
+  <script src="/static/js/discovered.js?v=5.0"></script>
+  <script src="/static/js/review.js?v=5.0"></script>
+  <script src="/static/js/history.js?v=5.0"></script>
+  <script src="/static/js/crawler.js?v=5.0"></script>
+  <script src="/static/js/tasks.js?v=5.0"></script>
+  <script src="/static/js/modals.js?v=5.0"></script>
+  <script src="/static/js/analytics.js?v=5.0"></script>
+  <script src="/static/app.js?v=5.0"></script>
 </body>
 </html>

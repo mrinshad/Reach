@@ -1,0 +1,549 @@
+/* ==========================================================================
+   SIDEBAR.CSS — Sidebar Navigation, Collapsed/Expanded States, 44x44 Icons, Crawler Trigger & Health Footer
+   ========================================================================== */
+
+  /* Left Sidebar Navigation & Controls */
+  .app-sidebar {
+    width: 270px;
+    min-width: 270px;
+    max-width: 270px;
+    flex-shrink: 0;
+    height: 100vh;
+    max-height: 100vh;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: #0b1120;
+    border-right: 1px solid var(--border-subtle);
+    padding: 1.25rem 1rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 50;
+    box-shadow: 2px 0 16px rgba(0, 0, 0, 0.35);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+    transition: width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), min-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), max-width 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), padding 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .sidebar-brand {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 1.15rem;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 1.15rem;
+    transition: padding 0.22s ease;
+  }
+
+  .brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    user-select: none;
+    min-width: 0;
+  }
+
+  .brand-logo .logo-mark {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.6));
+    flex-shrink: 0;
+  }
+
+  .brand-text-block {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .brand-title {
+    font-family: var(--font-logo);
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.1;
+  }
+
+  .brand-subtitle {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.15rem;
+  }
+
+  .sidebar-collapse-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    color: var(--text-muted);
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .sidebar-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text-main);
+    border-color: var(--border-medium);
+  }
+
+  .sidebar-section {
+    margin-bottom: 1.15rem;
+  }
+
+  .sidebar-section.flex-grow {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.55rem;
+    padding-left: 0.4rem;
+  }
+
+  /* Sidebar Crawler Launch Card */
+  .crawler-sidebar-card,
+  .crawler-card-sidebar {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .crawler-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  .crawler-control-vertical,
+  .crawler-controls-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .field-label-sm {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+
+  .crawler-source-select,
+  .crawler-source-select-sidebar,
+  .crawler-location-select,
+  .crawler-location-select-sidebar {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-xs);
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.78rem;
+    padding: 0.45rem 0.6rem;
+    outline: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .crawler-source-select:focus,
+  .crawler-source-select-sidebar:focus,
+  .crawler-location-select:focus,
+  .crawler-location-select-sidebar:focus {
+    border-color: var(--accent-indigo);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  }
+
+  .btn-crawl-sidebar {
+    width: 100%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    box-shadow: 0 2px 10px rgba(99, 102, 241, 0.3);
+  }
+
+  /* Sidebar Nav Items */
+  .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .sidebar-nav .nav-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.6rem 0.75rem;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s ease;
+  }
+
+  .sidebar-nav .nav-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .sidebar-nav .nav-item.active {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+  }
+
+  .sidebar-nav .nav-icon {
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-nav .nav-label {
+    flex: 1;
+  }
+
+  .sidebar-nav .badge-count {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+  }
+
+  .sidebar-nav .nav-item.active .badge-count {
+    background: rgba(99, 102, 241, 0.35);
+    color: #c7d2fe;
+  }
+
+  /* Sidebar Footer */
+  .sidebar-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .resume-pill-sidebar {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.65rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .resume-pill-sidebar .pill-icon {
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .resume-pill-sidebar .resume-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .resume-pill-sidebar .resume-tag {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .resume-pill-sidebar .resume-filename {
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+  }
+
+  .sidebar-system-bar {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .sidebar-sys-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xs);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.45rem 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sidebar-sys-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: var(--text-main);
+    border-color: var(--border-medium);
+  }
+
+  /* Smooth micro-fade animation when sidebar expands */
+  @keyframes sidebarItemFadeIn {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .app-sidebar:not(.collapsed) .brand-text-block,
+  .app-sidebar:not(.collapsed) .sidebar-collapse-btn,
+  .app-sidebar:not(.collapsed) .sidebar-section-title,
+  .app-sidebar:not(.collapsed) .crawler-select-wrapper,
+  .app-sidebar:not(.collapsed) .field-label-sm,
+  .app-sidebar:not(.collapsed) .btn-crawl-label,
+  .app-sidebar:not(.collapsed) .nav-label,
+  .app-sidebar:not(.collapsed) .badge-count,
+  .app-sidebar:not(.collapsed) .resume-info,
+  .app-sidebar:not(.collapsed) .sidebar-sys-btn span {
+    animation: sidebarItemFadeIn 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* ==========================================================================
+     Collapsible Sidebar Mode (Minimum width: 68px, icon & logo only)
+     ========================================================================== */
+  .app-sidebar.collapsed {
+    width: 68px;
+    min-width: 68px;
+    max-width: 68px;
+    padding: 1.25rem 0.5rem;
+    align-items: center;
+  }
+
+  .app-sidebar.collapsed .sidebar-brand {
+    justify-content: center;
+    width: 100%;
+    padding-bottom: 0.85rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .app-sidebar.collapsed .brand-text-block,
+  .app-sidebar.collapsed .sidebar-collapse-btn {
+    display: none !important;
+  }
+
+  .app-sidebar.collapsed .brand-logo {
+    justify-content: center;
+  }
+
+  .app-sidebar.collapsed .sidebar-crawler-section {
+    margin-bottom: 0.85rem;
+    width: 100%;
+  }
+
+  .app-sidebar.collapsed .sidebar-section-title,
+  .app-sidebar.collapsed .field-label-sm,
+  .app-sidebar.collapsed .crawler-select-wrapper,
+  .app-sidebar.collapsed .btn-crawl-label {
+    display: none !important;
+  }
+
+  .app-sidebar.collapsed .crawler-sidebar-card,
+  .app-sidebar.collapsed .crawler-card-sidebar {
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .app-sidebar.collapsed .crawler-control-vertical,
+  .app-sidebar.collapsed .crawler-controls-vertical {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .app-sidebar.collapsed .btn-crawl-sidebar {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    border-radius: 10px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-sidebar.collapsed .sidebar-nav {
+    width: 100%;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .app-sidebar.collapsed .sidebar-nav .nav-item {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 44px;
+    max-height: 44px;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .app-sidebar.collapsed .sidebar-nav .nav-label {
+    display: none !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-nav .badge-count {
+    display: inline-flex !important;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9999px;
+    background: #6366f1;
+    color: #ffffff;
+    border: 2px solid #0b1120;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .app-sidebar.collapsed .sidebar-footer {
+    width: 100%;
+    align-items: center;
+    padding-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .app-sidebar.collapsed .resume-pill-sidebar {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    max-width: 44px;
+    max-height: 44px;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+    margin: 0 auto;
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+
+  .app-sidebar.collapsed .resume-pill-sidebar .resume-info,
+  .app-sidebar.collapsed .resume-pill-sidebar label {
+    display: none !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-system-bar {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .app-sidebar.collapsed .sidebar-sys-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    max-width: 44px !important;
+    max-height: 44px !important;
+    flex: none !important;
+    flex-shrink: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+
+  .app-sidebar.collapsed .sidebar-sys-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .app-sidebar.collapsed .sidebar-sys-btn span {
+    display: none !important;
+  }

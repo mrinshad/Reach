@@ -16,8 +16,8 @@ import random
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
-from src.chatgpt_service import navigate_to_conversation, send_jd_and_get_email, extract_unsuitable_reason
+from src.services.firefox_connector import launch_firefox_context
+from src.services.chatgpt_service import navigate_to_conversation, send_jd_and_get_email, extract_unsuitable_reason
 from src.db import get_pending_email_posts, save_chatgpt_response, update_post_status, update_post_email
 
 

@@ -15,8 +15,8 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
-from src.gmail_service import navigate_to_gmail, populate_email_draft
+from src.services.firefox_connector import launch_firefox_context
+from src.services.gmail_service import navigate_to_gmail, populate_email_draft
 from src.db import get_posts, update_post_status, get_connection
 from src.config import load_config
 

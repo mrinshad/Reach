@@ -1,0 +1,135 @@
+<!-- TAB 2: Review & Drafts (Side-by-Side) -->
+    <div class="tab-panel hidden" id="tabReview">
+      <div class="review-split">
+        <!-- Sidebar: Items Ready -->
+        <aside class="review-queue">
+          <div class="queue-header">
+            <span class="queue-title">Ready for Review</span>
+            <span class="badge-count" id="reviewQueueCount">0</span>
+          </div>
+          <div class="queue-search">
+            <div class="search-box sm" style="width: 100%;">
+              <svg class="search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearchReview" placeholder="Search drafts..." oninput="handleSearchReview(this.value)" style="width: 100%;" />
+            </div>
+          </div>
+          <!-- Multi-Select Batch Actions Toolbar -->
+          <div class="queue-batch-bar" id="queueBatchBar">
+            <label class="queue-select-all-label" title="Select or Deselect All Drafts">
+              <input type="checkbox" id="selectAllDraftsCheckbox" onchange="toggleSelectAllDrafts(this.checked)" />
+              <span>Select All</span>
+            </label>
+            <button id="btnSendBatchDrafts" class="btn btn-primary btn-xs hidden" onclick="sendBatchSelectedDrafts()" title="Send selected applications directly">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              <span>Send (<span id="selectedDraftsCount">0</span>)</span>
+            </button>
+          </div>
+          <div class="queue-list" id="reviewQueueList">
+            <!-- Populated dynamically -->
+          </div>
+        </aside>
+
+        <!-- Main Review Workspace -->
+        <section class="review-main" id="reviewMainWorkspace">
+          <div class="empty-state" id="emptyReviewState">
+            <div class="empty-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            </div>
+            <h3>No Draft Selected</h3>
+            <p>Select a generated post from the left queue to review, edit, and open in Gmail.</p>
+          </div>
+
+          <div class="workspace-panel hidden" id="workspacePanel">
+            <!-- Workspace Top Bar -->
+            <div class="workspace-bar">
+              <div class="candidate-header-block">
+                <h2 class="candidate-title" id="reviewAuthorName">Candidate Name</h2>
+                <span class="candidate-meta" id="reviewHeadline">Headline</span>
+              </div>
+
+              <div class="bar-actions">
+                <button class="btn btn-outline btn-sm" onclick="saveActiveDraftEdits()" title="Save changes to database">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>Save</span>
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail without manual clicking">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  <span>Send Directly</span>
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft with resume for manual inspection">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                  <span>Open Gmail</span>
+                </button>
+                <button class="btn btn-success btn-sm" onclick="markActivePostSent()" title="Mark as successfully sent">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  <span>Mark Sent</span>
+                </button>
+                <button class="btn btn-outline btn-sm btn-spam-action" onclick="markActivePostSpam()" title="Mark this JD as Spam / Scam and discard">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                  <span>Spam</span>
+                </button>
+                <button class="btn btn-cancel-app btn-sm" onclick="cancelActiveApplication()" title="Cancel & Discard this application">
+                  <span>✕ Cancel</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Two-Column Grid: Original Post vs Draft -->
+            <div class="split-grid">
+              <!-- Left: Original Post -->
+              <div class="panel-box">
+                <div class="box-head">
+                  <span class="box-title">Job Post</span>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <button class="box-copy-btn" id="btnCopyJd" onclick="copyJobDescription()" title="Copy full Job Description text">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      <span>Copy JD</span>
+                    </button>
+                    <a href="#" target="_blank" id="reviewPostLink" class="link-small">LinkedIn ↗</a>
+                  </div>
+                </div>
+                <div class="post-specs">
+                  <div><strong>Email:</strong> <span id="reviewTargetEmail"></span></div>
+                  <div><strong>Experience:</strong> <span class="pill-badge" id="reviewExpPill"></span></div>
+                </div>
+                <div class="post-scroll" id="reviewFullText"></div>
+              </div>
+
+              <!-- Right: Editable Draft -->
+              <div class="panel-box">
+                <div class="box-head">
+                  <span class="box-title">Outreach Email Draft</span>
+                  <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    <button class="box-copy-btn" id="btnCopyDraft" onclick="copyEmailDraft()" title="Copy email subject and body">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      <span>Copy Email</span>
+                    </button>
+                    <span class="tag-success">✓ Ready for Gmail</span>
+                  </div>
+                </div>
+                <div class="editor-fields">
+                  <div class="field-item">
+                    <label>Subject Line</label>
+                    <input type="text" id="draftSubject" class="input-clean" />
+                  </div>
+                  <div class="field-item">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; gap: 0.5rem; flex-wrap: wrap;">
+                      <label style="margin-bottom: 0;">Email Body</label>
+                      <button type="button" class="btn btn-outline btn-xs btn-generate-mail-jd" id="btnGenerateMailFromJd" onclick="generateEmailForActiveDraft()" title="Generate custom AI cold outreach email from this Job Description">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                        <span>Generate Mail from JD</span>
+                      </button>
+                    </div>
+                    <textarea id="draftBody" rows="18" class="textarea-clean"></textarea>
+                  </div>
+                  <div class="resume-badge-box" id="draftResumeBox">
+                    <span>📎 Resume attached:</span>
+                    <strong id="draftResumeFilename">Resume.pdf</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>

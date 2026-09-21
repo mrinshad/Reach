@@ -1,0 +1,62 @@
+<!-- Problem / Error Notice Alert Banner -->
+      <div class="system-alert-banner hidden" id="systemAlertBanner">
+        <div class="alert-content">
+          <span class="alert-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <span class="alert-message" id="systemAlertMessage">Issue detected</span>
+        </div>
+        <button class="alert-close-btn" onclick="dismissSystemAlert()">×</button>
+      </div>
+
+      <!-- Real-Data Real-Time Task Progress Widget -->
+      <div class="live-task-card hidden" id="liveTaskCard">
+        <div class="task-card-header">
+          <div class="task-card-left">
+            <div class="pulse-ring"></div>
+            <div>
+              <div class="task-title" id="taskTitle">Automation Running</div>
+              <div class="task-subtitle" id="taskSubtitle">Processing real post data...</div>
+            </div>
+          </div>
+          <div class="task-card-right">
+            <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
+            <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="taskProgressFill" style="width: 0%;"></div>
+        </div>
+
+        <div class="task-logs-drawer hidden" id="taskLogsDrawer">
+          <div class="logs-stream" id="logsStream"></div>
+        </div>
+
+        <!-- Centralized Automation Task Queue Drawer -->
+        <div class="task-queue-section hidden" id="taskQueueSection">
+          <div class="task-queue-header">
+            <div class="task-queue-title-group">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              <span class="task-queue-title">Up Next in Queue</span>
+              <span class="queue-counter-badge" id="taskQueueCountBadge">0</span>
+            </div>
+            <button class="btn-link-xs text-muted" onclick="clearTaskQueue()" title="Clear all queued tasks">Clear Queue</button>
+          </div>
+          <div class="task-queue-list" id="taskQueueList">
+            <!-- Populated dynamically with pending tasks -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Backward compatibility hidden metrics -->
+      <div style="display: none;">
+        <span id="statApplied">0</span>
+        <span id="statGenerated">0</span>
+        <span id="statOutreach">0</span>
+        <span id="statTotalSourced">0</span>
+      </div>
+
+      <main class="content-wrapper">

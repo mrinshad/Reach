@@ -14,7 +14,7 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
-from src.firefox_connector import launch_firefox_context
+from src.services.firefox_connector import launch_firefox_context
 
 ARTIFACT_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
