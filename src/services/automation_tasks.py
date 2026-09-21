@@ -35,6 +35,8 @@ from .gmail_service import (
 )
 from src.config import load_config, is_headless
 
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 class TaskManager:
     """Thread-safe task state tracker and centralized sequential execution queue."""
@@ -607,6 +609,7 @@ def run_scraper_subprocess_with_timeout(
     inactivity_timeout_seconds: float = 90.0,
     finish_message: str = "Scraping finished successfully.",
     extra_env: Optional[Dict[str, str]] = None,
+    cwd: Optional[str] = None,
 ):
     """
     Execute a scraping script in a subprocess monitored with an inactivity watchdog.
@@ -629,6 +632,7 @@ def run_scraper_subprocess_with_timeout(
             text=True,
             bufsize=1,
             env=env,
+            cwd=cwd or PROJECT_ROOT,
         )
 
         last_activity = [time.time()]
@@ -705,11 +709,7 @@ def run_infopark_scraper():
     Scrapes today's opportunities from https://infopark.in/companies-job,
     extracting full JDs and direct recruiter emails.
     """
-    script_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "scripts",
-        "infopark_jobs_search.py"
-    )
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "infopark_jobs_search.py")
     run_scraper_subprocess_with_timeout(
         task_name="Infopark Jobs Scraper",
         script_path=script_path,
@@ -723,11 +723,7 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
     Run the LinkedIn Posts Scraper in headed Firefox (headless=False) via subprocess
     with 90-second inactivity timeout, with optional query and location parameters.
     """
-    script_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "scripts",
-        "linkedin_posts_search.py"
-    )
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_posts_search.py")
     task_label = "LinkedIn Posts Scraper"
     if location and location.strip():
         task_label = f"LinkedIn Posts Scraper ({location.strip()})"
