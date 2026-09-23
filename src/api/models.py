@@ -15,6 +15,7 @@ class UpdateEmailPayload(BaseModel):
 
 class GenerateBatchPayload(BaseModel):
     post_ids: List[str]
+    force: bool = False
 
 
 class SendBatchPayload(BaseModel):

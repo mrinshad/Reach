@@ -263,17 +263,23 @@ function updateSelectedDraftsUI() {
   const count = state.selectedDraftIds.size;
   const countEl = document.getElementById('selectedDraftsCount');
   const countCancelEl = document.getElementById('selectedDraftsCancelCount');
+  const countGenEl = document.getElementById('selectedDraftsGenCount');
   const btnBatch = document.getElementById('btnSendBatchDrafts');
   const btnCancelBatch = document.getElementById('btnCancelBatchDrafts');
+  const btnGenBatch = document.getElementById('btnGenerateBatchDrafts');
   const checkAll = document.getElementById('selectAllDraftsCheckbox');
 
   if (countEl) countEl.textContent = String(count);
   if (countCancelEl) countCancelEl.textContent = String(count);
+  if (countGenEl) countGenEl.textContent = String(count);
   if (btnBatch) {
     btnBatch.classList.toggle('hidden', count === 0);
   }
   if (btnCancelBatch) {
     btnCancelBatch.classList.toggle('hidden', count === 0);
+  }
+  if (btnGenBatch) {
+    btnGenBatch.classList.toggle('hidden', count === 0);
   }
   if (checkAll) {
     checkAll.checked = state.reviewPosts.length > 0 && count === state.reviewPosts.length;
@@ -497,6 +503,93 @@ async function markPostSentById(postId) {
 function cancelActiveApplication() {
   if (!state.activeReviewPost) return;
   openCancelReasonModal(state.activeReviewPost.id, state.activeReviewPost.author_name, '', false);
+}
+
+async function generateBatchSelectedDrafts() {
+  const ids = Array.from(state.selectedDraftIds || []);
+  if (ids.length === 0) {
+    showToast('Please select at least one draft to generate.', 'warn');
+    return;
+  }
+
+  const confirmed = await showConfirm(
+    'Batch Generate Outreach Emails',
+    `Generate or re-generate tailored outreach emails for ${ids.length} selected post${ids.length === 1 ? '' : 's'} using ChatGPT?`,
+    { confirmText: `Generate ${ids.length} Emails` }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/generate-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, force: true }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
+      if (data.queued) {
+        showToast(`Enqueued batch generation for ${ids.length} posts (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      }
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Cannot Start', err.detail || 'Failed to start batch generation.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function quickGenerateAllReviewDrafts() {
+  let ids = Array.from(state.selectedDraftIds || []);
+  if (ids.length === 0) {
+    ids = (state.reviewPosts || []).map((p) => p.id);
+  }
+  if (ids.length === 0) {
+    showToast('No drafts available in the queue to generate.', 'warn');
+    return;
+  }
+
+  const label = state.selectedDraftIds && state.selectedDraftIds.size > 0
+    ? `${ids.length} selected draft${ids.length === 1 ? '' : 's'}`
+    : `all ${ids.length} ready draft${ids.length === 1 ? '' : 's'} in the review queue`;
+
+  const confirmed = await showConfirm(
+    'Bulk Email Generation',
+    `Submit ${label} to ChatGPT for automated outreach email generation in headed Firefox?`,
+    { confirmText: `Generate ${ids.length} Emails` }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/generate-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, force: true }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (state.selectedDraftIds) state.selectedDraftIds.clear();
+      updateSelectedDraftsUI();
+      if (data.queued) {
+        showToast(`Enqueued batch generation for ${ids.length} posts (Position #${data.position})`, 'info');
+      } else {
+        showToast(`Batch generation started for ${ids.length} posts`, 'info');
+      }
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Cannot Start', err.detail || 'Failed to start batch generation.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
 }
 
 function cancelBatchSelectedDrafts() {
@@ -726,6 +819,8 @@ window.toggleSelectAllDrafts = toggleSelectAllDrafts;
 window.updateSelectedDraftsUI = updateSelectedDraftsUI;
 window.sendActiveDraftDirectly = sendActiveDraftDirectly;
 window.sendBatchSelectedDrafts = sendBatchSelectedDrafts;
+window.generateBatchSelectedDrafts = generateBatchSelectedDrafts;
+window.quickGenerateAllReviewDrafts = quickGenerateAllReviewDrafts;
 window.openActivePostInGmail = openActivePostInGmail;
 window.markActivePostSent = markActivePostSent;
 window.markPostSentById = markPostSentById;
