@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof fetchHealth === 'function') fetchHealth();
   if (typeof fetchScrapers === 'function') fetchScrapers();
   if (typeof pollTaskStatus === 'function') pollTaskStatus();
+  if (typeof startRealtimeSync === 'function') startRealtimeSync();
 
   if (window.state) {
     window.state.healthTimer = setInterval(() => {

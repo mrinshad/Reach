@@ -86,6 +86,9 @@ async function pollTaskStatus() {
 
       renderTaskLogs(task.logs);
 
+      // Real-time update of all dashboard metrics & active tab view during task execution
+      if (typeof fetchStats === 'function') fetchStats();
+
       state.lastHandledTaskKey = null;
     } else if (task.status === 'completed' || task.status === 'error') {
       if (task.logs && task.logs.length > 0) {

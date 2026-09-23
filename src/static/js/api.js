@@ -86,6 +86,10 @@ async function fetchStats() {
     const outreachReady = stats.email_outreach_total || 0;
     const totalSourced = stats.total_posts || 0;
     const othersCount = stats.others_total !== undefined ? stats.others_total : (sentCount + (stats.rejected_total || 0));
+    const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : 0;
+    const cancelledCount = stats.rejected_total || 0;
+    const spamCount = stats.potential_spam_total !== undefined ? stats.potential_spam_total : 0;
+    const withEmails = stats.with_emails !== undefined ? stats.with_emails : outreachReady;
 
     // Top Metrics Summary Bar
     const elApplied = document.getElementById('statApplied');
@@ -104,7 +108,7 @@ async function fetchStats() {
     const elDiscovered = document.getElementById('statDiscovered');
     if (elDiscovered) elDiscovered.textContent = discoveredTotal;
     const elPending = document.getElementById('statPending');
-    if (elPending) elPending.textContent = stats.pending_generation || 0;
+    if (elPending) elPending.textContent = pendingCount;
     const elSent = document.getElementById('statSent');
     if (elSent) elSent.textContent = othersCount;
 
@@ -112,7 +116,6 @@ async function fetchStats() {
     // 1. Discovered Jobs: count of yet to generate JDs
     const countDiscEl = document.getElementById('countDiscovered');
     if (countDiscEl) {
-      const pendingCount = stats.pending_generation !== undefined ? stats.pending_generation : 0;
       countDiscEl.textContent = pendingCount;
       countDiscEl.title = `${pendingCount} direct email outreach jobs yet to generate`;
     }
@@ -123,10 +126,12 @@ async function fetchStats() {
       countRevEl.textContent = draftsReady;
       countRevEl.title = `${draftsReady} drafts ready for review`;
     }
+    const reviewQueueBadge = document.getElementById('reviewQueueCount');
+    if (reviewQueueBadge) {
+      reviewQueueBadge.textContent = draftsReady;
+    }
 
-    // 3. Sent & History: show nothing (no badge)
-
-    const cancelledCount = stats.rejected_total || 0;
+    // 3. Sent & History: Others tab counters
     const elOthersAll = document.getElementById('countOthersAll');
     if (elOthersAll) elOthersAll.textContent = othersCount;
 
@@ -135,8 +140,133 @@ async function fetchStats() {
 
     const elOthersCancelled = document.getElementById('countOthersCancelled');
     if (elOthersCancelled) elOthersCancelled.textContent = cancelledCount;
+
+    // 4. Executive Overview KPI Performance Cards (Analytics Tab)
+    const kpiAppliedEl = document.getElementById('kpiApplied');
+    if (kpiAppliedEl) kpiAppliedEl.textContent = Number(sentCount).toLocaleString();
+
+    const kpiConvEl = document.getElementById('kpiConversionRate');
+    if (kpiConvEl) {
+      const conv = totalSourced > 0 ? (sentCount / totalSourced * 100).toFixed(1) : '0.0';
+      kpiConvEl.textContent = `${conv}% conversion`;
+    }
+
+    const kpiDirectEl = document.getElementById('kpiDirectEmails');
+    if (kpiDirectEl) kpiDirectEl.textContent = Number(withEmails).toLocaleString();
+
+    const kpiEmailRateEl = document.getElementById('kpiEmailRate');
+    if (kpiEmailRateEl) {
+      const emailRate = totalSourced > 0 ? (withEmails / totalSourced * 100).toFixed(1) : '0.0';
+      kpiEmailRateEl.textContent = `${emailRate}% emails found`;
+    }
+
+    const kpiDraftedEl = document.getElementById('kpiDrafted');
+    if (kpiDraftedEl) kpiDraftedEl.textContent = Number(draftsReady).toLocaleString();
+
+    const kpiDraftReadyEl = document.getElementById('kpiDraftReady');
+    if (kpiDraftReadyEl) kpiDraftReadyEl.textContent = `${Number(draftsReady).toLocaleString()} ready to send`;
+
+    const kpiPendingGenEl = document.getElementById('kpiPendingGen');
+    if (kpiPendingGenEl) kpiPendingGenEl.textContent = `${Number(pendingCount).toLocaleString()} pending AI`;
+
+    const kpiScrapedEl = document.getElementById('kpiScraped');
+    if (kpiScrapedEl) kpiScrapedEl.textContent = Number(totalSourced).toLocaleString();
+
+    const kpiRejectedEl = document.getElementById('kpiRejected');
+    if (kpiRejectedEl) kpiRejectedEl.textContent = Number(cancelledCount).toLocaleString();
+
+    const kpiSpamEl = document.getElementById('kpiSpamFlagged');
+    if (kpiSpamEl) kpiSpamEl.textContent = `${Number(spamCount).toLocaleString()} potential spam`;
+
+    // Smart change detection to trigger active tab view updates
+    const prevStats = state.lastStatsSnapshot;
+    const statsChanged = !prevStats || (
+      prevStats.total_posts !== stats.total_posts ||
+      prevStats.emails_generated !== stats.emails_generated ||
+      prevStats.applications_sent !== stats.applications_sent ||
+      prevStats.rejected_total !== stats.rejected_total ||
+      prevStats.pending_generation !== stats.pending_generation ||
+      prevStats.discovered_total !== stats.discovered_total ||
+      prevStats.others_total !== stats.others_total
+    );
+
+    state.lastStatsSnapshot = { ...stats };
+
+    if (statsChanged && prevStats) {
+      refreshActiveTabRealtime(stats);
+    }
   } catch (err) {
     console.error('Error fetching stats:', err);
+  }
+}
+
+function refreshActiveTabRealtime(stats) {
+  const activeTab = state.activeTab;
+
+  if (activeTab === 'tabDiscovered') {
+    const searchInput = document.getElementById('inputSearch');
+    const isSearching = searchInput && document.activeElement === searchInput;
+    const hasSelection = state.selectedIds && state.selectedIds.size > 0;
+    if (!isSearching && !hasSelection) {
+      if (typeof fetchDiscoveredPosts === 'function') fetchDiscoveredPosts();
+    }
+  } else if (activeTab === 'tabReview') {
+    const subjInput = document.getElementById('draftSubject');
+    const bodyInput = document.getElementById('draftBody');
+    const searchRevInput = document.getElementById('inputSearchReview');
+    const isEditing = (subjInput && document.activeElement === subjInput) ||
+                      (bodyInput && document.activeElement === bodyInput) ||
+                      (searchRevInput && document.activeElement === searchRevInput);
+    if (!isEditing) {
+      if (typeof fetchReviewPosts === 'function') fetchReviewPosts();
+    }
+  } else if (activeTab === 'tabSent') {
+    const searchSentInput = document.getElementById('inputSearchSent');
+    const isSearching = searchSentInput && document.activeElement === searchSentInput;
+    const hasSelection = state.selectedSentIds && state.selectedSentIds.size > 0;
+    if (!isSearching && !hasSelection) {
+      if (typeof fetchSentPosts === 'function') fetchSentPosts();
+    }
+  } else if (activeTab === 'tabAnalytics') {
+    if (typeof loadAnalytics === 'function') {
+      loadAnalytics(state.analyticsDays || 30);
+    }
+  }
+}
+
+let realtimeSyncCounter = 0;
+async function syncRealtimeData() {
+  realtimeSyncCounter++;
+
+  // 1. Fetch updated stats and refresh metrics
+  await fetchStats();
+
+  // 2. Check task status - if an automation is running and polling is not active, start polling
+  try {
+    const res = await fetch('/api/tasks/status');
+    if (res.ok) {
+      const task = await res.json();
+      if (task.status === 'running' && !state.pollingTimer) {
+        if (typeof startTaskPolling === 'function') startTaskPolling();
+      }
+    }
+  } catch (_) {}
+
+  // 3. Periodic health diagnostics check every ~30 seconds (10 ticks)
+  if (realtimeSyncCounter % 10 === 0) {
+    if (typeof fetchHealth === 'function') fetchHealth();
+  }
+}
+
+function startRealtimeSync() {
+  if (state.liveSyncTimer) clearInterval(state.liveSyncTimer);
+  state.liveSyncTimer = setInterval(syncRealtimeData, 3000);
+}
+
+function stopRealtimeSync() {
+  if (state.liveSyncTimer) {
+    clearInterval(state.liveSyncTimer);
+    state.liveSyncTimer = null;
   }
 }
 
@@ -249,3 +379,7 @@ window.filterSentApplications = filterSentApplications;
 window.filterOutreachReady = filterOutreachReady;
 window.fetchSettings = fetchSettings;
 window.handleResumeUpload = handleResumeUpload;
+window.refreshActiveTabRealtime = refreshActiveTabRealtime;
+window.syncRealtimeData = syncRealtimeData;
+window.startRealtimeSync = startRealtimeSync;
+window.stopRealtimeSync = stopRealtimeSync;
