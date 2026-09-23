@@ -34,6 +34,8 @@ from src.db.posts import (
     move_post_to_review,
     save_chatgpt_response,
     get_pending_email_posts,
+    get_recently_sent_recipients,
+    SEND_COOLDOWN_DAYS,
 )
 
 from src.db.analytics import (

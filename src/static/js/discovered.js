@@ -334,7 +334,17 @@ function applyFilters() {
   if (srcSelect) state.sourceFilter = srcSelect.value;
 
   const dateSelect = document.getElementById('selectDateFilter');
-  if (dateSelect) state.dateFilter = dateSelect.value;
+  if (dateSelect) {
+    if (dateSelect.value === 'CUSTOM') {
+      const customValInput = document.getElementById('customDateFilterValue');
+      const customUnitSelect = document.getElementById('customDateFilterUnit');
+      const val = parseInt(customValInput?.value || '12', 10);
+      const unit = customUnitSelect?.value || 'hours';
+      state.dateFilter = `${unit === 'hours' ? 'CUSTOM_HOURS' : 'CUSTOM_DAYS'}:${val}`;
+    } else {
+      state.dateFilter = dateSelect.value;
+    }
+  }
 
   const locSelect = document.getElementById('selectLocationFilter');
   if (locSelect) state.locationFilter = locSelect.value;
@@ -360,6 +370,16 @@ function handleSortSelectChange(val) {
   updateSortIndicators();
   state.page = 1;
   fetchDiscoveredPosts();
+}
+
+function handleDateFilterSelectChange() {
+  const dateSelect = document.getElementById('selectDateFilter');
+  const customGroup = document.getElementById('customDateFilterGroup');
+  if (dateSelect && customGroup) {
+    const isCustom = dateSelect.value === 'CUSTOM';
+    customGroup.classList.toggle('hidden', !isCustom);
+  }
+  applyFilters();
 }
 
 function toggleSort(col) {
@@ -429,6 +449,8 @@ function clearDiscoveredFilters() {
   state.dateFilter = 'ALL';
   const dateSel = document.getElementById('selectDateFilter');
   if (dateSel) dateSel.value = 'ALL';
+  const customGroup = document.getElementById('customDateFilterGroup');
+  if (customGroup) customGroup.classList.add('hidden');
 
   state.locationFilter = 'ALL';
   const locSel = document.getElementById('selectLocationFilter');
@@ -544,6 +566,7 @@ window.changeRowsPerPage = changeRowsPerPage;
 window.setExpFilter = setExpFilter;
 window.applyFilters = applyFilters;
 window.handleSortSelectChange = handleSortSelectChange;
+window.handleDateFilterSelectChange = handleDateFilterSelectChange;
 window.toggleSort = toggleSort;
 window.updateSortIndicators = updateSortIndicators;
 window.handleSearchKeyUp = handleSearchKeyUp;

@@ -54,6 +54,11 @@
               </select>
             </div>
 
+            <div class="field-label-sm">Search Keywords:</div>
+            <div class="crawler-select-wrapper crawler-search-wrapper" id="crawlerSearchWrapper">
+              <input type="text" id="crawlerSearchInput" class="crawler-source-select crawler-search-input" placeholder="e.g. Full Stack Developer" autocomplete="off" spellcheck="false" title="Optional — takes priority over Settings → Target LinkedIn Search Keywords when filled. Leave empty to use the Settings keywords." />
+            </div>
+
             <div class="field-label-sm">Location / Target:</div>
             <div class="crawler-select-wrapper" id="crawlerLocationWrapper">
               <select id="crawlerLocationSelect" class="crawler-source-select crawler-location-select" title="Target Job Location / Area">
@@ -126,6 +131,27 @@
                 <optgroup label="Work Mode">
                   <option value="Remote">Remote</option>
                 </optgroup>
+              </select>
+            </div>
+
+            <div class="field-label-sm" id="crawlerTimeLabel">Time Window:</div>
+            <div class="crawler-select-wrapper" id="crawlerTimeWrapper">
+              <select id="crawlerTimeSelect" class="crawler-source-select" title="Scrape posts within this timeframe" onchange="handleCrawlerTimeChange()">
+                <option value="24h" selected>Last 24 Hours (Default)</option>
+                <option value="today">Today (Since Midnight)</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="2d">Last 2 Days</option>
+                <option value="3d">Last 3 Days</option>
+                <option value="week">Past Week</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+
+            <div class="crawler-custom-time-row hidden" id="crawlerCustomTimeWrapper">
+              <input type="number" id="crawlerCustomTimeValue" class="crawler-source-select custom-time-input" min="1" max="720" value="12" placeholder="Val" title="Number of hours or days" />
+              <select id="crawlerCustomTimeUnit" class="crawler-source-select custom-time-unit" title="Unit">
+                <option value="hours" selected>Hours</option>
+                <option value="days">Days</option>
               </select>
             </div>
 
@@ -276,6 +302,10 @@
           </div>
           <div class="task-card-right">
             <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
+            <button class="btn-cancel-active-task" id="btnCancelActiveTask" onclick="cancelActiveTask()" title="Stop ongoing task">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              <span>Stop</span>
+            </button>
             <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
             </button>
@@ -287,6 +317,17 @@
         </div>
 
         <div class="task-logs-drawer hidden" id="taskLogsDrawer">
+          <div class="task-logs-toolbar">
+            <div class="task-logs-toolbar-left">
+              <span class="logs-toolbar-title">Terminal Stream</span>
+            </div>
+            <div class="task-logs-toolbar-right">
+              <button class="logs-cancel-btn" onclick="cancelActiveTask()" title="Stop ongoing task">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                <span>Stop Task</span>
+              </button>
+            </div>
+          </div>
           <div class="logs-stream" id="logsStream"></div>
         </div>
 
@@ -387,12 +428,24 @@
               <option value="ALL" selected>All Reasons</option>
             </select>
 
-            <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
+            <select id="selectDateFilter" class="select-clean" onchange="handleDateFilterSelectChange()" title="Filter by Crawled Date">
               <option value="ALL" selected>All Dates</option>
+              <option value="24H">Last 24 Hours</option>
               <option value="TODAY">Today</option>
               <option value="YESTERDAY">Yesterday</option>
+              <option value="2D">Last 2 Days</option>
+              <option value="3D">Last 3 Days</option>
               <option value="WEEK">Past 7 Days</option>
+              <option value="CUSTOM">Custom...</option>
             </select>
+
+            <div class="custom-date-filter-group hidden" id="customDateFilterGroup">
+              <input type="number" id="customDateFilterValue" min="1" max="365" value="12" class="select-clean input-custom-date" title="Enter hours or days" oninput="applyFilters()" />
+              <select id="customDateFilterUnit" class="select-clean select-custom-unit" title="Unit" onchange="applyFilters()">
+                <option value="hours" selected>hrs</option>
+                <option value="days">days</option>
+              </select>
+            </div>
 
             <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
               <option value="default" selected>Sort: Default</option>

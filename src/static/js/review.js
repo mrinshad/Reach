@@ -279,8 +279,49 @@ function updateSelectedDraftsUI() {
   });
 }
 
+function formatCooldownWait(waitSeconds) {
+  const total = Math.max(0, Math.floor(waitSeconds || 0));
+  const d = Math.floor(total / 86400);
+  const h = Math.floor((total % 86400) / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (d > 0) return `${d} day${d !== 1 ? 's' : ''} ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${Math.max(m, 1)} minute${m !== 1 ? 's' : ''}`;
+}
+
+async function preflightSendCooldown(postIds) {
+  try {
+    const res = await fetch('/api/send-preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: postIds }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+function showCooldownDialog(blocked, cooldownDays) {
+  const lines = blocked.map(
+    (b) => `• ${b.email} — already sent, wait ${formatCooldownWait(b.wait_seconds)} to send again`
+  );
+  showCenterAlert(
+    'Already Sent Recently',
+    `An application email was already sent to ${blocked.length === 1 ? 'this recipient' : 'these recipients'} within the last ${cooldownDays} days:\n\n${lines.join('\n')}\n\nPlease wait for the cooldown to finish before sending again.`,
+    { danger: true, confirmText: 'Got it' }
+  );
+}
+
 async function sendActiveDraftDirectly() {
   if (!state.activeReviewPost) return;
+
+  const cooldown = await preflightSendCooldown([state.activeReviewPost.id]);
+  if (cooldown && cooldown.blocked && cooldown.blocked.length > 0) {
+    showCooldownDialog(cooldown.blocked, cooldown.cooldown_days || 3);
+    return;
+  }
 
   const recipient = (state.activeReviewPost.contact_emails && state.activeReviewPost.contact_emails[0]) || state.activeReviewPost.author_name;
   const confirmed = await showConfirm(
@@ -306,7 +347,11 @@ async function sendActiveDraftDirectly() {
       if (typeof startTaskPolling === 'function') startTaskPolling();
     } else {
       const err = await res.json();
-      showAlert('Send Direct Error', err.detail || 'Cannot send email directly.');
+      if (res.status === 409) {
+        showCenterAlert('Already Sent Recently', err.detail || 'This recipient was emailed recently.', { danger: true, confirmText: 'Got it' });
+      } else {
+        showAlert('Send Direct Error', err.detail || 'Cannot send email directly.');
+      }
     }
   } catch (err) {
     showAlert('Error', err.message);
@@ -320,10 +365,32 @@ async function sendBatchSelectedDrafts() {
     return;
   }
 
+  let sendIds = ids;
+  const cooldown = await preflightSendCooldown(ids);
+  if (cooldown && cooldown.blocked && cooldown.blocked.length > 0) {
+    const days = cooldown.cooldown_days || 3;
+    if (!cooldown.allowed || cooldown.allowed.length === 0) {
+      showCooldownDialog(cooldown.blocked, days);
+      return;
+    }
+    const lines = cooldown.blocked.map(
+      (b) => `• ${b.email} — wait ${formatCooldownWait(b.wait_seconds)}`
+    );
+    const proceed = await showConfirm(
+      'Some Recipients Recently Emailed',
+      `${cooldown.blocked.length} of ${ids.length} selected recipients were already emailed within the last ${days} days:\n\n${lines.join('\n')}\n\nSend to the remaining ${cooldown.allowed.length} recipient(s) only?`,
+      { confirmText: `Send ${cooldown.allowed.length} Remaining` }
+    );
+    if (!proceed) return;
+    sendIds = cooldown.allowed;
+    cooldown.blocked.forEach((b) => state.selectedDraftIds.delete(b.post_id));
+    updateSelectedDraftsUI();
+  }
+
   const confirmed = await showConfirm(
     'Batch Direct Send',
-    `Send ${ids.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
-    { confirmText: `Send ${ids.length} Emails` }
+    `Send ${sendIds.length} selected applications directly via Gmail in a single browser session? Each recipient will be emailed and attached your resume sequentially.`,
+    { confirmText: `Send ${sendIds.length} Emails` }
   );
   if (!confirmed) return;
 
@@ -331,21 +398,25 @@ async function sendBatchSelectedDrafts() {
     const res = await fetch('/api/send-batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_ids: ids }),
+      body: JSON.stringify({ post_ids: sendIds }),
     });
     if (res.ok) {
       const data = await res.json();
       if (data.queued) {
-        showToast(`Enqueued batch send for ${ids.length} emails (Position #${data.position})`, 'info');
+        showToast(`Enqueued batch send for ${sendIds.length} emails (Position #${data.position})`, 'info');
       } else {
-        showToast(`Dispatched batch send task for ${ids.length} emails. Monitor progress in live widget.`, 'info');
+        showToast(`Dispatched batch send task for ${sendIds.length} emails. Monitor progress in live widget.`, 'info');
       }
       state.selectedDraftIds.clear();
       updateSelectedDraftsUI();
       if (typeof startTaskPolling === 'function') startTaskPolling();
     } else {
       const err = await res.json();
-      showAlert('Batch Send Error', err.detail || 'Cannot initiate batch send.');
+      if (res.status === 409) {
+        showCenterAlert('Already Sent Recently', err.detail || 'Selected recipients were emailed recently.', { danger: true, confirmText: 'Got it' });
+      } else {
+        showAlert('Batch Send Error', err.detail || 'Cannot initiate batch send.');
+      }
     }
   } catch (err) {
     showAlert('Error', err.message);

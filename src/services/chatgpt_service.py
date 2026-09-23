@@ -53,6 +53,28 @@ def navigate_to_conversation(page: Page, url: Optional[str] = None, timeout: int
     print("✓ ChatGPT conversation loaded and prompt box ready.")
 
 
+def is_unsuitable_response(raw_text: str) -> bool:
+    """Check if ChatGPT returned an unsuitable / skip / non-engineering classification."""
+    if not raw_text:
+        return False
+    t = raw_text.strip().lower()
+    return bool(
+        "unsuitable_jd" in t
+        or t.startswith("not suitable")
+        or "❌ not suitable" in t
+        or "not suitable —" in t
+        or "not suitable -" in t
+        or "→ skip" in t
+        or "-> skip" in t
+        or ("classification:" in t and "skip" in t)
+        or "recommendation: skip" in t
+        or "not a software engineering" in t
+        or "not a software developer" in t
+        or "i'd skip this one" in t
+        or "skip this one" in t
+    )
+
+
 def parse_email_response(raw_text: str) -> Tuple[str, str]:
     """
     Parse a ChatGPT generated application response into (subject, body).
@@ -62,8 +84,8 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
 
     clean_text = raw_text.strip()
 
-    # Detect if ChatGPT reported the JD as unsuitable (e.g. female candidates only, etc.)
-    if "UNSUITABLE_JD" in clean_text or clean_text.lower().startswith("not suitable") or "❌ not suitable" in clean_text.lower() or "not suitable —" in clean_text.lower():
+    # Detect if ChatGPT reported the JD as unsuitable or skip
+    if is_unsuitable_response(clean_text):
         return "UNSUITABLE_JD", clean_text
 
     lines = raw_text.split("\n")
@@ -93,11 +115,27 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
 def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8) -> str:
     """
     Strip boilerplate prefixes and truncate to a concise label.
-    e.g. "Not suitable — This is an HR role requiring an MBA/MHRM..." -> "HR role requiring an MBA/MHRM..."
+    e.g. "Classification: BUSINESS DEVELOPMENT / SALES → Skip." -> "Business Development / Sales"
+    e.g. "This is a Business Development / Sales role, not a software engineering role." -> "Business Development / Sales role"
     """
     if not text:
         return "Not suitable"
     t = text.strip()
+
+    # Check for Classification: XYZ → Skip
+    class_match = re.search(r"Classification:\s*([^→\-\n\.]+?)(?:\s*[→\-]+\s*Skip|\.|$)", t, flags=re.IGNORECASE)
+    if class_match:
+        label = class_match.group(1).strip()
+        if label:
+            if label.isupper():
+                label = " / ".join("QA" if part.strip().upper() == "QA" else part.strip().title() for part in label.split("/"))
+            return label[:max_chars].strip()
+
+    # Check for "This is a <Role>, not a software..."
+    role_match = re.search(r"This is an?\s+([^,\n\.]+?)(?:,\s*not a software|\.\s*The core)?", t, flags=re.IGNORECASE)
+    if role_match:
+        return role_match.group(1).strip()[:max_chars]
+
     # Strip UNSUITABLE_JD / ❌ prefix
     t = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", t, flags=re.IGNORECASE).strip()
     # Strip "Not suitable — " / "Not suitable - " prefix variants
@@ -126,22 +164,38 @@ def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8
 
 def extract_unsuitable_reason(raw_text: str) -> str:
     """
-    Extract clean, concise reason string from an unsuitable JD response, e.g.:
-    "UNSUITABLE_JD - ❌ Not suitable — {reason}" -> concise truncated reason
-    "❌ Not suitable — Female candidates only" -> "Female candidates only"
+    Extract clean, concise reason string from an unsuitable JD response.
+    First checks for an explicit Classification tag anywhere in the text,
+    then evaluates the role description or first line.
     """
     if not raw_text:
         return "Not suitable"
-    first_line = raw_text.strip().splitlines()[0].strip()
-    return clean_and_truncate_reason(first_line)
 
+    # 1. Search full text for explicit Classification: ... -> Skip tag
+    class_match = re.search(r"Classification:\s*([^→\-\n\.]+?)(?:\s*[→\-]+\s*Skip|\.|$)", raw_text, flags=re.IGNORECASE)
+    if class_match:
+        label = class_match.group(1).strip()
+        if label:
+            if label.isupper():
+                label = " / ".join("QA" if part.strip().upper() == "QA" else part.strip().title() for part in label.split("/"))
+            return label[:48].strip()
+
+    # 2. Check for "This is a <Role>, not a software..."
+    role_match = re.search(r"This is an?\s+([^,\n\.]+?)(?:,\s*not a software|\.\s*The core)?", raw_text, flags=re.IGNORECASE)
+    if role_match:
+        return role_match.group(1).strip()[:48]
+
+    # 3. Fallback to clean_and_truncate_reason on first non-empty line
+    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+    first_line = lines[0] if lines else ""
+    return clean_and_truncate_reason(first_line)
 
 
 def send_jd_and_get_email(
     page: Page,
     jd_text: str,
     max_wait: int = 120,
-    poll_interval: int = 3
+    poll_interval: int = 2
 ) -> Tuple[str, str]:
     """
     Send the raw JD to ChatGPT and wait for the response.
@@ -152,34 +206,108 @@ def send_jd_and_get_email(
     if not jd_text or not jd_text.strip():
         raise ValueError("Cannot send empty JD text to ChatGPT.")
 
-    # 1. Record existing last assistant message ID
+    # 1. Record existing last assistant message ID and text
     existing_msgs = page.locator("[data-message-author-role='assistant']")
     initial_count = existing_msgs.count()
     last_msg_id = ""
+    initial_last_text = ""
     if initial_count > 0:
-        last_msg_id = existing_msgs.last.evaluate(
-            "el => el.getAttribute('data-message-id') || ''"
-        )
+        try:
+            last_msg_id = existing_msgs.last.evaluate(
+                "el => el.getAttribute('data-message-id') || ''"
+            )
+        except Exception:
+            pass
+        try:
+            initial_last_text = existing_msgs.last.inner_text().strip()
+        except Exception:
+            pass
 
     # 2. Focus prompt box
     prompt_box = page.locator("#prompt-textarea")
     prompt_box.click()
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(300)
 
-    # 3. Type line-by-line (ProseMirror contenteditable)
-    lines = jd_text.strip().split("\n")
-    for i, line in enumerate(lines):
-        if i > 0:
-            page.keyboard.press("Shift+Enter")
-        if line:
-            page.keyboard.type(line, delay=3)
+    # 3. Fast insert into ProseMirror contenteditable via native execCommand
+    inserted = False
+    try:
+        inserted = page.evaluate("""(text) => {
+            const el = document.querySelector('#prompt-textarea');
+            if (!el) return false;
+            el.focus();
+            document.execCommand('selectAll', false, null);
+            const ok = document.execCommand('insertText', false, text);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            return ok;
+        }""", jd_text.strip())
+    except Exception as eval_err:
+        print(f"    execCommand insert notice: {eval_err}")
+        inserted = False
 
-    page.wait_for_timeout(800)
+    # Verify text populated in prompt box
+    current_prompt_text = ""
+    try:
+        current_prompt_text = prompt_box.inner_text().strip()
+    except Exception:
+        pass
 
-    # 4. Click Send Button
-    send_btn = page.locator("button[data-testid='send-button']")
-    send_btn.wait_for(state="visible", timeout=6000)
-    send_btn.click()
+    if not inserted or not current_prompt_text:
+        # Fallback 1: fill locator
+        try:
+            prompt_box.fill(jd_text.strip())
+            current_prompt_text = prompt_box.inner_text().strip()
+        except Exception:
+            pass
+
+    if not current_prompt_text:
+        # Fallback 2: type line-by-line
+        lines = jd_text.strip().split("\n")
+        for i, line in enumerate(lines):
+            if i > 0:
+                page.keyboard.press("Shift+Enter")
+            if line:
+                page.keyboard.type(line, delay=1)
+
+    page.wait_for_timeout(600)
+
+    # 4. Click Send Button or press Enter
+    sent = False
+    send_btn_query = (
+        "button[data-testid='send-button'], "
+        "button[aria-label*='Send'], "
+        "button[data-testid*='send'], "
+        "button[data-testid='fruitjuice-send-button'], "
+        "form button[type='submit']"
+    )
+
+    start_btn = time.time()
+    while time.time() - start_btn < 5:
+        btn = page.locator(send_btn_query).first
+        if btn.count() > 0 and btn.is_visible():
+            try:
+                is_disabled = btn.evaluate("el => el.disabled || el.getAttribute('aria-disabled') === 'true'")
+            except Exception:
+                is_disabled = False
+            if not is_disabled:
+                try:
+                    btn.click(timeout=3000)
+                    sent = True
+                    break
+                except Exception:
+                    pass
+        time.sleep(0.5)
+
+    if not sent:
+        # Resilient fallback: press Enter in prompt box
+        print("    Send button not clickable or delayed; pressing Enter...")
+        try:
+            prompt_box.focus()
+            page.keyboard.press("Enter")
+            sent = True
+        except Exception as enter_err:
+            print(f"    Press Enter fallback failed: {enter_err}")
+
+    page.wait_for_timeout(1000)
 
     # 5. Wait for Response Generation
     elapsed = 0
@@ -193,31 +321,46 @@ def send_jd_and_get_email(
         current_count = current_msgs.count()
 
         if current_count > 0:
-            new_last_id = current_msgs.last.evaluate(
-                "el => el.getAttribute('data-message-id') || ''"
+            last_msg = current_msgs.last
+            try:
+                new_last_id = last_msg.evaluate(
+                    "el => el.getAttribute('data-message-id') || ''"
+                )
+            except Exception:
+                new_last_id = ""
+
+            try:
+                current_last_text = last_msg.inner_text().strip()
+            except Exception:
+                current_last_text = ""
+
+            # Check if a new message has arrived
+            is_new_message = (
+                (new_last_id and last_msg_id and new_last_id != last_msg_id)
+                or current_count > initial_count
+                or (current_last_text and current_last_text != initial_last_text)
             )
 
-            # New message appeared
-            if new_last_id != last_msg_id or current_count > initial_count:
+            if is_new_message:
                 # Check if still streaming
                 stop_btn = page.locator(
                     "button[aria-label='Stop generating'], "
                     "button[data-testid='stop-button'], "
-                    "button[aria-label='Stop reasoning']"
+                    "button[aria-label='Stop reasoning'], "
+                    "button[aria-label*='Stop']"
                 )
                 if stop_btn.count() > 0 and stop_btn.first.is_visible():
                     print(f"    ...streaming response ({elapsed}s)")
                     continue
 
                 # Finished streaming!
-                last_msg = current_msgs.last
                 md_el = last_msg.locator(".markdown")
                 if md_el.count() > 0:
                     response_text = md_el.first.inner_text().strip()
                 else:
-                    response_text = last_msg.inner_text().strip()
+                    response_text = current_last_text
 
-                if response_text:
+                if response_text and response_text != initial_last_text:
                     print(f"    ✓ Received full response ({elapsed}s, {len(response_text)} chars)")
                     break
 

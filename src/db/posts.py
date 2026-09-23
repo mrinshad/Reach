@@ -242,6 +242,43 @@ def upsert_post(
             return (created_id, res is not None)
 
 
+def _apply_date_filter(date_filter: Optional[str], where_clauses: list, params: list):
+    """Safely append SQL where clauses for predefined and custom date/time filters."""
+    if not date_filter:
+        return
+    df = date_filter.strip().upper()
+    if df == "ALL":
+        return
+    if df in ("24H", "LAST_24H", "PAST_24H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '24 hours'")
+    elif df == "TODAY":
+        where_clauses.append("created_at >= CURRENT_DATE")
+    elif df == "YESTERDAY":
+        where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
+    elif df in ("2D", "LAST_2_DAYS", "2DAYS", "48H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '2 days'")
+    elif df in ("3D", "LAST_3_DAYS", "3DAYS", "72H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '3 days'")
+    elif df in ("WEEK", "PAST_WEEK", "7D"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '7 days'")
+    elif df.startswith("CUSTOM_HOURS:") or df.startswith("HOURS:"):
+        try:
+            hrs = int(df.split(":")[1])
+            if hrs > 0:
+                where_clauses.append("created_at >= NOW() - make_interval(hours => %s)")
+                params.append(hrs)
+        except (ValueError, IndexError):
+            pass
+    elif df.startswith("CUSTOM_DAYS:") or df.startswith("DAYS:"):
+        try:
+            dys = int(df.split(":")[1])
+            if dys > 0:
+                where_clauses.append("created_at >= NOW() - make_interval(days => %s)")
+                params.append(dys)
+        except (ValueError, IndexError):
+            pass
+
+
 def get_posts(
     category: Optional[str] = None,
     status: Optional[str] = None,
@@ -313,14 +350,7 @@ def get_posts(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    if date_filter:
-        df_upper = date_filter.upper()
-        if df_upper == "TODAY":
-            where_clauses.append("created_at >= CURRENT_DATE")
-        elif df_upper == "YESTERDAY":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
-        elif df_upper == "WEEK":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+    _apply_date_filter(date_filter, where_clauses, params)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
@@ -477,14 +507,7 @@ def get_posts_paginated(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    if date_filter:
-        df_upper = date_filter.upper()
-        if df_upper == "TODAY":
-            where_clauses.append("created_at >= CURRENT_DATE")
-        elif df_upper == "YESTERDAY":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
-        elif df_upper == "WEEK":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+    _apply_date_filter(date_filter, where_clauses, params)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
@@ -665,6 +688,61 @@ def mark_post_sent(post_id: str, db_url: str = DEFAULT_DB_URL):
         with conn.cursor() as cur:
             cur.execute(sql, (post_id,))
         conn.commit()
+
+
+SEND_COOLDOWN_DAYS = 3
+
+
+def get_recently_sent_recipients(
+    emails: List[str],
+    cooldown_days: int = SEND_COOLDOWN_DAYS,
+    db_url: str = DEFAULT_DB_URL
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Check which recipient emails have already received an outreach email
+    within the cooldown window. Returns a mapping of email -> info with
+    the last sent timestamp, the post that was sent, and seconds remaining
+    before sending again is allowed.
+    """
+    cleaned = [e.strip().lower() for e in (emails or []) if e and e.strip()]
+    if not cleaned:
+        return {}
+
+    sql = """
+    SELECT lower(recipient) AS email,
+           MAX(p.sent_at) AS last_sent_at,
+           (ARRAY_AGG(p.id ORDER BY p.sent_at DESC))[1] AS post_id,
+           (ARRAY_AGG(p.author_name ORDER BY p.sent_at DESC))[1] AS author_name
+    FROM posts p, unnest(p.contact_emails) AS recipient
+    WHERE p.status = 'SENT'
+      AND p.sent_at IS NOT NULL
+      AND lower(recipient) = ANY(%s)
+      AND p.sent_at >= NOW() - make_interval(days => %s)
+    GROUP BY lower(recipient);
+    """
+    from datetime import datetime, timezone
+
+    with get_connection(db_url) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, (cleaned, cooldown_days))
+            rows = cur.fetchall()
+
+    now = datetime.now(timezone.utc)
+    result: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        last_sent = row["last_sent_at"]
+        if last_sent is not None and last_sent.tzinfo is None:
+            last_sent = last_sent.replace(tzinfo=timezone.utc)
+        elapsed = (now - last_sent).total_seconds() if last_sent else 0
+        wait_seconds = max(0, int(cooldown_days * 86400 - elapsed))
+        result[row["email"]] = {
+            "email": row["email"],
+            "post_id": row["post_id"],
+            "author_name": row["author_name"],
+            "last_sent_at": last_sent.isoformat() if last_sent else None,
+            "wait_seconds": wait_seconds,
+        }
+    return result
 
 
 def revert_post_to_draft(post_id: str, db_url: str = DEFAULT_DB_URL):

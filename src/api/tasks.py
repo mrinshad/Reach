@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 
-from src.db import upsert_post
+from src.db import upsert_post, get_post_by_id, get_recently_sent_recipients, SEND_COOLDOWN_DAYS
 from src.services.automation_tasks import (
     task_manager,
     run_chatgpt_batch,
@@ -31,17 +31,97 @@ from .models import (
 router = APIRouter(prefix="/api", tags=["Tasks & Automation"])
 
 
+def check_send_cooldown(post_ids):
+    """
+    Check which of the given posts target a recipient email that was already
+    emailed within the cooldown window. Returns (blocked, allowed) lists where
+    each blocked entry carries the remaining wait time.
+    """
+    posts = []
+    for pid in post_ids:
+        post = get_post_by_id(pid)
+        if post:
+            posts.append(post)
+
+    primary_emails = []
+    for post in posts:
+        emails = post.get("contact_emails") or []
+        if emails:
+            primary_emails.append(emails[0])
+
+    recent = get_recently_sent_recipients(primary_emails, cooldown_days=SEND_COOLDOWN_DAYS)
+
+    blocked = []
+    allowed = []
+    for post in posts:
+        emails = post.get("contact_emails") or []
+        recipient = (emails[0].strip().lower() if emails else "")
+        hit = recent.get(recipient) if recipient else None
+        if hit:
+            blocked.append({
+                "post_id": post["id"],
+                "author_name": post.get("author_name", "Recruiter"),
+                "email": recipient,
+                "last_sent_at": hit["last_sent_at"],
+                "wait_seconds": hit["wait_seconds"],
+            })
+        else:
+            allowed.append(post["id"])
+    return blocked, allowed
+
+
+def format_wait_time(wait_seconds: int) -> str:
+    """Human-readable remaining cooldown, e.g. '2 days 5 hours' or '4 hours 12 minutes'."""
+    days = wait_seconds // 86400
+    hours = (wait_seconds % 86400) // 3600
+    minutes = (wait_seconds % 3600) // 60
+    parts = []
+    if days:
+        parts.append(f"{days} day{'s' if days != 1 else ''}")
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if not parts and minutes:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    if not parts:
+        parts.append("less than a minute")
+    return " ".join(parts[:2])
+
+
+def build_crawler_labels(source: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+    """Generate clean full_name, short_name, and descriptive snippet for crawler tasks."""
+    src_title = "LinkedIn" if (source or "").lower() == "linkedin" else (source or "Web").capitalize()
+    short_name = f"{src_title} Scraper"
+    snippet_parts = []
+    if query and query.strip():
+        clean_q = query.strip().strip("'\"")
+        if len(clean_q) > 22:
+            clean_q = clean_q[:20] + "..."
+        snippet_parts.append(f'"{clean_q}"')
+    if location and location.strip():
+        clean_loc = location.strip().split(",")[0].strip()
+        snippet_parts.append(clean_loc)
+    if time_filter and time_filter.lower() not in ("24h", "today"):
+        snippet_parts.append(f"[{time_filter}]")
+    snippet = " • ".join(snippet_parts) if snippet_parts else "Default Search"
+    full_name = f"{short_name} ({snippet})"
+    return full_name, short_name, snippet
+
+
 @router.post("/generate-email/{post_id}")
 def api_generate_email(post_id: str, force: bool = False):
     """Enqueue ChatGPT generation for a single post with optional force override."""
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or f"Post #{post_id[:8]}"
     res = task_manager.enqueue_task(
         task_type="chatgpt",
-        task_name=f"ChatGPT Email Generation (Post #{post_id})",
+        task_name=f"Generate Email — {author}",
+        short_name="ChatGPT Email",
+        snippet=author,
         runner_func=run_chatgpt_batch,
         args=([post_id], force),
-        metadata={"post_id": post_id, "count": 1, "force": force},
+        metadata={"post_id": post_id, "count": 1, "force": force, "author": author},
     )
-    msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for post {post_id}."
+    msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for {author}."
     return {"success": True, "message": msg, **res}
 
 
@@ -55,6 +135,8 @@ def api_generate_batch(payload: GenerateBatchPayload):
     res = task_manager.enqueue_task(
         task_type="chatgpt",
         task_name=f"Batch Email Generation ({count} posts)",
+        short_name="Batch Email Gen",
+        snippet=f"{count} posts",
         runner_func=run_chatgpt_batch,
         args=(payload.post_ids,),
         metadata={"count": count, "post_ids": payload.post_ids},
@@ -66,12 +148,16 @@ def api_generate_batch(payload: GenerateBatchPayload):
 @router.post("/open-gmail/{post_id}")
 def api_open_gmail(post_id: str):
     """Enqueue Gmail draft creation in headed Firefox with resume attached."""
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or f"Post #{post_id[:8]}"
     res = task_manager.enqueue_task(
         task_type="gmail_draft",
-        task_name=f"Gmail Draft (Post #{post_id})",
+        task_name=f"Gmail Draft — {author}",
+        short_name="Gmail Draft",
+        snippet=author,
         runner_func=run_open_gmail_draft,
         args=(post_id,),
-        metadata={"post_id": post_id},
+        metadata={"post_id": post_id, "author": author},
     )
     msg = f"Queued Gmail draft opening (Position #{res['position']})" if res["queued"] else "Opening Gmail compose in headed Firefox..."
     return {"success": True, "message": msg, **res}
@@ -80,14 +166,31 @@ def api_open_gmail(post_id: str):
 @router.post("/send-direct/{post_id}")
 def api_send_direct(post_id: str):
     """Enqueue direct email sending in Gmail without manual interaction."""
+    blocked, _ = check_send_cooldown([post_id])
+    if blocked:
+        b = blocked[0]
+        wait = format_wait_time(b["wait_seconds"])
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"An application email was already sent to {b['email']} "
+                f"within the last {SEND_COOLDOWN_DAYS} days. "
+                f"Please wait {wait} before sending again."
+            ),
+        )
+
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or "Recruiter"
     res = task_manager.enqueue_task(
         task_type="gmail_send",
-        task_name=f"Direct Send (Post #{post_id})",
+        task_name=f"Send Email — {author}",
+        short_name="Send Email",
+        snippet=author,
         runner_func=run_send_single_draft,
         args=(post_id,),
-        metadata={"post_id": post_id},
+        metadata={"post_id": post_id, "author": author},
     )
-    msg = f"Queued email direct sending (Position #{res['position']})" if res["queued"] else "Directly sending application email via Gmail..."
+    msg = f"Queued email direct sending (Position #{res['position']})" if res["queued"] else f"Directly sending application email to {author} via Gmail..."
     return {"success": True, "message": msg, **res}
 
 
@@ -97,16 +200,55 @@ def api_send_batch(payload: SendBatchPayload):
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided for batch sending.")
 
-    count = len(payload.post_ids)
+    blocked, allowed = check_send_cooldown(payload.post_ids)
+    if blocked and not allowed:
+        details = "; ".join(
+            f"{b['email']} (wait {format_wait_time(b['wait_seconds'])})" for b in blocked
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"All selected recipients were emailed within the last "
+                f"{SEND_COOLDOWN_DAYS} days: {details}."
+            ),
+        )
+
+    count = len(allowed)
     res = task_manager.enqueue_task(
         task_type="gmail_send_batch",
         task_name=f"Batch Email Sending ({count} applications)",
+        short_name="Batch Send",
+        snippet=f"{count} applications",
         runner_func=run_send_batch_drafts,
-        args=(payload.post_ids,),
-        metadata={"count": count, "post_ids": payload.post_ids},
+        args=(allowed,),
+        metadata={"count": count, "post_ids": allowed, "skipped_cooldown": [b["post_id"] for b in blocked]},
     )
     msg = f"Queued batch sending for {count} applications (Position #{res['position']})" if res["queued"] else f"Started direct sending for {count} applications."
-    return {"success": True, "message": msg, **res}
+    if blocked:
+        msg += f" Skipped {len(blocked)} recently-emailed recipient(s)."
+    return {
+        "success": True,
+        "message": msg,
+        "skipped_cooldown": blocked,
+        **res,
+    }
+
+
+@router.post("/send-preflight")
+def api_send_preflight(payload: SendBatchPayload):
+    """
+    Check which posts target recipients already emailed within the cooldown
+    window. Lets the UI warn the user before queueing any browser automation.
+    """
+    if not payload.post_ids:
+        return {"success": True, "cooldown_days": SEND_COOLDOWN_DAYS, "blocked": [], "allowed": []}
+    blocked, allowed = check_send_cooldown(payload.post_ids)
+    return {
+        "success": True,
+        "cooldown_days": SEND_COOLDOWN_DAYS,
+        "blocked": blocked,
+        "allowed": allowed,
+    }
 
 
 @router.post("/direct-outreach")
@@ -157,6 +299,8 @@ def api_direct_outreach(payload: DirectOutreachPayload):
             res = task_manager.enqueue_task(
                 task_type="gmail_draft",
                 task_name=f"Direct Opportunity Draft ({recipient})",
+                short_name="Direct Draft",
+                snippet=recipient,
                 runner_func=run_open_gmail_draft,
                 args=(post_id,),
                 metadata={"post_id": post_id, "recipient": recipient},
@@ -167,6 +311,8 @@ def api_direct_outreach(payload: DirectOutreachPayload):
             res = task_manager.enqueue_task(
                 task_type="gmail_send",
                 task_name=f"Direct Opportunity Send ({recipient})",
+                short_name="Direct Send",
+                snippet=recipient,
                 runner_func=run_send_single_draft,
                 args=(post_id,),
                 metadata={"post_id": post_id, "recipient": recipient},
@@ -182,7 +328,9 @@ def api_trigger_scrape_infopark():
     """Enqueue the Infopark jobs scraper."""
     res = task_manager.enqueue_task(
         task_type="crawler",
-        task_name="Infopark Jobs Crawler",
+        task_name="Infopark Jobs Scraper",
+        short_name="Infopark Scraper",
+        snippet="Kochi Openings",
         runner_func=run_infopark_scraper,
         metadata={"source": "infopark"},
     )
@@ -192,19 +340,22 @@ def api_trigger_scrape_infopark():
 
 @router.post("/scrape/linkedin")
 def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
-    """Enqueue the LinkedIn scraper in headed Firefox with optional location and query."""
+    """Enqueue the LinkedIn scraper in headed Firefox with optional location, query, and time_filter."""
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
+    time_filter = (payload.time_filter or "24h") if payload else "24h"
 
-    label = f"LinkedIn Crawler ({loc or 'Default'})" if loc else "LinkedIn Crawler"
+    full_name, short_name, snippet = build_crawler_labels("linkedin", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
         task_type="crawler",
-        task_name=label,
+        task_name=full_name,
+        short_name=short_name,
+        snippet=snippet,
         runner_func=run_linkedin_scraper,
-        args=(query, loc),
-        metadata={"source": "linkedin", "query": query, "location": loc},
+        args=(query, loc, time_filter),
+        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
     )
-    msg = f"Queued LinkedIn scraper for {loc or 'default'} (Position #{res['position']})" if res["queued"] else "LinkedIn scraper started in headed Firefox."
+    msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
     return {"success": True, "message": msg, **res}
 
 
@@ -216,28 +367,33 @@ def api_get_scrapers():
 
 @router.post("/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Enqueue scraper by source using the extensible scraper registry with optional query and location."""
+    """Enqueue scraper by source using the extensible scraper registry with optional query, location, and time_filter."""
     src = "linkedin"
     query = None
     loc = None
+    time_filter = "24h"
     if payload:
         if payload.source:
             src = payload.source
         query = payload.search_query
         loc = payload.location
+        if payload.time_filter:
+            time_filter = payload.time_filter
     elif source:
         src = source
 
     try:
-        label = f"{src.capitalize()} Crawler" + (f" ({loc})" if loc else "")
+        full_name, short_name, snippet = build_crawler_labels(src, query=query, location=loc, time_filter=time_filter)
         res = task_manager.enqueue_task(
             task_type="crawler",
-            task_name=label,
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
             runner_func=run_scraper_by_source,
-            args=(src, query, loc),
-            metadata={"source": src, "query": query, "location": loc},
+            args=(src, query, loc, time_filter),
+            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter},
         )
-        msg = f"Queued {label} (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
+        msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
         return {"success": True, "message": msg, **res}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -256,6 +412,15 @@ def api_clear_task():
     """Reset task state to idle."""
     task_manager.clear_task()
     return {"success": True, "message": "Task state cleared."}
+
+
+@router.post("/tasks/cancel")
+def api_cancel_active_task():
+    """Cancel the currently executing automation task."""
+    stopped = task_manager.cancel_active_task()
+    if not stopped:
+        return {"success": False, "message": "No automation task is currently running."}
+    return {"success": True, "message": "Ongoing task has been stopped."}
 
 
 @router.post("/tasks/queue/cancel/{task_id}")

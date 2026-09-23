@@ -177,6 +177,7 @@
     color: var(--text-dim);
     line-height: 1.45;
     margin-bottom: 1.25rem;
+    white-space: pre-wrap;
   }
 
   .dialog-actions {
@@ -308,6 +309,77 @@
     gap: 0.35rem;
     flex-shrink: 0;
     margin-left: 0.25rem;
+  }
+
+  /* Current snackbar DOM classes (src/static/js/utils.js) */
+  .snackbar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .snackbar-title {
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .snackbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-shrink: 0;
+    margin-left: 0.25rem;
+  }
+
+  .snackbar-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-xs);
+    transition: color 0.15s ease, background 0.15s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .snackbar-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .snackbar-toggle-btn svg {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .snackbar-item.expanded .snackbar-toggle-btn {
+    color: var(--text-main);
+  }
+
+  .snackbar-item.expanded .snackbar-toggle-btn svg {
+    transform: rotate(180deg);
+  }
+
+  .snackbar-item.snackbar-error .snackbar-close-btn:hover {
+    color: var(--accent-rose);
+    background: rgba(244, 63, 94, 0.14);
+  }
+
+  .snackbar-detail-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 0.6rem;
   }
 
   .snackbar-expand-icon {

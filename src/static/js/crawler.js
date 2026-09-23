@@ -25,18 +25,56 @@ async function triggerInfoparkScrape() {
   }
 }
 
+const CRAWLER_SEARCH_OVERRIDE_KEY = 'reach_crawler_search_override';
+
 function handleCrawlerSourceChange() {
   const sourceSelect = document.getElementById('crawlerSourceSelect');
   const locSelect = document.getElementById('crawlerLocationSelect');
+  const searchInput = document.getElementById('crawlerSearchInput');
+  const timeSelect = document.getElementById('crawlerTimeSelect');
+  const customTimeVal = document.getElementById('crawlerCustomTimeValue');
+  const customTimeUnit = document.getElementById('crawlerCustomTimeUnit');
   if (!sourceSelect || !locSelect) return;
   const sourceId = sourceSelect.value;
   if (sourceId === 'infopark') {
     locSelect.disabled = true;
     locSelect.title = "Infopark crawler discovers jobs in Kochi, Kerala";
+    if (searchInput) {
+      searchInput.disabled = true;
+      searchInput.title = "Search keyword override is only supported by the LinkedIn crawler";
+    }
+    if (timeSelect) timeSelect.disabled = true;
+    if (customTimeVal) customTimeVal.disabled = true;
+    if (customTimeUnit) customTimeUnit.disabled = true;
   } else {
     locSelect.disabled = false;
     locSelect.title = "Target Job Location / Area";
+    if (searchInput) {
+      searchInput.disabled = false;
+      searchInput.title = "Optional — takes priority over Settings → Target LinkedIn Search Keywords when filled. Leave empty to use the Settings keywords.";
+    }
+    if (timeSelect) timeSelect.disabled = false;
+    if (customTimeVal) customTimeVal.disabled = false;
+    if (customTimeUnit) customTimeUnit.disabled = false;
   }
+}
+
+function handleCrawlerTimeChange() {
+  const timeSelect = document.getElementById('crawlerTimeSelect');
+  const customWrapper = document.getElementById('crawlerCustomTimeWrapper');
+  if (!timeSelect || !customWrapper) return;
+  const isCustom = timeSelect.value === 'custom';
+  customWrapper.classList.toggle('hidden', !isCustom);
+  localStorage.setItem('reach_selected_crawler_time', timeSelect.value);
+}
+
+function updateCrawlerSearchPlaceholder() {
+  const searchInput = document.getElementById('crawlerSearchInput');
+  if (!searchInput) return;
+  const settingsQuery = (state.config && state.config.search_query) ? String(state.config.search_query).trim() : '';
+  searchInput.placeholder = settingsQuery
+    ? `Settings default: "${settingsQuery}"`
+    : 'e.g. Full Stack Developer';
 }
 
 function initCrawlerControls() {
@@ -50,6 +88,25 @@ function initCrawlerControls() {
       localStorage.setItem('reach_selected_crawler_location', locSelect.value);
     };
   }
+  const searchInput = document.getElementById('crawlerSearchInput');
+  if (searchInput) {
+    const savedQuery = localStorage.getItem(CRAWLER_SEARCH_OVERRIDE_KEY);
+    if (savedQuery !== null) {
+      searchInput.value = savedQuery;
+    }
+    searchInput.addEventListener('input', () => {
+      localStorage.setItem(CRAWLER_SEARCH_OVERRIDE_KEY, searchInput.value);
+    });
+  }
+  const timeSelect = document.getElementById('crawlerTimeSelect');
+  if (timeSelect) {
+    const savedTime = localStorage.getItem('reach_selected_crawler_time');
+    if (savedTime !== null) {
+      timeSelect.value = savedTime;
+    }
+    handleCrawlerTimeChange();
+  }
+  updateCrawlerSearchPlaceholder();
   handleCrawlerSourceChange();
 }
 
@@ -121,14 +178,37 @@ async function triggerSelectedCrawl() {
   const sourceId = select ? select.value : 'linkedin';
   const sourceName = select ? select.options[select.selectedIndex]?.text.trim() : 'Selected Source';
   const selectedLocation = (locSelect && !locSelect.disabled) ? (locSelect.value || '').trim() : '';
+  const searchInput = document.getElementById('crawlerSearchInput');
+  const searchOverride = (searchInput && !searchInput.disabled) ? (searchInput.value || '').trim() : '';
 
   let searchDetails = '';
   if (sourceId === 'linkedin') {
-    const baseQuery = (state.config && state.config.search_query) || 'Full stack developer';
+    const settingsQuery = (state.config && state.config.search_query) || 'Full stack developer';
+    const baseQuery = searchOverride || settingsQuery;
+    const priorityNote = searchOverride
+      ? '\nPriority: Sidebar search bar (overrides Settings → Target LinkedIn Search Keywords)'
+      : '\nPriority: Settings → Target LinkedIn Search Keywords (sidebar search bar is empty)';
+    let timeFilter = '24h';
+    let timeFilterLabel = 'Last 24 Hours';
+    const timeSelect = document.getElementById('crawlerTimeSelect');
+    const customTimeVal = document.getElementById('crawlerCustomTimeValue');
+    const customTimeUnit = document.getElementById('crawlerCustomTimeUnit');
+    if (timeSelect && !timeSelect.disabled) {
+      if (timeSelect.value === 'custom') {
+        const val = parseInt(customTimeVal?.value || '12', 10);
+        const unit = customTimeUnit?.value || 'hours';
+        timeFilter = `${unit === 'hours' ? 'custom_hours' : 'custom_days'}:${val}`;
+        timeFilterLabel = `Custom: ${val} ${unit}`;
+      } else {
+        timeFilter = timeSelect.value;
+        timeFilterLabel = timeSelect.options[timeSelect.selectedIndex]?.text || timeFilter;
+      }
+    }
+
     if (selectedLocation) {
-      searchDetails = `\n\nSearch Query: "${baseQuery} ${selectedLocation}"\nSaved Location: "${selectedLocation}"`;
+      searchDetails = `\n\nSearch Query: "${baseQuery} ${selectedLocation}"${priorityNote}\nSaved Location: "${selectedLocation}"\nTime Window: ${timeFilterLabel}`;
     } else {
-      searchDetails = `\n\nSearch Query: "${baseQuery}" (No specific location appended)`;
+      searchDetails = `\n\nSearch Query: "${baseQuery}" (No specific location appended)${priorityNote}\nTime Window: ${timeFilterLabel}`;
     }
   } else if (sourceId === 'infopark') {
     searchDetails = `\n\nSource: Infopark Kochi Portal\nSaved Location: "Kochi"`;
@@ -143,8 +223,26 @@ async function triggerSelectedCrawl() {
 
   try {
     const payload = { source: sourceId };
-    if (selectedLocation && sourceId === 'linkedin') {
-      payload.location = selectedLocation;
+    if (sourceId === 'linkedin') {
+      if (selectedLocation) {
+        payload.location = selectedLocation;
+      }
+      if (searchOverride) {
+        // Sidebar search keyword takes priority over Settings → Target LinkedIn Search Keywords
+        payload.search_query = searchOverride;
+      }
+      const timeSelect = document.getElementById('crawlerTimeSelect');
+      const customTimeVal = document.getElementById('crawlerCustomTimeValue');
+      const customTimeUnit = document.getElementById('crawlerCustomTimeUnit');
+      if (timeSelect && !timeSelect.disabled) {
+        if (timeSelect.value === 'custom') {
+          const val = parseInt(customTimeVal?.value || '12', 10);
+          const unit = customTimeUnit?.value || 'hours';
+          payload.time_filter = `${unit === 'hours' ? 'custom_hours' : 'custom_days'}:${val}`;
+        } else {
+          payload.time_filter = timeSelect.value;
+        }
+      }
     }
     const res = await fetch('/api/scrape', {
       method: 'POST',
@@ -274,9 +372,11 @@ async function generateBatchChatGPT() {
 window.triggerInfoparkScrape = triggerInfoparkScrape;
 window.handleCrawlerSourceChange = handleCrawlerSourceChange;
 window.initCrawlerControls = initCrawlerControls;
+window.updateCrawlerSearchPlaceholder = updateCrawlerSearchPlaceholder;
 window.fetchScrapers = fetchScrapers;
 window.fetchLocations = fetchLocations;
 window.triggerSelectedCrawl = triggerSelectedCrawl;
+window.handleCrawlerTimeChange = handleCrawlerTimeChange;
 window.triggerLinkedInScrape = triggerLinkedInScrape;
 window.markPostAsSpam = markPostAsSpam;
 window.cancelDiscoveredPost = cancelDiscoveredPost;

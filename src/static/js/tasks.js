@@ -31,6 +31,13 @@ async function pollTaskStatus() {
 
     if (!card || !titleEl || !subEl || !countEl || !fillEl || !logsEl) return;
 
+    // Toggle visibility of stop/cancel buttons based on running status
+    const cancelBtn = document.getElementById('btnCancelActiveTask');
+    const logsCancelBtns = document.querySelectorAll('.logs-cancel-btn');
+    const isRunning = task.status === 'running';
+    if (cancelBtn) cancelBtn.style.display = isRunning ? 'inline-flex' : 'none';
+    logsCancelBtns.forEach(btn => btn.style.display = isRunning ? 'inline-flex' : 'none');
+
     // Render task queue drawer if queued tasks exist
     const queueSection = document.getElementById('taskQueueSection');
     const queueBadge = document.getElementById('taskQueueCountBadge');
@@ -45,7 +52,10 @@ async function pollTaskStatus() {
           <div class="task-queue-card" id="queueItem_${escapeHtml(item.id)}">
             <div class="task-queue-card-left">
               <span class="queue-pos-badge">#${idx + 1}</span>
-              <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+              <div class="queue-card-info">
+                <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.short_name || item.name)}</span>
+                ${item.snippet ? `<span class="queue-card-snippet" title="${escapeHtml(item.snippet)}">${escapeHtml(item.snippet)}</span>` : ''}
+              </div>
             </div>
             <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -74,11 +84,13 @@ async function pollTaskStatus() {
       const pct = Math.min(100, Math.round((done / total) * 100));
       fillEl.style.width = `${Math.max(5, pct)}%`;
 
-      logsEl.innerHTML = (task.logs || []).map((l) => `<div>${escapeHtml(l)}</div>`).join('');
-      logsEl.scrollTop = logsEl.scrollHeight;
+      renderTaskLogs(task.logs);
 
       state.lastHandledTaskKey = null;
     } else if (task.status === 'completed' || task.status === 'error') {
+      if (task.logs && task.logs.length > 0) {
+        renderTaskLogs(task.logs);
+      }
       const hasQueuedItems = (queue.length > 0);
       const taskEventKey = `${task.task_name}_${task.started_at}_${task.status}`;
       const isNewCompletion = (state.lastHandledTaskKey !== taskEventKey);
@@ -172,6 +184,27 @@ async function pollTaskStatus() {
   }
 }
 
+async function cancelActiveTask() {
+  const confirmed = await showConfirm(
+    'Stop Ongoing Task',
+    'Are you sure you want to stop the currently running automation task? Any in-flight progress will be cleanly halted.',
+    { confirmText: 'Stop Task', danger: true }
+  );
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/tasks/cancel', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('✓ Task cancellation requested', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.message || 'No task is currently running', 'warn');
+    }
+  } catch (err) {
+    showToast('Error stopping task: ' + err.message, 'error');
+  }
+}
+
 async function cancelQueuedTask(taskId) {
   try {
     const res = await fetch(`/api/tasks/queue/cancel/${encodeURIComponent(taskId)}`, { method: 'POST' });
@@ -252,19 +285,60 @@ function closeCrawlSummaryModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+function initTaskLogsScrollListener() {
+  const drawerEl = document.getElementById('taskLogsDrawer');
+  if (drawerEl && !drawerEl.dataset.scrollBound) {
+    drawerEl.dataset.scrollBound = 'true';
+    drawerEl.addEventListener('scroll', () => {
+      const distance = drawerEl.scrollHeight - drawerEl.scrollTop - drawerEl.clientHeight;
+      state.logsUserScrolledUp = distance > 60;
+    });
+  }
+}
+
+function renderTaskLogs(logs) {
+  const logsEl = document.getElementById('logsStream');
+  const drawerEl = document.getElementById('taskLogsDrawer');
+  if (!logsEl) return;
+
+  initTaskLogsScrollListener();
+
+  const logList = logs || [];
+  const isAtBottom = drawerEl ? (drawerEl.scrollHeight - drawerEl.scrollTop - drawerEl.clientHeight <= 60) : true;
+
+  logsEl.innerHTML = logList.map((l) => `<div>${escapeHtml(l)}</div>`).join('');
+
+  if (drawerEl && (isAtBottom || !state.logsUserScrolledUp)) {
+    drawerEl.scrollTop = drawerEl.scrollHeight;
+  }
+  logsEl.scrollTop = logsEl.scrollHeight;
+}
+
 function toggleTaskLogs() {
   state.showLogs = !state.showLogs;
   const drawer = document.getElementById('taskLogsDrawer');
-  if (drawer) drawer.classList.toggle('hidden', !state.showLogs);
+  if (drawer) {
+    drawer.classList.toggle('hidden', !state.showLogs);
+    if (state.showLogs) {
+      state.logsUserScrolledUp = false;
+      initTaskLogsScrollListener();
+      drawer.scrollTop = drawer.scrollHeight;
+      requestAnimationFrame(() => {
+        drawer.scrollTop = drawer.scrollHeight;
+      });
+    }
+  }
 }
 
 // Global Bindings
 window.startTaskPolling = startTaskPolling;
 window.stopTaskPolling = stopTaskPolling;
 window.pollTaskStatus = pollTaskStatus;
+window.cancelActiveTask = cancelActiveTask;
 window.cancelQueuedTask = cancelQueuedTask;
 window.clearTaskQueue = clearTaskQueue;
 window.showCrawlSummaryModal = showCrawlSummaryModal;
 window.closeCrawlSummaryModal = closeCrawlSummaryModal;
+window.renderTaskLogs = renderTaskLogs;
 window.toggleTaskLogs = toggleTaskLogs;
 window.toggleTaskDrawer = toggleTaskLogs;
