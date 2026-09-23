@@ -18,6 +18,8 @@ from src.db import (
     move_post_to_review,
     mark_post_sent,
     revert_post_to_draft,
+    revert_posts_batch,
+    reject_posts_batch,
     update_post_status,
 )
 from src.services.experience_extractor import extract_experience
@@ -26,6 +28,7 @@ from .models import (
     UpdateEmailPayload,
     RejectPostPayload,
     SpamPostPayload,
+    BatchPostActionPayload,
     MAJOR_JOB_HUBS,
 )
 
@@ -201,6 +204,18 @@ def api_revert_post(post_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/posts/revert-batch")
+def api_revert_posts_batch(payload: BatchPostActionPayload):
+    """Revert multiple sent or rejected posts back to review/draft status."""
+    if not payload.post_ids:
+        raise HTTPException(status_code=400, detail="No post IDs provided.")
+    try:
+        count = revert_posts_batch(payload.post_ids)
+        return {"success": True, "count": count, "message": f"Successfully reverted {count} applications."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/posts/{post_id}/reject")
 def api_reject_post(post_id: str, payload: Optional[RejectPostPayload] = None):
     """Mark a post as rejected/cancelled with optional reason comment."""
@@ -211,6 +226,18 @@ def api_reject_post(post_id: str, payload: Optional[RejectPostPayload] = None):
         reason = payload.reason if payload else None
         update_post_status(post_id, "REJECTED", rejection_reason=reason)
         return {"success": True, "message": "Post marked as REJECTED."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/posts/reject-batch")
+def api_reject_posts_batch(payload: BatchPostActionPayload):
+    """Reject/cancel multiple posts with an optional cancellation reason."""
+    if not payload.post_ids:
+        raise HTTPException(status_code=400, detail="No post IDs provided.")
+    try:
+        count = reject_posts_batch(payload.post_ids, payload.reason)
+        return {"success": True, "count": count, "message": f"Successfully cancelled {count} applications."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

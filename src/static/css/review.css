@@ -430,6 +430,12 @@
     font-size: 0.74rem;
   }
 
+  .queue-batch-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
   .queue-select-all-label {
     display: inline-flex;
     align-items: center;

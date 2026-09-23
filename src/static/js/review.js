@@ -262,12 +262,18 @@ function toggleSelectAllDrafts(checked) {
 function updateSelectedDraftsUI() {
   const count = state.selectedDraftIds.size;
   const countEl = document.getElementById('selectedDraftsCount');
+  const countCancelEl = document.getElementById('selectedDraftsCancelCount');
   const btnBatch = document.getElementById('btnSendBatchDrafts');
+  const btnCancelBatch = document.getElementById('btnCancelBatchDrafts');
   const checkAll = document.getElementById('selectAllDraftsCheckbox');
 
   if (countEl) countEl.textContent = String(count);
+  if (countCancelEl) countCancelEl.textContent = String(count);
   if (btnBatch) {
     btnBatch.classList.toggle('hidden', count === 0);
+  }
+  if (btnCancelBatch) {
+    btnCancelBatch.classList.toggle('hidden', count === 0);
   }
   if (checkAll) {
     checkAll.checked = state.reviewPosts.length > 0 && count === state.reviewPosts.length;
@@ -493,8 +499,51 @@ function cancelActiveApplication() {
   openCancelReasonModal(state.activeReviewPost.id, state.activeReviewPost.author_name, '', false);
 }
 
+function cancelBatchSelectedDrafts() {
+  const count = state.selectedDraftIds ? state.selectedDraftIds.size : 0;
+  if (count === 0) return;
+
+  state.pendingCancelPostIds = Array.from(state.selectedDraftIds);
+  state.pendingCancelPostId = null;
+  state.isSpamCancelMode = false;
+
+  const titleEl = document.getElementById('cancelModalTitle');
+  if (titleEl) {
+    titleEl.textContent = `Cancel ${count} Applications`;
+  }
+
+  const descEl = document.getElementById('cancelModalDesc');
+  if (descEl) {
+    descEl.innerHTML = `Select a ready suggestion below or type a custom comment. All <strong>${count} selected applications</strong> will be moved to your <strong>Others</strong> history.`;
+  }
+
+  const btnConfirm = document.getElementById('btnConfirmCancelModal');
+  if (btnConfirm) {
+    btnConfirm.textContent = `✕ Cancel ${count} Applications`;
+  }
+
+  const nameEl = document.getElementById('cancelModalCandidate');
+  if (nameEl) nameEl.textContent = `for ${count} selected drafts`;
+
+  const input = document.getElementById('inputCancelReason');
+  if (input) {
+    input.value = '';
+  }
+
+  document.querySelectorAll('#cancelReasonModal .reason-chip').forEach((c) => {
+    c.classList.remove('active');
+  });
+
+  const modal = document.getElementById('cancelReasonModal');
+  if (modal) modal.classList.remove('hidden');
+  setTimeout(() => {
+    input?.focus();
+  }, 50);
+}
+
 function openCancelReasonModal(postId, candidateName, defaultReason = '', isSpamMode = false) {
   state.pendingCancelPostId = postId;
+  state.pendingCancelPostIds = [];
   state.isSpamCancelMode = !!isSpamMode;
 
   if (!candidateName) {
@@ -543,6 +592,7 @@ function openCancelReasonModal(postId, candidateName, defaultReason = '', isSpam
 
 function closeCancelReasonModal() {
   state.pendingCancelPostId = null;
+  state.pendingCancelPostIds = [];
   state.isSpamCancelMode = false;
   const modal = document.getElementById('cancelReasonModal');
   if (modal) modal.classList.add('hidden');
@@ -561,10 +611,39 @@ function selectPreMadeReason(reason) {
 }
 
 async function confirmCancelWithReason() {
-  const postId = state.pendingCancelPostId;
-  if (!postId) return;
   const input = document.getElementById('inputCancelReason');
   const reason = (input?.value || '').trim() || (state.isSpamCancelMode ? 'Scam' : 'Unspecified');
+
+  // Multi-item bulk cancel handling
+  if (state.pendingCancelPostIds && state.pendingCancelPostIds.length > 0) {
+    const postIds = state.pendingCancelPostIds;
+    try {
+      const res = await fetch('/api/posts/reject-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_ids: postIds, reason }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`✕ Cancelled ${data.count || postIds.length} applications: ${reason}`, 'info');
+        closeCancelReasonModal();
+        state.selectedDraftIds.clear();
+        updateSelectedDraftsUI();
+        await fetchReviewPosts();
+        await fetchSentPosts();
+        if (typeof loadDashboardData === 'function') loadDashboardData();
+      } else {
+        const err = await res.json();
+        showAlert('Error', err.detail || 'Could not cancel applications.');
+      }
+    } catch (err) {
+      showAlert('Error', err.message);
+    }
+    return;
+  }
+
+  const postId = state.pendingCancelPostId;
+  if (!postId) return;
 
   try {
     const endpoint = (state.isSpamCancelMode || reason.toLowerCase() === 'scam' || reason.toLowerCase().includes('spam'))
@@ -651,6 +730,7 @@ window.openActivePostInGmail = openActivePostInGmail;
 window.markActivePostSent = markActivePostSent;
 window.markPostSentById = markPostSentById;
 window.cancelActiveApplication = cancelActiveApplication;
+window.cancelBatchSelectedDrafts = cancelBatchSelectedDrafts;
 window.openCancelReasonModal = openCancelReasonModal;
 window.closeCancelReasonModal = closeCancelReasonModal;
 window.selectPreMadeReason = selectPreMadeReason;

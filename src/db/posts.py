@@ -767,6 +767,65 @@ def revert_post_to_draft(post_id: str, db_url: str = DEFAULT_DB_URL):
         conn.commit()
 
 
+def revert_posts_batch(post_ids: List[str], db_url: str = DEFAULT_DB_URL) -> int:
+    """Revert multiple sent or rejected posts back to active status (EMAIL_GENERATED if draft exists, else DISCOVERED)."""
+    if not post_ids:
+        return 0
+    sql = """
+    UPDATE posts SET
+        status = CASE 
+            WHEN generated_body IS NOT NULL AND generated_body != '' THEN 'EMAIL_GENERATED'
+            ELSE 'DISCOVERED'
+        END,
+        rejection_reason = NULL,
+        is_potential_spam = FALSE,
+        potential_spam_reason = NULL,
+        sent_at = NULL,
+        approved_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ANY(%s);
+    """
+    with get_connection(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (list(post_ids),))
+            count = cur.rowcount
+        conn.commit()
+    return count
+
+
+def reject_posts_batch(
+    post_ids: List[str],
+    rejection_reason: Optional[str] = None,
+    db_url: str = DEFAULT_DB_URL
+) -> int:
+    """Reject/cancel multiple posts with optional cancellation reason."""
+    if not post_ids:
+        return 0
+    set_clauses = ["status = 'REJECTED'", "updated_at = CURRENT_TIMESTAMP"]
+    params = []
+
+    if rejection_reason is not None:
+        from src.services.chatgpt_service import clean_and_truncate_reason
+        cleaned_reason = clean_and_truncate_reason(rejection_reason)
+        set_clauses.append("rejection_reason = %s")
+        params.append(cleaned_reason)
+
+        is_potential_spam = "potential scam" in rejection_reason.lower() or "potential spam" in rejection_reason.lower() or "scam" in rejection_reason.lower()
+        if is_potential_spam:
+            set_clauses.append("is_potential_spam = TRUE")
+            set_clauses.append("potential_spam_reason = %s")
+            params.append(cleaned_reason)
+
+    params.append(list(post_ids))
+    sql = f"UPDATE posts SET {', '.join(set_clauses)} WHERE id = ANY(%s);"
+    with get_connection(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            count = cur.rowcount
+        conn.commit()
+    return count
+
+
 def move_post_to_review(post_id: str, db_url: str = DEFAULT_DB_URL) -> Optional[Dict[str, Any]]:
     """Move a discovered post directly to EMAIL_GENERATED status for review/drafting."""
     sql = """

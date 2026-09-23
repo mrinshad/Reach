@@ -21,6 +21,11 @@ class SendBatchPayload(BaseModel):
     post_ids: List[str]
 
 
+class BatchPostActionPayload(BaseModel):
+    post_ids: List[str]
+    reason: Optional[str] = None
+
+
 class RejectPostPayload(BaseModel):
     reason: Optional[str] = None
 

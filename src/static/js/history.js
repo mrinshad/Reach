@@ -113,7 +113,7 @@ function filterOthersByReason(reason) {
 async function fetchSentPosts() {
   const tbody = document.getElementById('sentTableBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
 
   try {
     const statusVal = state.othersFilter === 'ALL' ? 'OTHERS' : state.othersFilter;
@@ -156,8 +156,9 @@ async function fetchSentPosts() {
       const emptyMsg = state.searchSent
         ? `No applications matching "${escapeHtml(state.searchSent)}" found.`
         : 'No applications in Others history yet.';
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 3rem; color: #64748b;">${emptyMsg}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">${emptyMsg}</td></tr>`;
       renderSentPagination();
+      updateSelectedSentUI();
       return;
     }
 
@@ -190,7 +191,12 @@ async function fetchSentPosts() {
 
       const noteOrSubject = escapeHtml(post.generated_subject || (post.full_text ? post.full_text.slice(0, 65) + '...' : '—'));
 
+      const isChecked = state.selectedSentIds && state.selectedSentIds.has(post.id);
+
       tr.innerHTML = `
+        <td onclick="event.stopPropagation()">
+          <input type="checkbox" class="sent-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectSent('${post.id}')" title="Select application" />
+        </td>
         <td>
           <div class="recruiter-cell" onclick="openPostModal('${post.id}')" title="Click to view full application details" style="cursor: pointer;">
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
@@ -232,8 +238,9 @@ async function fetchSentPosts() {
     });
 
     renderSentPagination();
+    updateSelectedSentUI();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem;">Error: ${escapeHtml(err.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem;">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -314,6 +321,87 @@ async function revertPostToDraft(postId) {
   }
 }
 
+function toggleSelectSent(postId) {
+  if (!state.selectedSentIds) state.selectedSentIds = new Set();
+  if (state.selectedSentIds.has(postId)) {
+    state.selectedSentIds.delete(postId);
+  } else {
+    state.selectedSentIds.add(postId);
+  }
+  updateSelectedSentUI();
+}
+
+function toggleSelectAllSent(checked) {
+  if (!state.selectedSentIds) state.selectedSentIds = new Set();
+  const pagePosts = state.sentPosts || [];
+  if (checked) {
+    pagePosts.forEach((p) => state.selectedSentIds.add(p.id));
+  } else {
+    pagePosts.forEach((p) => state.selectedSentIds.delete(p.id));
+  }
+  updateSelectedSentUI();
+}
+
+function updateSelectedSentUI() {
+  const count = state.selectedSentIds ? state.selectedSentIds.size : 0;
+  const countEl = document.getElementById('selectedSentCount');
+  const btnBatch = document.getElementById('btnBatchRestoreSent');
+  const checkAll = document.getElementById('selectAllSentCheckbox');
+
+  if (countEl) countEl.textContent = String(count);
+  if (btnBatch) {
+    btnBatch.classList.toggle('hidden', count === 0);
+  }
+
+  const pagePosts = state.sentPosts || [];
+  if (checkAll) {
+    const pageSelectedCount = pagePosts.filter((p) => state.selectedSentIds && state.selectedSentIds.has(p.id)).length;
+    checkAll.checked = pagePosts.length > 0 && pageSelectedCount === pagePosts.length;
+    checkAll.indeterminate = pageSelectedCount > 0 && pageSelectedCount < pagePosts.length;
+  }
+
+  document.querySelectorAll('.sent-checkbox').forEach((cb) => {
+    cb.checked = !!(state.selectedSentIds && state.selectedSentIds.has(cb.value));
+  });
+}
+
+async function restoreBatchSelectedSent() {
+  const count = state.selectedSentIds ? state.selectedSentIds.size : 0;
+  if (count === 0) return;
+
+  const confirmed = await showConfirm(
+    'Restore Multiple Applications?',
+    `This will return ${count} selected application${count === 1 ? '' : 's'} back to the Review & Drafts workspace, allowing you to edit the email draft and re-send or modify it.`,
+    { confirmText: `Restore ${count} Application${count === 1 ? '' : 's'}` }
+  );
+  if (!confirmed) return;
+
+  try {
+    const postIds = Array.from(state.selectedSentIds);
+    const res = await fetch('/api/posts/revert-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: postIds }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(`✓ Reverted ${data.count || count} applications to Review & Drafts`, 'success');
+      state.selectedSentIds.clear();
+      updateSelectedSentUI();
+      await fetchSentPosts();
+      await fetchReviewPosts();
+      if (typeof loadDashboardData === 'function') loadDashboardData();
+      switchTab('tabReview');
+    } else {
+      const err = await res.json();
+      showAlert('Restore Error', err.detail || 'Failed to revert applications.');
+    }
+  } catch (err) {
+    showAlert('Restore Error', err.message);
+  }
+}
+
 // Global Bindings
 window.setOthersFilter = setOthersFilter;
 window.handleSearchSentKeyUp = handleSearchSentKeyUp;
@@ -326,3 +414,7 @@ window.renderSentPagination = renderSentPagination;
 window.goToSentPage = goToSentPage;
 window.changeSentRowsPerPage = changeSentRowsPerPage;
 window.revertPostToDraft = revertPostToDraft;
+window.toggleSelectSent = toggleSelectSent;
+window.toggleSelectAllSent = toggleSelectAllSent;
+window.updateSelectedSentUI = updateSelectedSentUI;
+window.restoreBatchSelectedSent = restoreBatchSelectedSent;

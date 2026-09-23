@@ -19,6 +19,8 @@ window.state = {
   posts: [],
   selectedIds: new Set(),
   selectedDraftIds: new Set(),
+  selectedSentIds: new Set(),
+  pendingCancelPostIds: [],
   reviewPosts: [],
   activeReviewPost: null,
   sentPosts: [],
