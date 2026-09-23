@@ -133,6 +133,34 @@
     transition: width 0.3s ease;
   }
 
+  .btn-cancel-active-task {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .btn-cancel-active-task:hover {
+    background: rgba(239, 68, 68, 0.28);
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+  }
+
+  .btn-cancel-active-task.sm {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.68rem;
+  }
+
   .task-logs-drawer {
     margin-top: 0.75rem;
     padding-top: 0.75rem;
@@ -143,6 +171,44 @@
     font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--text-dim);
+  }
+
+  .task-logs-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .logs-toolbar-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .logs-cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+
+  .logs-cancel-btn:hover {
+    background: rgba(239, 68, 68, 0.28);
+    border-color: rgba(239, 68, 68, 0.6);
+    color: #ffffff;
   }
 
   .logs-stream div {
@@ -228,10 +294,25 @@
     flex-shrink: 0;
   }
 
+  .queue-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
   .queue-card-name {
     font-size: 0.76rem;
     color: var(--text-main);
     font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .queue-card-snippet {
+    font-size: 0.68rem;
+    color: #94a3b8;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

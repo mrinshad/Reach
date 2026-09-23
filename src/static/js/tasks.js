@@ -31,6 +31,13 @@ async function pollTaskStatus() {
 
     if (!card || !titleEl || !subEl || !countEl || !fillEl || !logsEl) return;
 
+    // Toggle visibility of stop/cancel buttons based on running status
+    const cancelBtn = document.getElementById('btnCancelActiveTask');
+    const logsCancelBtns = document.querySelectorAll('.logs-cancel-btn');
+    const isRunning = task.status === 'running';
+    if (cancelBtn) cancelBtn.style.display = isRunning ? 'inline-flex' : 'none';
+    logsCancelBtns.forEach(btn => btn.style.display = isRunning ? 'inline-flex' : 'none');
+
     // Render task queue drawer if queued tasks exist
     const queueSection = document.getElementById('taskQueueSection');
     const queueBadge = document.getElementById('taskQueueCountBadge');
@@ -45,7 +52,10 @@ async function pollTaskStatus() {
           <div class="task-queue-card" id="queueItem_${escapeHtml(item.id)}">
             <div class="task-queue-card-left">
               <span class="queue-pos-badge">#${idx + 1}</span>
-              <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+              <div class="queue-card-info">
+                <span class="queue-card-name" title="${escapeHtml(item.name)}">${escapeHtml(item.short_name || item.name)}</span>
+                ${item.snippet ? `<span class="queue-card-snippet" title="${escapeHtml(item.snippet)}">${escapeHtml(item.snippet)}</span>` : ''}
+              </div>
             </div>
             <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -171,6 +181,27 @@ async function pollTaskStatus() {
   } catch (err) {
     console.error('Task poll error:', err);
     stopTaskPolling();
+  }
+}
+
+async function cancelActiveTask() {
+  const confirmed = await showConfirm(
+    'Stop Ongoing Task',
+    'Are you sure you want to stop the currently running automation task? Any in-flight progress will be cleanly halted.',
+    { confirmText: 'Stop Task', danger: true }
+  );
+  if (!confirmed) return;
+  try {
+    const res = await fetch('/api/tasks/cancel', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('✓ Task cancellation requested', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.message || 'No task is currently running', 'warn');
+    }
+  } catch (err) {
+    showToast('Error stopping task: ' + err.message, 'error');
   }
 }
 
@@ -303,6 +334,7 @@ function toggleTaskLogs() {
 window.startTaskPolling = startTaskPolling;
 window.stopTaskPolling = stopTaskPolling;
 window.pollTaskStatus = pollTaskStatus;
+window.cancelActiveTask = cancelActiveTask;
 window.cancelQueuedTask = cancelQueuedTask;
 window.clearTaskQueue = clearTaskQueue;
 window.showCrawlSummaryModal = showCrawlSummaryModal;

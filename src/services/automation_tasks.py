@@ -48,9 +48,15 @@ class TaskManager:
         self._queue_lock = threading.Lock()
         self.queue: List[Dict[str, Any]] = []
         self._worker_thread: Optional[threading.Thread] = None
+        self._cancel_requested = threading.Event()
+        self._active_proc: Optional[Any] = None
+        self._active_context: Optional[Any] = None
+        self._current_task: Optional[Dict[str, Any]] = None
         self.state: Dict[str, Any] = {
             "status": "idle",       # idle | running | completed | error
             "task_name": "",
+            "short_name": "",
+            "snippet": "",
             "current_step": "",
             "total_items": 0,
             "completed_items": 0,
@@ -61,6 +67,60 @@ class TaskManager:
             "crawl_stats": None,
         }
 
+    def set_active_proc(self, proc):
+        with self._lock:
+            self._active_proc = proc
+
+    def clear_active_proc(self):
+        with self._lock:
+            self._active_proc = None
+
+    def set_active_context(self, context):
+        with self._lock:
+            self._active_context = context
+
+    def clear_active_context(self):
+        with self._lock:
+            self._active_context = None
+
+    def is_cancel_requested(self) -> bool:
+        return self._cancel_requested.is_set()
+
+    def cancel_active_task(self) -> bool:
+        """Cancel the currently executing automation task and stop underlying processes/browser."""
+        with self._lock:
+            if self.state["status"] != "running":
+                return False
+            self._cancel_requested.set()
+            task_name = self.state.get("task_name") or "Task"
+            entry = f"[{time.strftime('%H:%M:%S')}] 🛑 Stopping ongoing task: {task_name}..."
+            self.state["logs"].append(entry)
+            print(entry)
+
+            # Terminate active scraper subprocess if running
+            if self._active_proc:
+                try:
+                    self._active_proc.terminate()
+                    time.sleep(0.3)
+                    if self._active_proc.poll() is None:
+                        self._active_proc.kill()
+                except Exception:
+                    pass
+
+            # Close active Playwright context if running
+            if self._active_context:
+                try:
+                    self._active_context.close()
+                except Exception:
+                    pass
+
+            self.state["status"] = "error"
+            self.state["error"] = "Task stopped by user."
+            self.state["current_step"] = "Stopped by user"
+            self.state["finished_at"] = time.time()
+            self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] 🛑 {task_name} was stopped by user.")
+            return True
+
     def enqueue_task(
         self,
         task_type: str,
@@ -69,6 +129,8 @@ class TaskManager:
         args: tuple = (),
         kwargs: dict = None,
         metadata: dict = None,
+        short_name: str = "",
+        snippet: str = "",
     ) -> Dict[str, Any]:
         """
         Thread-safe addition to FIFO queue.
@@ -80,6 +142,8 @@ class TaskManager:
             "id": task_id,
             "type": task_type,
             "name": task_name,
+            "short_name": short_name or task_name,
+            "snippet": snippet or "",
             "runner": runner_func,
             "args": args or (),
             "kwargs": kwargs or {},
@@ -94,13 +158,16 @@ class TaskManager:
             if is_currently_running:
                 self.queue.append(item)
                 pos = len(self.queue)
-                self.log(f"Enqueued task #{pos}: {task_name}")
+                disp_desc = f"{item['short_name']} ({snippet})" if snippet else item["short_name"]
+                self.log(f"Enqueued task #{pos}: {disp_desc}")
                 return {
                     "queued": True,
                     "task_id": task_id,
                     "position": pos,
                     "queue_length": len(self.queue),
                     "task_name": task_name,
+                    "short_name": item["short_name"],
+                    "snippet": item["snippet"],
                 }
             else:
                 self.queue.append(item)
@@ -113,6 +180,8 @@ class TaskManager:
                     "position": 0,
                     "queue_length": len(self.queue),
                     "task_name": task_name,
+                    "short_name": item["short_name"],
+                    "snippet": item["snippet"],
                 }
 
     def _worker_loop(self):
@@ -127,6 +196,8 @@ class TaskManager:
             if not current_item:
                 break
 
+            self._cancel_requested.clear()
+            self._current_task = current_item
             runner = current_item["runner"]
             args = current_item.get("args", ())
             kwargs = current_item.get("kwargs", {})
@@ -134,7 +205,12 @@ class TaskManager:
             try:
                 runner(*args, **kwargs)
             except Exception as e:
-                self.fail_task(str(e))
+                if not self.is_cancel_requested():
+                    self.fail_task(str(e))
+            finally:
+                self._current_task = None
+                self._active_proc = None
+                self._active_context = None
 
             # Pause briefly if more tasks are queued to allow the frontend poller to register completion
             with self._queue_lock:
@@ -149,7 +225,7 @@ class TaskManager:
             for idx, item in enumerate(self.queue):
                 if item["id"] == task_id:
                     del self.queue[idx]
-                    self.log(f"Cancelled queued task: {item['name']}")
+                    self.log(f"Cancelled queued task: {item.get('short_name') or item['name']}")
                     return True
         return False
 
@@ -163,12 +239,14 @@ class TaskManager:
             return count
 
     def get_queue_summary(self) -> List[Dict[str, Any]]:
-        """Return a lightweight, JSON-serializable list of queued tasks."""
+        """Return a lightweight, JSON-serializable list of queued tasks with snippet descriptors."""
         with self._queue_lock:
             return [
                 {
                     "id": item["id"],
                     "name": item["name"],
+                    "short_name": item.get("short_name") or item["name"],
+                    "snippet": item.get("snippet") or "",
                     "type": item["type"],
                     "metadata": item.get("metadata", {}),
                     "enqueued_at": item.get("enqueued_at"),
@@ -176,11 +254,13 @@ class TaskManager:
                 for item in self.queue
             ]
 
-    def start_task(self, task_name: str, total_items: int = 1):
+    def start_task(self, task_name: str, total_items: int = 1, short_name: str = "", snippet: str = ""):
         with self._lock:
             self.state = {
                 "status": "running",
                 "task_name": task_name,
+                "short_name": short_name or task_name,
+                "snippet": snippet or "",
                 "current_step": "Initializing...",
                 "total_items": total_items,
                 "completed_items": 0,
@@ -232,6 +312,8 @@ class TaskManager:
             self.state["status"] = "idle"
             self.state["error"] = None
             self.state["task_name"] = ""
+            self.state["short_name"] = ""
+            self.state["snippet"] = ""
             self.state["current_step"] = ""
             self.state["crawl_stats"] = None
 
@@ -266,81 +348,100 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                 headless=hl,
                 sync_cookies_domains=["chatgpt.com", "openai.com"],
             )
+            task_manager.set_active_context(context)
+            try:
+                page = context.pages[0] if context.pages else context.new_page()
+                custom_gpt_url = config.get("chatgpt_url") or get_default_chatgpt_url()
 
-            page = context.pages[0] if context.pages else context.new_page()
-            custom_gpt_url = config.get("chatgpt_url") or get_default_chatgpt_url()
+                task_manager.log(f"Navigating to custom GPT conversation...")
+                navigate_to_conversation(page, url=custom_gpt_url)
 
-            task_manager.log(f"Navigating to custom GPT conversation...")
-            navigate_to_conversation(page, url=custom_gpt_url)
+                success_count = 0
+                rejected_count = 0
+                failed_posts = []
 
-            success_count = 0
-            rejected_count = 0
-            failed_posts = []
-
-            for idx, post_id in enumerate(post_ids, start=1):
-                post = get_post_by_id(post_id)
-                if not post:
-                    task_manager.log(f"Post {post_id} not found in database, skipping.")
-                    continue
-
-                author = post.get("author_name", "Unknown")
-                task_manager.update_progress(idx - 1, f"Processing {idx}/{len(post_ids)}: {author}")
-                task_manager.log(f"[{idx}/{len(post_ids)}] Submitting JD for {author}...")
-
-                update_post_status(post_id, "GENERATING_EMAIL")
-
-                try:
-                    jd_text = (post.get("full_text") or "").strip()
-                    subject, body = send_jd_and_get_email(page, jd_text)
-                    if subject == "UNSUITABLE_JD" or is_unsuitable_response(body):
-                        reason = extract_unsuitable_reason(body)
-                        update_post_status(post_id, "REJECTED", rejection_reason=reason)
-                        update_post_email(post_id, "UNSUITABLE_JD", body)
-                        rejected_count += 1
-                        task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
-                    else:
-                        save_chatgpt_response(post_id, subject, body)
-                        success_count += 1
-                        task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")
-                except Exception as post_err:
-                    err_str = str(post_err)
-                    task_manager.log(f"  ✗ Failed for post {author}: {err_str}")
-                    update_post_status(post_id, "DISCOVERED")
-                    failed_posts.append((author, err_str))
-
-                    # If browser context or page was closed or crashed, abort immediately
-                    if "closed" in err_str.lower() or "target crash" in err_str.lower() or "disconnected" in err_str.lower():
-                        task_manager.fail_task(f"Browser closed or disconnected while generating for {author}: {err_str}")
+                for idx, post_id in enumerate(post_ids, start=1):
+                    if task_manager.is_cancel_requested():
+                        task_manager.log("🛑 ChatGPT generation stopped by user.")
                         return
-                    continue
 
-                task_manager.update_progress(idx)
+                    post = get_post_by_id(post_id)
+                    if not post:
+                        task_manager.log(f"Post {post_id} not found in database, skipping.")
+                        continue
 
-                # Human pacing pause if more posts remain
-                if idx < len(post_ids):
-                    pause = random.uniform(
-                        config.get("pacing_min_seconds", 6),
-                        config.get("pacing_max_seconds", 12)
+                    author = post.get("author_name", "Unknown")
+                    task_manager.update_progress(idx - 1, f"Processing {idx}/{len(post_ids)}: {author}")
+                    task_manager.log(f"[{idx}/{len(post_ids)}] Submitting JD for {author}...")
+
+                    update_post_status(post_id, "GENERATING_EMAIL")
+
+                    try:
+                        jd_text = (post.get("full_text") or "").strip()
+                        subject, body = send_jd_and_get_email(page, jd_text)
+                        if subject == "UNSUITABLE_JD" or is_unsuitable_response(body):
+                            reason = extract_unsuitable_reason(body)
+                            update_post_status(post_id, "REJECTED", rejection_reason=reason)
+                            update_post_email(post_id, "UNSUITABLE_JD", body)
+                            rejected_count += 1
+                            task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
+                        else:
+                            save_chatgpt_response(post_id, subject, body)
+                            success_count += 1
+                            task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")
+                    except Exception as post_err:
+                        update_post_status(post_id, "DISCOVERED")
+                        if task_manager.is_cancel_requested():
+                            task_manager.log(f"  🛑 Generation stopped for {author} upon user request.")
+                            return
+                        err_str = str(post_err)
+                        task_manager.log(f"  ✗ Failed for post {author}: {err_str}")
+                        failed_posts.append((author, err_str))
+
+                        # If browser context or page was closed or crashed, abort immediately
+                        if "closed" in err_str.lower() or "target crash" in err_str.lower() or "disconnected" in err_str.lower():
+                            task_manager.fail_task(f"Browser closed or disconnected while generating for {author}: {err_str}")
+                            return
+                        continue
+
+                    task_manager.update_progress(idx)
+
+                    # Human pacing pause if more posts remain
+                    if idx < len(post_ids):
+                        pause = random.uniform(
+                            config.get("pacing_min_seconds", 6),
+                            config.get("pacing_max_seconds", 12)
+                        )
+                        task_manager.log(f"  Pacing pause: waiting {pause:.1f}s before next post...")
+                        p_start = time.time()
+                        while time.time() - p_start < pause:
+                            if task_manager.is_cancel_requested():
+                                task_manager.log("🛑 Pacing pause interrupted by user cancellation.")
+                                return
+                            time.sleep(0.5)
+
+                task_manager.log("Closing browser session...")
+                context.close()
+
+                if task_manager.is_cancel_requested():
+                    return
+
+                if len(failed_posts) > 0 and success_count == 0 and rejected_count == 0:
+                    reasons = "; ".join([f"{a}: {m}" for a, m in failed_posts[:3]])
+                    task_manager.fail_task(f"Generation stopped for all {len(failed_posts)} post(s): {reasons}")
+                elif len(failed_posts) > 0:
+                    reasons = "; ".join([f"{a}: {m}" for a, m in failed_posts[:2]])
+                    task_manager.fail_task(f"Generated {success_count} email(s), but stopped on {len(failed_posts)} post(s): {reasons}")
+                else:
+                    task_manager.finish_task(
+                        f"Processed {len(post_ids)} post(s): {success_count} draft(s) created, {rejected_count} unsuitable auto-rejected."
                     )
-                    task_manager.log(f"  Pacing pause: waiting {pause:.1f}s before next post...")
-                    time.sleep(pause)
-
-            task_manager.log("Closing browser session...")
-            context.close()
-
-            if len(failed_posts) > 0 and success_count == 0 and rejected_count == 0:
-                reasons = "; ".join([f"{a}: {m}" for a, m in failed_posts[:3]])
-                task_manager.fail_task(f"Generation stopped for all {len(failed_posts)} post(s): {reasons}")
-            elif len(failed_posts) > 0:
-                reasons = "; ".join([f"{a}: {m}" for a, m in failed_posts[:2]])
-                task_manager.fail_task(f"Generated {success_count} email(s), but stopped on {len(failed_posts)} post(s): {reasons}")
-            else:
-                task_manager.finish_task(
-                    f"Processed {len(post_ids)} post(s): {success_count} draft(s) created, {rejected_count} unsuitable auto-rejected."
-                )
+            finally:
+                task_manager.clear_active_context()
 
     except Exception as e:
-        task_manager.fail_task(f"ChatGPT Generation Error: {str(e)}")
+        if not task_manager.is_cancel_requested():
+            task_manager.fail_task(f"ChatGPT Generation Error: {str(e)}")
 
 
 def run_open_gmail_draft(post_id: str):
@@ -557,73 +658,93 @@ def run_send_batch_drafts(post_ids: List[str]):
                 headless=hl,
                 sync_cookies_domains=["google.com", "gmail.com"],
             )
-            page = context.pages[0] if context.pages else context.new_page()
+            task_manager.set_active_context(context)
+            try:
+                page = context.pages[0] if context.pages else context.new_page()
 
-            task_manager.log("Navigating to Gmail...")
-            navigate_to_gmail(page)
+                task_manager.log("Navigating to Gmail...")
+                navigate_to_gmail(page)
 
-            for idx, post_id in enumerate(post_ids, 1):
-                post = get_post_by_id(post_id)
-                if not post:
-                    failed.append((post_id, "Post not found"))
-                    continue
+                for idx, post_id in enumerate(post_ids, 1):
+                    if task_manager.is_cancel_requested():
+                        task_manager.log("🛑 Batch sending stopped by user.")
+                        return
 
-                emails = post.get("contact_emails", [])
-                if not emails:
-                    failed.append((post.get("author_name", post_id), "No email found"))
-                    continue
+                    post = get_post_by_id(post_id)
+                    if not post:
+                        failed.append((post_id, "Post not found"))
+                        continue
 
-                recipient = emails[0]
-                author = post.get("author_name", "Recruiter")
-                subject = post.get("generated_subject") or "Application for Full Stack Developer"
-                body = post.get("generated_body") or ""
+                    emails = post.get("contact_emails", [])
+                    if not emails:
+                        failed.append((post.get("author_name", post_id), "No email found"))
+                        continue
 
-                if not body:
-                    failed.append((author, "Empty email body"))
-                    continue
+                    recipient = emails[0]
+                    author = post.get("author_name", "Recruiter")
+                    subject = post.get("generated_subject") or "Application for Full Stack Developer"
+                    body = post.get("generated_body") or ""
 
-                task_manager.log(f"[{idx}/{len(post_ids)}] Composing to {author} ({recipient})...")
-                task_manager.set_current_step(f"Sending {idx}/{len(post_ids)}: {author}")
+                    if not body:
+                        failed.append((author, "Empty email body"))
+                        continue
 
-                try:
-                    populate_email_draft(
-                        page=page,
-                        recipient=recipient,
-                        subject=subject,
-                        body=body,
-                        attachment_path=attachment,
-                    )
-                    send_email_directly(page)
-                    mark_post_sent(post_id)
-                    successful += 1
-                    task_manager.log(f"  ✓ Sent application {idx}/{len(post_ids)} to {author} ({recipient})")
-                except Exception as send_err:
-                    task_manager.log(f"  ✗ Failed to send to {author}: {send_err}")
-                    failed.append((author, str(send_err)))
+                    task_manager.log(f"[{idx}/{len(post_ids)}] Composing to {author} ({recipient})...")
+                    task_manager.set_current_step(f"Sending {idx}/{len(post_ids)}: {author}")
 
-                task_manager.update_progress(idx)
+                    try:
+                        populate_email_draft(
+                            page=page,
+                            recipient=recipient,
+                            subject=subject,
+                            body=body,
+                            attachment_path=attachment,
+                        )
+                        send_email_directly(page)
+                        mark_post_sent(post_id)
+                        successful += 1
+                        task_manager.log(f"  ✓ Sent application {idx}/{len(post_ids)} to {author} ({recipient})")
+                    except Exception as send_err:
+                        if task_manager.is_cancel_requested():
+                            task_manager.log(f"  🛑 Sending stopped for {author} upon user request.")
+                            return
+                        task_manager.log(f"  ✗ Failed to send to {author}: {send_err}")
+                        failed.append((author, str(send_err)))
 
-                if idx < len(post_ids):
-                    pause = random.uniform(
-                        config.get("pacing_min_seconds", 4),
-                        config.get("pacing_max_seconds", 8)
-                    )
-                    task_manager.log(f"  Waiting {pause:.1f}s before sending next email...")
-                    time.sleep(pause)
+                    task_manager.update_progress(idx)
 
-            task_manager.log("Closing browser session...")
-            context.close()
+                    if idx < len(post_ids):
+                        pause = random.uniform(
+                            config.get("pacing_min_seconds", 4),
+                            config.get("pacing_max_seconds", 8)
+                        )
+                        task_manager.log(f"  Waiting {pause:.1f}s before sending next email...")
+                        p_start = time.time()
+                        while time.time() - p_start < pause:
+                            if task_manager.is_cancel_requested():
+                                task_manager.log("🛑 Pacing pause interrupted by user cancellation.")
+                                return
+                            time.sleep(0.5)
 
-            if failed and successful == 0:
-                reasons = "; ".join([f"{a}: {m}" for a, m in failed[:3]])
-                task_manager.fail_task(f"Failed to send all {len(failed)} emails: {reasons}")
-            elif failed:
-                task_manager.finish_task(f"Sent {successful} of {len(post_ids)} applications. ({len(failed)} failed)")
-            else:
-                task_manager.finish_task(f"Successfully sent all {successful} applications via Gmail!")
+                task_manager.log("Closing browser session...")
+                context.close()
+
+                if task_manager.is_cancel_requested():
+                    return
+
+                if failed and successful == 0:
+                    reasons = "; ".join([f"{a}: {m}" for a, m in failed[:3]])
+                    task_manager.fail_task(f"Failed to send all {len(failed)} emails: {reasons}")
+                elif failed:
+                    task_manager.finish_task(f"Sent {successful} of {len(post_ids)} applications. ({len(failed)} failed)")
+                else:
+                    task_manager.finish_task(f"Successfully sent all {successful} applications via Gmail!")
+            finally:
+                task_manager.clear_active_context()
 
     except Exception as e:
-        task_manager.fail_task(f"Batch Send Error: {str(e)}")
+        if not task_manager.is_cancel_requested():
+            task_manager.fail_task(f"Batch Send Error: {str(e)}")
 
 
 import subprocess
@@ -661,6 +782,7 @@ def run_scraper_subprocess_with_timeout(
             env=env,
             cwd=cwd or PROJECT_ROOT,
         )
+        task_manager.set_active_proc(proc)
 
         last_activity = [time.time()]
         timed_out = [False]
@@ -693,6 +815,8 @@ def run_scraper_subprocess_with_timeout(
 
         parsed_stats = None
         for line in proc.stdout:
+            if task_manager.is_cancel_requested():
+                break
             last_activity[0] = time.time()
             cleaned = line.rstrip()
             if cleaned:
@@ -708,6 +832,11 @@ def run_scraper_subprocess_with_timeout(
 
         completed.set()
         proc.wait()
+        task_manager.clear_active_proc()
+
+        if task_manager.is_cancel_requested():
+            task_manager.log(f"🛑 {task_name} was stopped upon user request.")
+            return
 
         if timed_out[0]:
             task_manager.finish_task(
@@ -727,7 +856,9 @@ def run_scraper_subprocess_with_timeout(
         else:
             task_manager.fail_task(f"{task_name} exited with code {proc.returncode}")
     except Exception as e:
-        task_manager.fail_task(str(e))
+        task_manager.clear_active_proc()
+        if not task_manager.is_cancel_requested():
+            task_manager.fail_task(str(e))
 
 
 def run_infopark_scraper():

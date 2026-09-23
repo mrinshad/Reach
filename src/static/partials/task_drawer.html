@@ -21,6 +21,10 @@
           </div>
           <div class="task-card-right">
             <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
+            <button class="btn-cancel-active-task" id="btnCancelActiveTask" onclick="cancelActiveTask()" title="Stop ongoing task">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+              <span>Stop</span>
+            </button>
             <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
             </button>
@@ -32,6 +36,17 @@
         </div>
 
         <div class="task-logs-drawer hidden" id="taskLogsDrawer">
+          <div class="task-logs-toolbar">
+            <div class="task-logs-toolbar-left">
+              <span class="logs-toolbar-title">Terminal Stream</span>
+            </div>
+            <div class="task-logs-toolbar-right">
+              <button class="logs-cancel-btn" onclick="cancelActiveTask()" title="Stop ongoing task">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                <span>Stop Task</span>
+              </button>
+            </div>
+          </div>
           <div class="logs-stream" id="logsStream"></div>
         </div>
 

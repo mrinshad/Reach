@@ -87,17 +87,41 @@ def format_wait_time(wait_seconds: int) -> str:
     return " ".join(parts[:2])
 
 
+def build_crawler_labels(source: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+    """Generate clean full_name, short_name, and descriptive snippet for crawler tasks."""
+    src_title = "LinkedIn" if (source or "").lower() == "linkedin" else (source or "Web").capitalize()
+    short_name = f"{src_title} Scraper"
+    snippet_parts = []
+    if query and query.strip():
+        clean_q = query.strip().strip("'\"")
+        if len(clean_q) > 22:
+            clean_q = clean_q[:20] + "..."
+        snippet_parts.append(f'"{clean_q}"')
+    if location and location.strip():
+        clean_loc = location.strip().split(",")[0].strip()
+        snippet_parts.append(clean_loc)
+    if time_filter and time_filter.lower() not in ("24h", "today"):
+        snippet_parts.append(f"[{time_filter}]")
+    snippet = " • ".join(snippet_parts) if snippet_parts else "Default Search"
+    full_name = f"{short_name} ({snippet})"
+    return full_name, short_name, snippet
+
+
 @router.post("/generate-email/{post_id}")
 def api_generate_email(post_id: str, force: bool = False):
     """Enqueue ChatGPT generation for a single post with optional force override."""
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or f"Post #{post_id[:8]}"
     res = task_manager.enqueue_task(
         task_type="chatgpt",
-        task_name=f"ChatGPT Email Generation (Post #{post_id})",
+        task_name=f"Generate Email — {author}",
+        short_name="ChatGPT Email",
+        snippet=author,
         runner_func=run_chatgpt_batch,
         args=([post_id], force),
-        metadata={"post_id": post_id, "count": 1, "force": force},
+        metadata={"post_id": post_id, "count": 1, "force": force, "author": author},
     )
-    msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for post {post_id}."
+    msg = f"Queued for email generation (Position #{res['position']})" if res["queued"] else f"ChatGPT email generation started for {author}."
     return {"success": True, "message": msg, **res}
 
 
@@ -111,6 +135,8 @@ def api_generate_batch(payload: GenerateBatchPayload):
     res = task_manager.enqueue_task(
         task_type="chatgpt",
         task_name=f"Batch Email Generation ({count} posts)",
+        short_name="Batch Email Gen",
+        snippet=f"{count} posts",
         runner_func=run_chatgpt_batch,
         args=(payload.post_ids,),
         metadata={"count": count, "post_ids": payload.post_ids},
@@ -122,12 +148,16 @@ def api_generate_batch(payload: GenerateBatchPayload):
 @router.post("/open-gmail/{post_id}")
 def api_open_gmail(post_id: str):
     """Enqueue Gmail draft creation in headed Firefox with resume attached."""
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or f"Post #{post_id[:8]}"
     res = task_manager.enqueue_task(
         task_type="gmail_draft",
-        task_name=f"Gmail Draft (Post #{post_id})",
+        task_name=f"Gmail Draft — {author}",
+        short_name="Gmail Draft",
+        snippet=author,
         runner_func=run_open_gmail_draft,
         args=(post_id,),
-        metadata={"post_id": post_id},
+        metadata={"post_id": post_id, "author": author},
     )
     msg = f"Queued Gmail draft opening (Position #{res['position']})" if res["queued"] else "Opening Gmail compose in headed Firefox..."
     return {"success": True, "message": msg, **res}
@@ -149,14 +179,18 @@ def api_send_direct(post_id: str):
             ),
         )
 
+    post = get_post_by_id(post_id)
+    author = (post.get("author_name") if post else None) or "Recruiter"
     res = task_manager.enqueue_task(
         task_type="gmail_send",
-        task_name=f"Direct Send (Post #{post_id})",
+        task_name=f"Send Email — {author}",
+        short_name="Send Email",
+        snippet=author,
         runner_func=run_send_single_draft,
         args=(post_id,),
-        metadata={"post_id": post_id},
+        metadata={"post_id": post_id, "author": author},
     )
-    msg = f"Queued email direct sending (Position #{res['position']})" if res["queued"] else "Directly sending application email via Gmail..."
+    msg = f"Queued email direct sending (Position #{res['position']})" if res["queued"] else f"Directly sending application email to {author} via Gmail..."
     return {"success": True, "message": msg, **res}
 
 
@@ -183,6 +217,8 @@ def api_send_batch(payload: SendBatchPayload):
     res = task_manager.enqueue_task(
         task_type="gmail_send_batch",
         task_name=f"Batch Email Sending ({count} applications)",
+        short_name="Batch Send",
+        snippet=f"{count} applications",
         runner_func=run_send_batch_drafts,
         args=(allowed,),
         metadata={"count": count, "post_ids": allowed, "skipped_cooldown": [b["post_id"] for b in blocked]},
@@ -263,6 +299,8 @@ def api_direct_outreach(payload: DirectOutreachPayload):
             res = task_manager.enqueue_task(
                 task_type="gmail_draft",
                 task_name=f"Direct Opportunity Draft ({recipient})",
+                short_name="Direct Draft",
+                snippet=recipient,
                 runner_func=run_open_gmail_draft,
                 args=(post_id,),
                 metadata={"post_id": post_id, "recipient": recipient},
@@ -273,6 +311,8 @@ def api_direct_outreach(payload: DirectOutreachPayload):
             res = task_manager.enqueue_task(
                 task_type="gmail_send",
                 task_name=f"Direct Opportunity Send ({recipient})",
+                short_name="Direct Send",
+                snippet=recipient,
                 runner_func=run_send_single_draft,
                 args=(post_id,),
                 metadata={"post_id": post_id, "recipient": recipient},
@@ -288,7 +328,9 @@ def api_trigger_scrape_infopark():
     """Enqueue the Infopark jobs scraper."""
     res = task_manager.enqueue_task(
         task_type="crawler",
-        task_name="Infopark Jobs Crawler",
+        task_name="Infopark Jobs Scraper",
+        short_name="Infopark Scraper",
+        snippet="Kochi Openings",
         runner_func=run_infopark_scraper,
         metadata={"source": "infopark"},
     )
@@ -303,17 +345,17 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
     loc = payload.location if payload else None
     time_filter = (payload.time_filter or "24h") if payload else "24h"
 
-    label = f"LinkedIn Crawler ({loc or 'Default'})" if loc else "LinkedIn Crawler"
-    if time_filter and time_filter != "24h":
-        label += f" [{time_filter}]"
+    full_name, short_name, snippet = build_crawler_labels("linkedin", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
         task_type="crawler",
-        task_name=label,
+        task_name=full_name,
+        short_name=short_name,
+        snippet=snippet,
         runner_func=run_linkedin_scraper,
         args=(query, loc, time_filter),
         metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
     )
-    msg = f"Queued LinkedIn scraper for {loc or 'default'} (Position #{res['position']})" if res["queued"] else "LinkedIn scraper started in headed Firefox."
+    msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
     return {"success": True, "message": msg, **res}
 
 
@@ -341,17 +383,17 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
         src = source
 
     try:
-        label = f"{src.capitalize()} Crawler" + (f" ({loc})" if loc else "")
-        if src == "linkedin" and time_filter and time_filter != "24h":
-            label += f" [{time_filter}]"
+        full_name, short_name, snippet = build_crawler_labels(src, query=query, location=loc, time_filter=time_filter)
         res = task_manager.enqueue_task(
             task_type="crawler",
-            task_name=label,
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
             runner_func=run_scraper_by_source,
             args=(src, query, loc, time_filter),
             metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter},
         )
-        msg = f"Queued {label} (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
+        msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
         return {"success": True, "message": msg, **res}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -370,6 +412,15 @@ def api_clear_task():
     """Reset task state to idle."""
     task_manager.clear_task()
     return {"success": True, "message": "Task state cleared."}
+
+
+@router.post("/tasks/cancel")
+def api_cancel_active_task():
+    """Cancel the currently executing automation task."""
+    stopped = task_manager.cancel_active_task()
+    if not stopped:
+        return {"success": False, "message": "No automation task is currently running."}
+    return {"success": True, "message": "Ongoing task has been stopped."}
 
 
 @router.post("/tasks/queue/cancel/{task_id}")
