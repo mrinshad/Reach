@@ -197,6 +197,22 @@
     cursor: not-allowed;
   }
 
+  .crawler-custom-time-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .crawler-custom-time-row .custom-time-input {
+    flex: 1 1 55%;
+    min-width: 0;
+  }
+
+  .crawler-custom-time-row .custom-time-unit {
+    flex: 1 1 45%;
+    min-width: 0;
+  }
+
   .btn-crawl-sidebar {
     width: 100%;
     display: inline-flex;

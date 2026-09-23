@@ -242,6 +242,43 @@ def upsert_post(
             return (created_id, res is not None)
 
 
+def _apply_date_filter(date_filter: Optional[str], where_clauses: list, params: list):
+    """Safely append SQL where clauses for predefined and custom date/time filters."""
+    if not date_filter:
+        return
+    df = date_filter.strip().upper()
+    if df == "ALL":
+        return
+    if df in ("24H", "LAST_24H", "PAST_24H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '24 hours'")
+    elif df == "TODAY":
+        where_clauses.append("created_at >= CURRENT_DATE")
+    elif df == "YESTERDAY":
+        where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
+    elif df in ("2D", "LAST_2_DAYS", "2DAYS", "48H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '2 days'")
+    elif df in ("3D", "LAST_3_DAYS", "3DAYS", "72H"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '3 days'")
+    elif df in ("WEEK", "PAST_WEEK", "7D"):
+        where_clauses.append("created_at >= NOW() - INTERVAL '7 days'")
+    elif df.startswith("CUSTOM_HOURS:") or df.startswith("HOURS:"):
+        try:
+            hrs = int(df.split(":")[1])
+            if hrs > 0:
+                where_clauses.append("created_at >= NOW() - make_interval(hours => %s)")
+                params.append(hrs)
+        except (ValueError, IndexError):
+            pass
+    elif df.startswith("CUSTOM_DAYS:") or df.startswith("DAYS:"):
+        try:
+            dys = int(df.split(":")[1])
+            if dys > 0:
+                where_clauses.append("created_at >= NOW() - make_interval(days => %s)")
+                params.append(dys)
+        except (ValueError, IndexError):
+            pass
+
+
 def get_posts(
     category: Optional[str] = None,
     status: Optional[str] = None,
@@ -313,14 +350,7 @@ def get_posts(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    if date_filter:
-        df_upper = date_filter.upper()
-        if df_upper == "TODAY":
-            where_clauses.append("created_at >= CURRENT_DATE")
-        elif df_upper == "YESTERDAY":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
-        elif df_upper == "WEEK":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+    _apply_date_filter(date_filter, where_clauses, params)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
@@ -477,14 +507,7 @@ def get_posts_paginated(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    if date_filter:
-        df_upper = date_filter.upper()
-        if df_upper == "TODAY":
-            where_clauses.append("created_at >= CURRENT_DATE")
-        elif df_upper == "YESTERDAY":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
-        elif df_upper == "WEEK":
-            where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '7 days'")
+    _apply_date_filter(date_filter, where_clauses, params)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""

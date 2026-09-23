@@ -69,12 +69,24 @@
               <option value="ALL" selected>All Reasons</option>
             </select>
 
-            <select id="selectDateFilter" class="select-clean" onchange="applyFilters()" title="Filter by Crawled Date">
+            <select id="selectDateFilter" class="select-clean" onchange="handleDateFilterSelectChange()" title="Filter by Crawled Date">
               <option value="ALL" selected>All Dates</option>
+              <option value="24H">Last 24 Hours</option>
               <option value="TODAY">Today</option>
               <option value="YESTERDAY">Yesterday</option>
+              <option value="2D">Last 2 Days</option>
+              <option value="3D">Last 3 Days</option>
               <option value="WEEK">Past 7 Days</option>
+              <option value="CUSTOM">Custom...</option>
             </select>
+
+            <div class="custom-date-filter-group hidden" id="customDateFilterGroup">
+              <input type="number" id="customDateFilterValue" min="1" max="365" value="12" class="select-clean input-custom-date" title="Enter hours or days" oninput="applyFilters()" />
+              <select id="customDateFilterUnit" class="select-clean select-custom-unit" title="Unit" onchange="applyFilters()">
+                <option value="hours" selected>hrs</option>
+                <option value="days">days</option>
+              </select>
+            </div>
 
             <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
               <option value="default" selected>Sort: Default</option>

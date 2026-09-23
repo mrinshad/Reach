@@ -298,17 +298,20 @@ def api_trigger_scrape_infopark():
 
 @router.post("/scrape/linkedin")
 def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
-    """Enqueue the LinkedIn scraper in headed Firefox with optional location and query."""
+    """Enqueue the LinkedIn scraper in headed Firefox with optional location, query, and time_filter."""
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
+    time_filter = (payload.time_filter or "24h") if payload else "24h"
 
     label = f"LinkedIn Crawler ({loc or 'Default'})" if loc else "LinkedIn Crawler"
+    if time_filter and time_filter != "24h":
+        label += f" [{time_filter}]"
     res = task_manager.enqueue_task(
         task_type="crawler",
         task_name=label,
         runner_func=run_linkedin_scraper,
-        args=(query, loc),
-        metadata={"source": "linkedin", "query": query, "location": loc},
+        args=(query, loc, time_filter),
+        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
     )
     msg = f"Queued LinkedIn scraper for {loc or 'default'} (Position #{res['position']})" if res["queued"] else "LinkedIn scraper started in headed Firefox."
     return {"success": True, "message": msg, **res}
@@ -322,26 +325,31 @@ def api_get_scrapers():
 
 @router.post("/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Enqueue scraper by source using the extensible scraper registry with optional query and location."""
+    """Enqueue scraper by source using the extensible scraper registry with optional query, location, and time_filter."""
     src = "linkedin"
     query = None
     loc = None
+    time_filter = "24h"
     if payload:
         if payload.source:
             src = payload.source
         query = payload.search_query
         loc = payload.location
+        if payload.time_filter:
+            time_filter = payload.time_filter
     elif source:
         src = source
 
     try:
         label = f"{src.capitalize()} Crawler" + (f" ({loc})" if loc else "")
+        if src == "linkedin" and time_filter and time_filter != "24h":
+            label += f" [{time_filter}]"
         res = task_manager.enqueue_task(
             task_type="crawler",
             task_name=label,
             runner_func=run_scraper_by_source,
-            args=(src, query, loc),
-            metadata={"source": src, "query": query, "location": loc},
+            args=(src, query, loc, time_filter),
+            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter},
         )
         msg = f"Queued {label} (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
         return {"success": True, "message": msg, **res}

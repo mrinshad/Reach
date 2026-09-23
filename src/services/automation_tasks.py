@@ -28,6 +28,7 @@ from .chatgpt_service import (
     navigate_to_conversation,
     send_jd_and_get_email,
     extract_unsuitable_reason,
+    is_unsuitable_response,
     get_default_chatgpt_url,
 )
 from .gmail_service import (
@@ -289,37 +290,14 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                 update_post_status(post_id, "GENERATING_EMAIL")
 
                 try:
-                    jd_text = post["full_text"] or ""
-                    if force:
-                        jd_text = (
-                            "Please write a customized, high-converting cold outreach email pitching my software engineering profile "
-                            "for this opportunity. Emphasize transferable problem-solving abilities, fast ramp-up on modern frameworks, "
-                            "and dedication. Do NOT reject or output UNSUITABLE_JD under any circumstance. "
-                            "Respond with format Subject: <subject line> followed by email body:\n\n"
-                            f"JOB DESCRIPTION:\n{jd_text}"
-                        )
+                    jd_text = (post.get("full_text") or "").strip()
                     subject, body = send_jd_and_get_email(page, jd_text)
-                    if subject == "UNSUITABLE_JD" or "UNSUITABLE_JD" in body or "❌ not suitable" in body.lower() or "not suitable —" in body.lower():
-                        if force:
-                            clean_author = post.get("author_name") or "Hiring Manager"
-                            subject = f"Application for Software Engineering Role — Opportunity Outreach"
-                            body = (
-                                f"Dear {clean_author},\n\n"
-                                "I recently came across your job posting and was eager to connect directly. "
-                                "As an adaptable full-stack software engineer with hands-on experience building resilient web architectures "
-                                "and backend services, I am confident in quickly mastering your specific tech stack and delivering immediate value.\n\n"
-                                "I have attached my resume for your consideration and would love the chance to briefly discuss how my background aligns with your engineering goals.\n\n"
-                                "Best regards,\n[Your Name]"
-                            )
-                            save_chatgpt_response(post_id, subject, body)
-                            success_count += 1
-                            task_manager.log(f"  ✓ Tailored outreach email generated for {author}")
-                        else:
-                            reason = extract_unsuitable_reason(body)
-                            update_post_status(post_id, "REJECTED", rejection_reason=reason)
-                            update_post_email(post_id, "UNSUITABLE_JD", body)
-                            rejected_count += 1
-                            task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
+                    if subject == "UNSUITABLE_JD" or is_unsuitable_response(body):
+                        reason = extract_unsuitable_reason(body)
+                        update_post_status(post_id, "REJECTED", rejection_reason=reason)
+                        update_post_email(post_id, "UNSUITABLE_JD", body)
+                        rejected_count += 1
+                        task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                     else:
                         save_chatgpt_response(post_id, subject, body)
                         success_count += 1
@@ -767,10 +745,10 @@ def run_infopark_scraper():
     )
 
 
-def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = None):
+def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
     """
     Run the LinkedIn Posts Scraper in headed Firefox (headless=False) via subprocess
-    with 90-second inactivity timeout, with optional query and location parameters.
+    with 90-second inactivity timeout, with optional query, location, and time_filter parameters.
     """
     script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_posts_search.py")
     task_label = "LinkedIn Posts Scraper"
@@ -784,6 +762,8 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
         extra_env["SCRAPER_QUERY"] = query.strip()
     if location:
         extra_env["SCRAPER_LOCATION"] = location.strip()
+    if time_filter:
+        extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
 
     run_scraper_subprocess_with_timeout(
         task_name=task_label,
@@ -799,7 +779,7 @@ SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
         "id": "linkedin",
         "name": "LinkedIn Posts",
         "icon": "💼",
-        "description": "Scrapes today's hiring posts via search query in headed Firefox",
+        "description": "Scrapes hiring posts via search query in headed Firefox",
         "runner": run_linkedin_scraper,
     },
     "infopark": {
@@ -825,8 +805,8 @@ def get_registered_scrapers() -> List[Dict[str, str]]:
     ]
 
 
-def run_scraper_by_source(source_id: str, query: Optional[str] = None, location: Optional[str] = None):
-    """Dispatch and run a scraper background task by source ID with optional query and location."""
+def run_scraper_by_source(source_id: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+    """Dispatch and run a scraper background task by source ID with optional query, location, and time filter."""
     source_lower = (source_id or "linkedin").strip().lower()
     scraper = SCRAPER_REGISTRY.get(source_lower)
     if not scraper:
@@ -834,6 +814,6 @@ def run_scraper_by_source(source_id: str, query: Optional[str] = None, location:
         raise ValueError(f"Unknown scraper source '{source_id}'. Supported sources: {valid_sources}")
     
     if source_lower == "linkedin":
-        run_linkedin_scraper(query=query, location=location)
+        run_linkedin_scraper(query=query, location=location, time_filter=time_filter)
     else:
         scraper["runner"]()

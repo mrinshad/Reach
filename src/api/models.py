@@ -62,6 +62,7 @@ class ScrapePayload(BaseModel):
     source: Optional[str] = "linkedin"
     location: Optional[str] = None
     search_query: Optional[str] = None
+    time_filter: Optional[str] = "24h"
 
 
 MAJOR_JOB_HUBS = [

@@ -69,16 +69,68 @@ def human_scroll(page, distance: int = 400, steps: int = 5):
     human_sleep(1.0, 2.2)
 
 
-def build_posts_search_url(keywords: str) -> str:
-    """Build LinkedIn search URL filtered for Posts posted in the past 24 hours."""
+def build_posts_search_url(keywords: str, date_posted_filter: str = "past-24h") -> str:
+    """Build LinkedIn search URL filtered for Posts posted in the requested timeframe."""
     encoded = quote(keywords)
     return (
         f"{LINKEDIN_BASE}/search/results/content/"
         f"?keywords={encoded}"
         f"&origin=GLOBAL_SEARCH_HEADER"
         f"&sortBy=%22date_posted%22"
-        f"&datePosted=%22past-24h%22"
+        f"&datePosted=%22{date_posted_filter}%22"
     )
+
+
+def get_max_cutoff_hours(time_filter: str, now: Optional[datetime] = None) -> Tuple[float, str]:
+    """
+    Compute maximum post age in hours and LinkedIn datePosted query parameter from time filter.
+    Returns (max_hours, date_posted_param).
+    """
+    now = now or datetime.now()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    hours_since_midnight = (now - midnight).total_seconds() / 3600.0
+
+    tf = (time_filter or "24h").strip().lower()
+
+    if tf == "today":
+        max_hours = hours_since_midnight + 0.5
+        date_param = "past-24h"
+    elif tf == "yesterday":
+        max_hours = hours_since_midnight + 24.5
+        date_param = "past-week" if max_hours > 24 else "past-24h"
+    elif tf in ("24h", "last_24h", "past_24h"):
+        max_hours = 24.5
+        date_param = "past-24h"
+    elif tf in ("2d", "last_2_days", "48h"):
+        max_hours = 48.5
+        date_param = "past-week"
+    elif tf in ("3d", "last_3_days", "72h"):
+        max_hours = 72.5
+        date_param = "past-week"
+    elif tf in ("week", "past_week", "7d"):
+        max_hours = 168.5
+        date_param = "past-week"
+    elif tf.startswith("custom_hours:") or tf.startswith("hours:"):
+        try:
+            hrs = float(tf.split(":")[1])
+            max_hours = hrs + 0.5
+            date_param = "past-24h" if max_hours <= 24.5 else ("past-week" if max_hours <= 168.5 else "past-month")
+        except (ValueError, IndexError):
+            max_hours = 24.5
+            date_param = "past-24h"
+    elif tf.startswith("custom_days:") or tf.startswith("days:"):
+        try:
+            dys = float(tf.split(":")[1])
+            max_hours = (dys * 24.0) + 0.5
+            date_param = "past-24h" if max_hours <= 24.5 else ("past-week" if max_hours <= 168.5 else "past-month")
+        except (ValueError, IndexError):
+            max_hours = 48.5
+            date_param = "past-week"
+    else:
+        max_hours = 24.5
+        date_param = "past-24h"
+
+    return max_hours, date_param
 
 
 def is_job_seeker_post(text: str) -> bool:
@@ -91,6 +143,39 @@ def is_comment_bait_post(text: str) -> bool:
     """Detect if the post asks users to comment to apply or receive details."""
     lower_text = text.lower()
     return any(re.search(p, lower_text) for p in COMMENT_BAIT_PATTERNS)
+
+
+def parse_post_hours_ago(post_date: str) -> float:
+    """Parse relative post date string from LinkedIn card into estimated hours ago."""
+    if not post_date:
+        return 0.0
+
+    clean = re.split(r"[•·]", post_date.strip().lower())[0].strip()
+
+    if clean in ["just now", "now"]:
+        return 0.0
+
+    m_match = re.match(r"^(\d+)\s*(?:m|min|minute|minutes)$", clean)
+    if m_match:
+        return float(m_match.group(1)) / 60.0
+
+    h_match = re.match(r"^(\d+)\s*(?:h|hr|hour|hours)$", clean)
+    if h_match:
+        return float(h_match.group(1))
+
+    d_match = re.match(r"^(\d+)\s*(?:d|day|days)$", clean)
+    if d_match:
+        return float(d_match.group(1)) * 24.0
+
+    w_match = re.match(r"^(\d+)\s*(?:w|wk|week|weeks)$", clean)
+    if w_match:
+        return float(w_match.group(1)) * 168.0
+
+    mo_match = re.match(r"^(\d+)\s*(?:mo|month|months)$", clean)
+    if mo_match:
+        return float(mo_match.group(1)) * 720.0
+
+    return 0.0
 
 
 def is_posted_since_midnight(post_date: str, now: Optional[datetime] = None) -> Tuple[bool, float]:
@@ -107,38 +192,8 @@ def is_posted_since_midnight(post_date: str, now: Optional[datetime] = None) -> 
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     hours_since_midnight = (now - midnight).total_seconds() / 3600.0
 
-    # Strip edit and privacy indicators e.g. "12h • Edited", "3h · Visible to anyone"
-    clean = re.split(r"[•·]", post_date.strip().lower())[0].strip()
-
-    if clean in ["just now", "now"]:
-        return True, 0.0
-
-    # Minutes: e.g. "5m", "45m", "15 min"
-    m_match = re.match(r"^(\d+)\s*(?:m|min|minute|minutes)$", clean)
-    if m_match:
-        hours_ago = float(m_match.group(1)) / 60.0
-        return hours_ago <= (hours_since_midnight + 0.5), hours_ago
-
-    # Hours: e.g. "1h", "6h", "16h", "2 hr"
-    h_match = re.match(r"^(\d+)\s*(?:h|hr|hour|hours)$", clean)
-    if h_match:
-        hours_ago = float(h_match.group(1))
-        return hours_ago <= (hours_since_midnight + 0.5), hours_ago
-
-    # Days, weeks, months, years: older than today 00:00
-    d_match = re.match(r"^(\d+)\s*(?:d|day|days)$", clean)
-    if d_match:
-        return False, float(d_match.group(1)) * 24.0
-
-    w_match = re.match(r"^(\d+)\s*(?:w|wk|week|weeks)$", clean)
-    if w_match:
-        return False, float(w_match.group(1)) * 168.0
-
-    mo_match = re.match(r"^(\d+)\s*(?:mo|month|months)$", clean)
-    if mo_match:
-        return False, float(mo_match.group(1)) * 720.0
-
-    return True, 0.0
+    hours_ago = parse_post_hours_ago(post_date)
+    return hours_ago <= (hours_since_midnight + 0.5), hours_ago
 
 
 def is_posted_today(post_date: str) -> bool:
@@ -351,7 +406,11 @@ def main():
         effective_query = base_query
         print(f"🔎 [Search Target] Keywords: '{base_query}' | No location constraint")
 
-    search_url = build_posts_search_url(effective_query)
+    time_filter_env = os.environ.get("SCRAPER_TIME_FILTER", "24h").strip().lower()
+    max_cutoff_hours, date_posted_param = get_max_cutoff_hours(time_filter_env)
+    print(f"🕒 [Time Window] Filter: '{time_filter_env}' => Max Post Age: ~{max_cutoff_hours:.1f}h | LinkedIn Query Param: datePosted='{date_posted_param}'")
+
+    search_url = build_posts_search_url(effective_query, date_posted_filter=date_posted_param)
 
     with sync_playwright() as playwright:
         headless_env = os.environ.get("HEADLESS", "").lower()
@@ -441,12 +500,12 @@ def main():
 
                 data = extract_post_from_card(page, card, index=len(email_posts) + len(draft_posts))
 
-                # Check if post is from today (00:00 midnight until now)
-                if not data["is_today"]:
+                # Check if post falls within the requested time window
+                if data["hours_ago"] > max_cutoff_hours:
                     consecutive_older_posts += 1
-                    print(f"    -> Post older than today 00:00 ({data['post_date']}, ~{data['hours_ago']:.1f}h ago). Count: {consecutive_older_posts}/2")
+                    print(f"    -> Post older than selected window ({data['post_date']}, ~{data['hours_ago']:.1f}h ago > {max_cutoff_hours:.1f}h). Count: {consecutive_older_posts}/2")
                     if consecutive_older_posts >= 2:
-                        print(f"    -> Reached 2 consecutive posts older than today 00:00; stopping feed scan.")
+                        print(f"    -> Reached 2 consecutive posts older than {max_cutoff_hours:.1f}h; stopping feed scan.")
                         consecutive_no_new = 999
                         break
                     continue

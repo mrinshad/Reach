@@ -117,6 +117,27 @@
               </select>
             </div>
 
+            <div class="field-label-sm" id="crawlerTimeLabel">Time Window:</div>
+            <div class="crawler-select-wrapper" id="crawlerTimeWrapper">
+              <select id="crawlerTimeSelect" class="crawler-source-select" title="Scrape posts within this timeframe" onchange="handleCrawlerTimeChange()">
+                <option value="24h" selected>Last 24 Hours (Default)</option>
+                <option value="today">Today (Since Midnight)</option>
+                <option value="yesterday">Yesterday</option>
+                <option value="2d">Last 2 Days</option>
+                <option value="3d">Last 3 Days</option>
+                <option value="week">Past Week</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+
+            <div class="crawler-custom-time-row hidden" id="crawlerCustomTimeWrapper">
+              <input type="number" id="crawlerCustomTimeValue" class="crawler-source-select custom-time-input" min="1" max="720" value="12" placeholder="Val" title="Number of hours or days" />
+              <select id="crawlerCustomTimeUnit" class="crawler-source-select custom-time-unit" title="Unit">
+                <option value="hours" selected>Hours</option>
+                <option value="days">Days</option>
+              </select>
+            </div>
+
             <button id="btnStartCrawl" class="btn btn-primary btn-crawl-sidebar" onclick="triggerSelectedCrawl()" title="Start Crawling Selected Source">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
               <span class="btn-crawl-label">Start Crawl</span>
