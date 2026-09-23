@@ -30,6 +30,7 @@ window.state = {
   pollingTimer: null,
   healthTimer: null,
   showLogs: false,
+  logsUserScrolledUp: false,
   awaitingSentPost: null,
   analyticsDays: 30,
   analyticsData: null,

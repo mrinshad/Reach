@@ -139,6 +139,7 @@
     border-top: 1px solid var(--border-subtle);
     max-height: 140px;
     overflow-y: auto;
+    overscroll-behavior: contain;
     font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--text-dim);
@@ -146,6 +147,8 @@
 
   .logs-stream div {
     padding: 0.1rem 0;
+    word-break: break-word;
+    white-space: pre-wrap;
   }
 
 
