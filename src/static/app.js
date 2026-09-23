@@ -20,9 +20,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initSidebarCollapse === 'function') initSidebarCollapse();
 
-  const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
+  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
+    '#crawlers': 'tabCrawlers',
     '#discovered': 'tabDiscovered',
     '#review': 'tabReview',
     '#sent': 'tabSent',

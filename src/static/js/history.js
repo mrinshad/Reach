@@ -308,10 +308,11 @@ async function revertPostToDraft(postId) {
     if (res.ok) {
       showToast('Application reverted back to Review & Drafts', 'success');
       await fetchSentPosts();
-      await fetchReviewPosts();
-      switchTab('tabReview');
-      const target = state.reviewPosts.find((p) => p.id === postId);
-      if (target) selectReviewPost(target);
+      if (typeof fetchReviewPosts === 'function') fetchReviewPosts();
+      if (typeof fetchStats === 'function') fetchStats();
+      if (state.activeTab === 'tabDiscovered' && typeof fetchDiscoveredPosts === 'function') {
+        fetchDiscoveredPosts();
+      }
     } else {
       const err = await res.json();
       showAlert('Error', err.detail || 'Failed to revert post.');
@@ -390,9 +391,9 @@ async function restoreBatchSelectedSent() {
       state.selectedSentIds.clear();
       updateSelectedSentUI();
       await fetchSentPosts();
-      await fetchReviewPosts();
+      if (typeof fetchReviewPosts === 'function') fetchReviewPosts();
+      if (typeof fetchStats === 'function') fetchStats();
       if (typeof loadDashboardData === 'function') loadDashboardData();
-      switchTab('tabReview');
     } else {
       const err = await res.json();
       showAlert('Restore Error', err.detail || 'Failed to revert applications.');
