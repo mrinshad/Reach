@@ -72,7 +72,8 @@ function updateSidebarCollapseUI() {
 }
 
 function switchTab(tabId) {
-  if (tabId === 'discovered') tabId = 'tabDiscovered';
+  if (tabId === 'crawlers') tabId = 'tabCrawlers';
+  else if (tabId === 'discovered') tabId = 'tabDiscovered';
   else if (tabId === 'review') tabId = 'tabReview';
   else if (tabId === 'sent') tabId = 'tabSent';
   else if (tabId === 'analytics') tabId = 'tabAnalytics';
@@ -87,6 +88,7 @@ function switchTab(tabId) {
     localStorage.setItem('reach_active_tab', tabId);
     const tabToHash = {
       tabAnalytics: '#analytics',
+      tabCrawlers: '#crawlers',
       tabDiscovered: '#discovered',
       tabReview: '#review',
       tabSent: '#sent',
@@ -99,6 +101,7 @@ function switchTab(tabId) {
   // Update Topbar Title & Breadcrumb
   const pageMeta = {
     tabAnalytics: { title: 'Dashboard Overview', breadcrumb: 'Real-time database intelligence & automation metrics' },
+    tabCrawlers: { title: 'Job Crawlers & Portals', breadcrumb: 'Launch active scrapers or explore upcoming major job portal engines' },
     tabDiscovered: { title: 'Discovered Jobs', breadcrumb: 'Explore, filter, and review crawled job postings' },
     tabReview: { title: 'Review & Drafts', breadcrumb: 'Approve AI cover letters and dispatch outreach' },
     tabSent: { title: 'Sent & History', breadcrumb: 'Track dispatched applications and historical outreach' },
@@ -109,27 +112,34 @@ function switchTab(tabId) {
   const breadcrumbEl = document.getElementById('pageBreadcrumbDisplay');
   if (breadcrumbEl) breadcrumbEl.textContent = meta.breadcrumb;
 
+  const btnAnalytics = document.getElementById('btnTabAnalytics');
+  if (btnAnalytics) btnAnalytics.classList.toggle('active', tabId === 'tabAnalytics');
+  const btnCrawlers = document.getElementById('btnTabCrawlers');
+  if (btnCrawlers) btnCrawlers.classList.toggle('active', tabId === 'tabCrawlers');
   const btnDiscovered = document.getElementById('btnTabDiscovered');
   if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
   const btnReview = document.getElementById('btnTabReview');
   if (btnReview) btnReview.classList.toggle('active', tabId === 'tabReview');
   const btnSent = document.getElementById('btnTabSent');
   if (btnSent) btnSent.classList.toggle('active', tabId === 'tabSent');
-  const btnAnalytics = document.getElementById('btnTabAnalytics');
-  if (btnAnalytics) btnAnalytics.classList.toggle('active', tabId === 'tabAnalytics');
 
+  const panelAnalytics = document.getElementById('tabAnalytics');
+  if (panelAnalytics) panelAnalytics.classList.toggle('hidden', tabId !== 'tabAnalytics');
+  const panelCrawlers = document.getElementById('tabCrawlers');
+  if (panelCrawlers) panelCrawlers.classList.toggle('hidden', tabId !== 'tabCrawlers');
   const panelDiscovered = document.getElementById('tabDiscovered');
   if (panelDiscovered) panelDiscovered.classList.toggle('hidden', tabId !== 'tabDiscovered');
   const panelReview = document.getElementById('tabReview');
   if (panelReview) panelReview.classList.toggle('hidden', tabId !== 'tabReview');
   const panelSent = document.getElementById('tabSent');
   if (panelSent) panelSent.classList.toggle('hidden', tabId !== 'tabSent');
-  const panelAnalytics = document.getElementById('tabAnalytics');
-  if (panelAnalytics) panelAnalytics.classList.toggle('hidden', tabId !== 'tabAnalytics');
 
   fetchStats();
 
-  if (tabId === 'tabDiscovered') {
+  if (tabId === 'tabCrawlers') {
+    if (typeof fetchHealth === 'function') fetchHealth();
+    if (typeof fetchScrapers === 'function') fetchScrapers();
+  } else if (tabId === 'tabDiscovered') {
     fetchDiscoveredPosts();
   } else if (tabId === 'tabReview') {
     fetchReviewPosts();

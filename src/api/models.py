@@ -15,10 +15,16 @@ class UpdateEmailPayload(BaseModel):
 
 class GenerateBatchPayload(BaseModel):
     post_ids: List[str]
+    force: bool = False
 
 
 class SendBatchPayload(BaseModel):
     post_ids: List[str]
+
+
+class BatchPostActionPayload(BaseModel):
+    post_ids: List[str]
+    reason: Optional[str] = None
 
 
 class RejectPostPayload(BaseModel):

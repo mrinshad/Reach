@@ -138,8 +138,8 @@ def api_generate_batch(payload: GenerateBatchPayload):
         short_name="Batch Email Gen",
         snippet=f"{count} posts",
         runner_func=run_chatgpt_batch,
-        args=(payload.post_ids,),
-        metadata={"count": count, "post_ids": payload.post_ids},
+        args=(payload.post_ids, payload.force),
+        metadata={"count": count, "post_ids": payload.post_ids, "force": payload.force},
     )
     msg = f"Queued batch generation of {count} posts (Position #{res['position']})" if res["queued"] else f"Started email generation for {count} posts."
     return {"success": True, "message": msg, **res}

@@ -20,9 +20,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initSidebarCollapse === 'function') initSidebarCollapse();
 
-  const validTabs = ['tabAnalytics', 'tabDiscovered', 'tabReview', 'tabSent'];
+  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
+    '#crawlers': 'tabCrawlers',
     '#discovered': 'tabDiscovered',
     '#review': 'tabReview',
     '#sent': 'tabSent',
@@ -51,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof fetchHealth === 'function') fetchHealth();
   if (typeof fetchScrapers === 'function') fetchScrapers();
   if (typeof pollTaskStatus === 'function') pollTaskStatus();
+  if (typeof startRealtimeSync === 'function') startRealtimeSync();
 
   if (window.state) {
     window.state.healthTimer = setInterval(() => {

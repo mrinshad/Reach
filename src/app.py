@@ -62,6 +62,19 @@ async def add_no_cache_headers(request: Request, call_next):
     return response
 
 
+@app.on_event("startup")
+def startup_event():
+    """Recover orphaned posts on server startup and initialize settings."""
+    try:
+        from src.db.posts import cleanup_stuck_generating_posts
+        recovered = cleanup_stuck_generating_posts()
+        if recovered > 0:
+            print(f"✓ Recovered {recovered} post(s) stuck in GENERATING_EMAIL status on startup.")
+    except Exception as e:
+        print(f"Notice: startup post cleanup check: {e}")
+
+
+
 def get_rendered_index_html() -> str:
     """Dynamically assemble index_layout.html with partials from src/static/partials/."""
     layout_path = os.path.join(STATIC_DIR, "index_layout.html")

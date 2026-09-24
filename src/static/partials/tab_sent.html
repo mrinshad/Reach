@@ -13,6 +13,10 @@
           </button>
         </div>
         <div class="toolbar-right">
+          <button class="btn btn-primary btn-sm hidden" id="btnBatchRestoreSent" onclick="restoreBatchSelectedSent()" title="Restore selected applications back to Review & Drafts">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+            <span>Restore (<span id="selectedSentCount">0</span>)</span>
+          </button>
           <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
             <option value="ALL" selected>All Reasons</option>
           </select>
@@ -31,6 +35,9 @@
         <table class="reach-table">
           <thead>
             <tr>
+              <th width="35">
+                <input type="checkbox" id="selectAllSentCheckbox" onchange="toggleSelectAllSent(this.checked)" title="Select all on this page" />
+              </th>
               <th>Recruiter / Author</th>
               <th>Recipient Email</th>
               <th>Subject / Note</th>

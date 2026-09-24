@@ -230,3 +230,13 @@
     color: #ffffff;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
   }
+
+  /* Checkbox styling for Sent History table */
+  .sent-checkbox,
+  #selectAllSentCheckbox {
+    accent-color: var(--accent-indigo, #6366f1);
+    cursor: pointer;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+  }

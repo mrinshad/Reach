@@ -67,7 +67,9 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
         COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS discovered_total,
         COUNT(*) FILTER (WHERE status = 'REJECTED') AS rejected_total,
         COUNT(*) FILTER (WHERE status IN ('SENT', 'REJECTED')) AS others_total,
-        COUNT(*) FILTER (WHERE category = 'DRAFT_PORTAL') AS draft_portal_total
+        COUNT(*) FILTER (WHERE category = 'DRAFT_PORTAL') AS draft_portal_total,
+        COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
+        COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails
     FROM posts;
     """
     with get_connection(db_url) as conn:
@@ -84,9 +86,15 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
                 "rejected_total": 0,
                 "others_total": 0,
                 "draft_portal_total": 0,
+                "potential_spam_total": 0,
+                "with_emails": 0,
             }
             if "others_total" not in stats:
                 stats["others_total"] = (stats.get("applications_sent") or 0) + (stats.get("rejected_total") or 0)
+            if "potential_spam_total" not in stats:
+                stats["potential_spam_total"] = 0
+            if "with_emails" not in stats:
+                stats["with_emails"] = stats.get("email_outreach_total") or 0
             return stats
 
 
