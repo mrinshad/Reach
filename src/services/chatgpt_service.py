@@ -88,7 +88,15 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
     if is_unsuitable_response(clean_text):
         return "UNSUITABLE_JD", clean_text
 
-    lines = raw_text.split("\n")
+    # Strip conversational lead-ins or boilerplate labels like "Email\n\n", "Email Draft:\n\n"
+    clean_text = re.sub(
+        r"^(?:(?:Here(?:'s| is) (?:the )?(?:cold outreach )?email(?:\s+draft)?:?)|(?:Email(?:\s+Draft)?[:\s]*))\n+",
+        "",
+        clean_text,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    lines = clean_text.split("\n")
     subject = ""
     body_lines = []
     found_subject = False
@@ -99,15 +107,20 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
             subject = match.group(1).replace("**", "").strip()
             found_subject = True
             continue
-        if found_subject:
-            body_lines.append(line)
-        else:
-            body_lines.append(line)
+        body_lines.append(line)
 
     body = "\n".join(body_lines).strip()
+    # Strip any residual leading "Email\n\n" or "Subject:\n"
+    body = re.sub(r"^(?:Email(?:\s+Draft)?[:\s]*\n+)+", "", body, flags=re.IGNORECASE).strip()
+
     if not subject:
-        # Fallback if no explicit subject line
-        subject = "Application for Full Stack Developer"
+        # Try extracting role from first sentence (e.g. "I'm writing to apply for the Full Stack Developer L2 position in Mumbai")
+        role_match = re.search(r"apply(?:ing)? for the\s+([^,\.\n]+?)(?:\s+position|\s+role|\.|\n|$)", body, re.IGNORECASE)
+        if role_match:
+            extracted_role = role_match.group(1).strip()
+            subject = f"Application for {extracted_role}"
+        else:
+            subject = "Application for Full Stack Developer"
 
     return subject, body
 
@@ -274,14 +287,14 @@ def send_jd_and_get_email(
     sent = False
     send_btn_query = (
         "button[data-testid='send-button'], "
-        "button[aria-label*='Send'], "
-        "button[data-testid*='send'], "
-        "button[data-testid='fruitjuice-send-button'], "
+        "form button[aria-label='Send prompt'], "
+        "form button[data-testid='send-button'], "
+        "form button[data-testid='fruitjuice-send-button'], "
         "form button[type='submit']"
     )
 
     start_btn = time.time()
-    while time.time() - start_btn < 5:
+    while time.time() - start_btn < 4:
         btn = page.locator(send_btn_query).first
         if btn.count() > 0 and btn.is_visible():
             try:
@@ -295,11 +308,11 @@ def send_jd_and_get_email(
                     break
                 except Exception:
                     pass
-        time.sleep(0.5)
+        time.sleep(0.4)
 
     if not sent:
         # Resilient fallback: press Enter in prompt box
-        print("    Send button not clickable or delayed; pressing Enter...")
+        print("    Send button not clickable or delayed; pressing Enter in prompt box...")
         try:
             prompt_box.focus()
             page.keyboard.press("Enter")
@@ -365,12 +378,14 @@ def send_jd_and_get_email(
                     break
 
     if not response_text:
-        # Fallback: grab whatever the last assistant message says
+        # Fallback: only if a new message was actually produced
         current_msgs = page.locator("[data-message-author-role='assistant']")
-        if current_msgs.count() > 0:
+        if current_msgs.count() > initial_count:
             last_msg = current_msgs.last
             md_el = last_msg.locator(".markdown")
             response_text = md_el.first.inner_text().strip() if md_el.count() > 0 else last_msg.inner_text().strip()
+        else:
+            raise TimeoutError("Timed out waiting for ChatGPT response (no new assistant reply was generated).")
 
     subject, body = parse_email_response(response_text)
     return subject, body

@@ -890,3 +890,23 @@ def get_pending_email_posts(
 def mark_post_spam(post_id: str, reason: str = "Spam / Scam", db_url: str = DEFAULT_DB_URL):
     """Mark a post as rejected due to spam/scam."""
     return update_post_status(post_id, "REJECTED", rejection_reason=reason, db_url=db_url)
+
+
+def cleanup_stuck_generating_posts(db_url: str = DEFAULT_DB_URL) -> int:
+    """Recover posts stuck in GENERATING_EMAIL status back to their appropriate active state."""
+    sql = """
+    UPDATE posts SET
+        status = CASE
+            WHEN generated_body IS NOT NULL AND generated_body != '' AND (generated_subject IS NULL OR generated_subject != 'UNSUITABLE_JD') THEN 'EMAIL_GENERATED'
+            ELSE 'DISCOVERED'
+        END,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE status = 'GENERATING_EMAIL';
+    """
+    with get_connection(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            count = cur.rowcount
+        conn.commit()
+    return count
+

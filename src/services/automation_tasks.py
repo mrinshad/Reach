@@ -371,6 +371,7 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                         continue
 
                     author = post.get("author_name", "Unknown")
+                    prev_status = post.get("status") or "DISCOVERED"
                     task_manager.update_progress(idx - 1, f"Processing {idx}/{len(post_ids)}: {author}")
                     task_manager.log(f"[{idx}/{len(post_ids)}] Submitting JD for {author}...")
 
@@ -379,18 +380,24 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                     try:
                         jd_text = (post.get("full_text") or "").strip()
                         subject, body = send_jd_and_get_email(page, jd_text)
-                        if subject == "UNSUITABLE_JD" or is_unsuitable_response(body):
+
+                        # If force=True, user explicitly requested an email draft for this opportunity
+                        is_unsuitable = (not force) and (subject == "UNSUITABLE_JD" or is_unsuitable_response(body))
+                        if is_unsuitable:
                             reason = extract_unsuitable_reason(body)
                             update_post_status(post_id, "REJECTED", rejection_reason=reason)
                             update_post_email(post_id, "UNSUITABLE_JD", body)
                             rejected_count += 1
                             task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                         else:
+                            if subject == "UNSUITABLE_JD":
+                                subject = "Application for Full Stack Developer"
                             save_chatgpt_response(post_id, subject, body)
                             success_count += 1
                             task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")
                     except Exception as post_err:
-                        update_post_status(post_id, "DISCOVERED")
+                        fallback_status = "EMAIL_GENERATED" if prev_status == "EMAIL_GENERATED" else "DISCOVERED"
+                        update_post_status(post_id, fallback_status)
                         if task_manager.is_cancel_requested():
                             task_manager.log(f"  🛑 Generation stopped for {author} upon user request.")
                             return
