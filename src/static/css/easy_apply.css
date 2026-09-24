@@ -393,13 +393,32 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
-.easy-batch-banner .batch-actions {
+.easy-batch-banner .batch-banner-right {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.batch-select-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  background: rgba(14, 165, 233, 0.12);
+  border: 1px solid rgba(14, 165, 233, 0.3);
+  border-radius: var(--radius-xs);
+  padding: 0.18rem 0.55rem;
+}
+
+.batch-transition-lbl {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .batch-divider {
@@ -407,6 +426,31 @@
   height: 18px;
   background: var(--border-medium);
   margin: 0 0.2rem;
+}
+
+.btn-batch-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  padding: 0;
+  margin-left: 0.25rem;
+}
+
+.btn-batch-close:hover {
+  background: rgba(244, 63, 94, 0.2);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: #fda4af;
+  transform: scale(1.05);
 }
 
 /* Table Card & Reach-Table overrides */

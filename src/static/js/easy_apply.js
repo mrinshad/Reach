@@ -38,11 +38,12 @@ async function fetchEasyApplyPosts() {
   }
 }
 
-function updateEasyKPIs(posts) {
-  const total = posts.length;
-  const applied = posts.filter((p) => p.status === 'APPLIED').length;
-  const questionnaire = posts.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
-  const ready = posts.filter((p) => p.status === 'DISCOVERED').length;
+function updateEasyKPIs(posts = easyApplyPosts) {
+  const list = posts || easyApplyPosts || [];
+  const total = list.length;
+  const applied = list.filter((p) => p.status === 'APPLIED').length;
+  const questionnaire = list.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
+  const ready = list.filter((p) => p.status === 'DISCOVERED').length;
 
   const totalEl = document.getElementById('easyKpiTotal');
   if (totalEl) totalEl.textContent = total;
@@ -419,6 +420,26 @@ function updateSelectedEasyBatchUI() {
   if (countEl) {
     countEl.textContent = `${size} selected`;
   }
+
+  const checkAll = document.getElementById('easyCheckAll');
+  if (checkAll) {
+    const visibleCount = document.querySelectorAll('.easy-checkbox').length;
+    checkAll.checked = visibleCount > 0 && size === visibleCount;
+    checkAll.indeterminate = size > 0 && size < visibleCount;
+  }
+}
+
+function clearEasySelection() {
+  selectedEasyJobIds.clear();
+  document.querySelectorAll('.easy-checkbox').forEach((cb) => {
+    cb.checked = false;
+  });
+  const checkAll = document.getElementById('easyCheckAll');
+  if (checkAll) {
+    checkAll.checked = false;
+    checkAll.indeterminate = false;
+  }
+  updateSelectedEasyBatchUI();
 }
 
 function batchCopyEasyLinks() {
@@ -608,3 +629,4 @@ window.toggleEasyStatusMenu = toggleEasyStatusMenu;
 window.setEasyPostStatus = setEasyPostStatus;
 window.batchSetEasyStatus = batchSetEasyStatus;
 window.setModalPostStatus = setModalPostStatus;
+window.clearEasySelection = clearEasySelection;

@@ -73,7 +73,7 @@ This directory contains the modular styling system for the Reach web application
   - Header & Form: `.easy-apply-header`, `.easy-crawler-form`, `.easy-input`, `.btn-easy-crawl`.
   - KPI Metrics: `.easy-kpi-ribbon`, `.easy-kpi-card`, `.kpi-num`, `.kpi-lbl`.
   - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.easy-search-box`.
-  - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-actions`, `.batch-divider`.
+  - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-banner-right`, `.batch-select-badge`, `.batch-transition-lbl`, `.batch-divider`, `.btn-batch-close`.
   - Table: `#tabEasyApply .reach-table`, `.easy-role-cell`, `.easy-job-title-link`, `.easy-actions-cell`.
   - Status Menu: `.easy-status-wrap`, `.tag-easy-status-btn`, `.status-caret`, `.easy-status-menu`, `.status-menu-opt`.
   - Details Modal: `.easy-modal-meta-grid`, `.easy-jd-box`, `.modal-status-toggle-wrap`, `.btn-modal-status-chip`.
