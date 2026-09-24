@@ -17,11 +17,37 @@ async function fetchHealth() {
 
     const banner = document.getElementById('systemAlertBanner');
     const msgEl = document.getElementById('systemAlertMessage');
+    const actionsEl = document.getElementById('systemAlertActions');
 
     if (state.health.has_issues && state.health.issues.length > 0) {
       if (msgEl) msgEl.textContent = state.health.issues.join(' | ');
+      if (actionsEl) {
+        actionsEl.innerHTML = '';
+        if (state.health.linkedin && !state.health.linkedin.connected) {
+          const btn = document.createElement('button');
+          btn.className = 'alert-action-btn';
+          btn.textContent = 'Log into LinkedIn';
+          btn.onclick = () => launchServiceLogin('linkedin');
+          actionsEl.appendChild(btn);
+        }
+        if (state.health.chatgpt && !state.health.chatgpt.connected) {
+          const btn = document.createElement('button');
+          btn.className = 'alert-action-btn';
+          btn.textContent = 'Log into ChatGPT';
+          btn.onclick = () => launchServiceLogin('chatgpt');
+          actionsEl.appendChild(btn);
+        }
+        if (state.health.gmail && !state.health.gmail.connected) {
+          const btn = document.createElement('button');
+          btn.className = 'alert-action-btn';
+          btn.textContent = 'Log into Gmail';
+          btn.onclick = () => launchServiceLogin('gmail');
+          actionsEl.appendChild(btn);
+        }
+      }
       if (banner) banner.classList.remove('hidden');
     } else {
+      if (actionsEl) actionsEl.innerHTML = '';
       if (banner) banner.classList.add('hidden');
     }
   } catch (err) {
@@ -47,6 +73,65 @@ function updateHealthPill(elementId, serviceData) {
   if (labelEl) {
     labelEl.textContent = serviceData.label || (serviceData.connected ? 'Online' : 'Not Connected');
     labelEl.style.color = serviceData.connected ? '#a7f3d0' : '#fde68a';
+  }
+
+  const btnEl = document.getElementById(`healthBtn${suffix}`);
+  const btnLabelEl = document.getElementById(`healthBtnLabel${suffix}`);
+  if (btnEl) {
+    if (serviceData.connected) {
+      btnEl.className = 'health-action-btn btn-subtle';
+      btnEl.title = `Launch ${suffix} in Firefox to verify or switch accounts`;
+      if (btnLabelEl) btnLabelEl.textContent = 'Open / Re-login';
+    } else {
+      btnEl.className = 'health-action-btn btn-warn';
+      btnEl.title = `Click to log into ${suffix} in Firefox`;
+      if (btnLabelEl) btnLabelEl.textContent = '👉 Log In Now';
+    }
+  }
+}
+
+async function launchServiceLogin(service) {
+  try {
+    const res = await fetch(`/api/tasks/login/${service}`, { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Cannot Launch Login',
+          message: data.detail || data.message || 'Another task is currently running.',
+          type: 'error',
+        });
+      } else if (typeof showAlert === 'function') {
+        showAlert('Cannot Launch Login', data.detail || data.message || 'Another task is currently running.');
+      }
+      return;
+    }
+
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Browser Login Launched',
+        message: data.message || 'Opening headed Firefox. Complete login and close the browser window when done.',
+        type: 'info',
+        duration: 5000,
+      });
+    }
+
+    if (typeof startTaskPolling === 'function') {
+      startTaskPolling();
+    }
+    const card = document.getElementById('liveTaskCard');
+    if (card) card.classList.remove('hidden');
+
+  } catch (err) {
+    console.error('Launch login error:', err);
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Network Error',
+        message: 'Could not contact server to launch login session.',
+        type: 'error',
+      });
+    }
   }
 }
 
@@ -372,6 +457,7 @@ async function handleResumeUpload(files) {
 // Global Bindings
 window.fetchHealth = fetchHealth;
 window.updateHealthPill = updateHealthPill;
+window.launchServiceLogin = launchServiceLogin;
 window.dismissSystemAlert = dismissSystemAlert;
 window.loadDashboardData = loadDashboardData;
 window.fetchStats = fetchStats;

@@ -36,6 +36,7 @@ from .gmail_service import (
     populate_email_draft,
     send_email_directly,
 )
+from .health_service import check_firefox_session_cookies
 from src.config import load_config, is_headless
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -524,6 +525,116 @@ def run_open_gmail_draft(post_id: str):
 
     except Exception as e:
         task_manager.fail_task(str(e))
+
+
+def run_interactive_login(service: str):
+    """
+    Launch headed Firefox (headless=False) so the user can interactively log into
+    LinkedIn, ChatGPT, Gmail, or all services simultaneously.
+    Saves session cookies and state directly into ~/.playwright_firefox_profile.
+    """
+    service_map = {
+        "linkedin": {
+            "name": "LinkedIn",
+            "urls": ["https://www.linkedin.com/login"],
+            "domains": ["linkedin.com"],
+            "cookie_key": "linkedin",
+        },
+        "chatgpt": {
+            "name": "ChatGPT",
+            "urls": ["https://chatgpt.com/"],
+            "domains": ["chatgpt.com", "openai.com"],
+            "cookie_key": "chatgpt",
+        },
+        "gmail": {
+            "name": "Gmail",
+            "urls": ["https://mail.google.com/"],
+            "domains": ["google.com", "gmail.com"],
+            "cookie_key": "gmail",
+        },
+        "all": {
+            "name": "All Services (LinkedIn, ChatGPT, Gmail)",
+            "urls": [
+                "https://www.linkedin.com/login",
+                "https://chatgpt.com/",
+                "https://mail.google.com/",
+            ],
+            "domains": ["linkedin.com", "chatgpt.com", "openai.com", "google.com", "gmail.com"],
+            "cookie_key": None,
+        }
+    }
+
+    target = service_map.get((service or "").strip().lower())
+    if not target:
+        task_manager.fail_task(f"Unknown login service: '{service}'")
+        return
+
+    service_name = target["name"]
+    task_manager.start_task(f"Login Session — {service_name}", total_items=1)
+    task_manager.log(f"Launching Firefox in headed mode (headless=False) for {service_name}...")
+
+    try:
+        with sync_playwright() as playwright:
+            context = launch_firefox_context(
+                playwright,
+                headless=False,
+                sync_cookies_domains=target["domains"],
+            )
+            task_manager.set_active_context(context)
+
+            urls = target["urls"]
+            first_page = context.pages[0] if context.pages else context.new_page()
+            task_manager.log(f"Navigating to {urls[0]}...")
+            try:
+                first_page.goto(urls[0], wait_until="domcontentloaded", timeout=45000)
+            except Exception as e:
+                task_manager.log(f"Navigation note ({urls[0]}): {e}")
+
+            for url in urls[1:]:
+                task_manager.log(f"Opening {url} in new tab...")
+                try:
+                    new_p = context.new_page()
+                    new_p.goto(url, wait_until="domcontentloaded", timeout=45000)
+                except Exception as e:
+                    task_manager.log(f"Navigation note ({url}): {e}")
+
+            task_manager.log("👉 Please complete login in the opened Firefox window.")
+            task_manager.log("👉 When finished, simply close the Firefox browser window (or click Stop in Reach) to save.")
+
+            while not task_manager.is_cancel_requested():
+                try:
+                    open_pages = [p for p in context.pages if not p.is_closed()]
+                    if not open_pages:
+                        break
+                except Exception:
+                    break
+                time.sleep(1.0)
+
+            try:
+                context.close()
+            except Exception:
+                pass
+            task_manager.clear_active_context()
+
+            cookies = check_firefox_session_cookies()
+            if target["cookie_key"]:
+                is_authed = cookies.get(target["cookie_key"], False)
+                if is_authed:
+                    task_manager.log(f"✓ {service_name} authentication detected!")
+                    task_manager.finish_task(f"{service_name} login successful.")
+                else:
+                    task_manager.log(f"⚠️ {service_name} cookies not yet detected. Refresh health if already logged in.")
+                    task_manager.finish_task(f"{service_name} login session closed.")
+            else:
+                summary = [f"{k.capitalize()}: {'✓ Logged in' if v else '✗ Missing'}" for k, v in cookies.items()]
+                task_manager.log(f"Session cookies: {', '.join(summary)}")
+                task_manager.finish_task("Login session completed.")
+
+    except Exception as e:
+        task_manager.clear_active_context()
+        if not task_manager.is_cancel_requested():
+            task_manager.fail_task(f"Login Session Error: {str(e)}")
+
 
 
 def run_send_single_draft(post_id: str):

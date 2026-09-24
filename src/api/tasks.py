@@ -18,6 +18,7 @@ from src.services.automation_tasks import (
     run_linkedin_scraper,
     get_registered_scrapers,
     run_scraper_by_source,
+    run_interactive_login,
 )
 from .models import (
     GenerateBatchPayload,
@@ -437,3 +438,49 @@ def api_clear_task_queue():
     """Clear all pending tasks in the execution queue."""
     cleared = task_manager.clear_queue()
     return {"success": True, "cleared": cleared, "message": f"Cleared {cleared} task(s) from the queue."}
+
+
+@router.post("/tasks/login/{service}")
+def api_launch_service_login(service: str):
+    """
+    Launch headed Firefox persistent context for interactive login to
+    LinkedIn, ChatGPT, Gmail, or All services.
+    """
+    valid_services = {
+        "linkedin": "LinkedIn",
+        "chatgpt": "ChatGPT",
+        "gmail": "Gmail",
+        "all": "All Services (LinkedIn, ChatGPT, Gmail)",
+    }
+    svc_lower = (service or "").strip().lower()
+    if svc_lower not in valid_services:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid service '{service}'. Choose from: {list(valid_services.keys())}",
+        )
+
+    # Check if an automation task is currently executing to avoid browser profile locks
+    current_state = task_manager.get_state()
+    if current_state.get("status") == "running":
+        current_name = current_state.get("task_name") or "Another automation task"
+        raise HTTPException(
+            status_code=409,
+            detail=f"An automation task ('{current_name}') is currently running. Please wait for it to complete or stop it before launching an interactive login session.",
+        )
+
+    label = valid_services[svc_lower]
+    res = task_manager.enqueue_task(
+        task_type="service_login",
+        task_name=f"Interactive Login — {label}",
+        short_name=f"{svc_lower.capitalize()} Login",
+        snippet="Browser Authentication",
+        runner_func=run_interactive_login,
+        args=(svc_lower,),
+        metadata={"service": svc_lower, "service_name": label},
+    )
+    return {
+        "success": True,
+        "message": f"Opening headed Firefox for {label} login...",
+        **res,
+    }
+

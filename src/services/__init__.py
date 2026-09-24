@@ -16,6 +16,7 @@ from .automation_tasks import (
     run_linkedin_scraper,
     get_registered_scrapers,
     run_scraper_by_source,
+    run_interactive_login,
 )
 
 from .chatgpt_service import (

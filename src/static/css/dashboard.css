@@ -328,10 +328,22 @@
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    transition: border-color 0.2s ease;
+    transition: all 0.2s ease;
+    position: relative;
+    justify-content: space-between;
   }
 
-  .health-card:hover {
+  .health-card.health-card-interactive {
+    cursor: pointer;
+  }
+
+  .health-card.health-card-interactive:hover {
+    border-color: rgba(99, 102, 241, 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .health-card:not(.health-card-interactive):hover {
     border-color: var(--border-medium);
   }
 
@@ -376,6 +388,55 @@
   .health-card-status {
     font-size: 0.72rem;
     color: var(--text-muted);
+  }
+
+  .health-card-note {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    opacity: 0.65;
+    padding-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .health-action-btn {
+    margin-top: 0.35rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    width: 100%;
+  }
+
+  .health-action-btn.btn-warn {
+    background: rgba(245, 158, 11, 0.16);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #fbbf24;
+  }
+
+  .health-action-btn.btn-warn:hover {
+    background: rgba(245, 158, 11, 0.3);
+    border-color: rgba(245, 158, 11, 0.75);
+    color: #ffffff;
+  }
+
+  .health-action-btn.btn-subtle {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+  }
+
+  .health-action-btn.btn-subtle:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--border-medium);
+    color: var(--text-main);
   }
 
   @keyframes fadeInDown {

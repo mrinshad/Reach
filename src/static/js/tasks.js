@@ -150,6 +150,7 @@ async function pollTaskStatus() {
           }
         }
         if (typeof loadDashboardData === 'function') loadDashboardData();
+        if (typeof fetchHealth === 'function') fetchHealth();
       }
 
       if (hasQueuedItems) {
