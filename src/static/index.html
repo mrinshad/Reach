@@ -946,7 +946,7 @@
     </div>
   </div>
 
-  <!-- Filter & Actions Bar -->
+  <!-- Filter & Actions Bar (Spacious 1-Row Toolbar) -->
   <div class="easy-filter-bar">
     <div class="status-pill-group">
       <button class="filter-pill active" id="pillEasyAll" onclick="filterEasyApplyStatus('ALL')">
@@ -970,28 +970,43 @@
       </button>
     </div>
 
-    <div class="easy-filter-right">
-      <!-- Live In-Table Search Input -->
-      <div class="easy-search-box">
-        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..." oninput="handleEasyTableSearch(this.value)" />
-      </div>
+    <!-- Live In-Table Search Input -->
+    <div class="easy-search-box">
+      <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..." oninput="handleEasyTableSearch(this.value)" />
+    </div>
+  </div>
 
-      <!-- Batch Controls -->
-      <div class="batch-actions-wrap hidden" id="easyBatchToolbar">
-        <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
-        <button class="btn btn-outline btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>Apply Selected</span>
-        </button>
-        <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          <span>Copy Links</span>
-        </button>
-        <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
-          <span>Dismiss</span>
-        </button>
-      </div>
+  <!-- Dedicated Floating Batch Action Banner (Unhidden when >= 1 selected) -->
+  <div class="easy-batch-banner hidden" id="easyBatchToolbar">
+    <div class="batch-banner-left">
+      <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
+    </div>
+    <div class="batch-banner-center">
+      <span class="batch-action-lbl">Move Status:</span>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('DISCOVERED')" title="Move selected to Ready">
+        <span>⚡ Ready</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('REQUIRES_QUESTIONNAIRE')" title="Move selected to Questionnaire Screening">
+        <span>📋 Screening</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('APPLIED')" title="Move selected to Applied">
+        <span>✓ Applied</span>
+      </button>
+    </div>
+    <div class="batch-banner-right">
+      <button class="btn btn-primary btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Apply Selected</span>
+      </button>
+      <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy Links</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
+        <span>Dismiss</span>
+      </button>
+      <button class="btn-batch-close" onclick="clearEasySelection()" title="Clear selection">✕</button>
     </div>
   </div>
 
@@ -1004,11 +1019,11 @@
             <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)" title="Select all" />
           </th>
           <th>Role & Company</th>
-          <th width="190">Location</th>
-          <th width="105">Experience</th>
-          <th width="135">Status</th>
-          <th width="165">Crawled Date</th>
-          <th width="145" style="text-align: right;">Actions</th>
+          <th width="180">Location</th>
+          <th width="110">Experience</th>
+          <th width="160">Status</th>
+          <th width="155">Crawled Date</th>
+          <th width="140" style="text-align: right;">Actions</th>
         </tr>
       </thead>
       <tbody id="easyApplyTableBody">
@@ -1050,7 +1065,14 @@
         </div>
         <div class="meta-item">
           <span class="meta-lbl">Current Status</span>
-          <span id="easyModalStatus" class="meta-val">-</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; flex-wrap: wrap;">
+            <span id="easyModalStatus" class="meta-val" style="margin-top: 0; font-weight: 700;">-</span>
+            <div class="modal-status-toggle-wrap">
+              <button class="btn-modal-status-chip" onclick="setModalPostStatus('DISCOVERED')" title="Move to Ready in Queue">⚡ Ready</button>
+              <button class="btn-modal-status-chip" onclick="setModalPostStatus('REQUIRES_QUESTIONNAIRE')" title="Move to Screening">📋 Screening</button>
+              <button class="btn-modal-status-chip" onclick="setModalPostStatus('APPLIED')" title="Mark as Applied">✓ Applied</button>
+            </div>
+          </div>
         </div>
       </div>
 

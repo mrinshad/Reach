@@ -27,6 +27,17 @@ class BatchPostActionPayload(BaseModel):
     reason: Optional[str] = None
 
 
+class UpdateStatusPayload(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class BatchStatusPayload(BaseModel):
+    post_ids: List[str]
+    status: str
+    reason: Optional[str] = None
+
+
 class RejectPostPayload(BaseModel):
     reason: Optional[str] = None
 

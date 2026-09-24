@@ -140,15 +140,39 @@ function renderEasyApplyTable() {
     tr.id = `easy-row-${post.id}`;
     const isSelected = selectedEasyJobIds.has(post.id);
 
-    // Status Badge
-    let statusBadge = '<span class="tag-easy-status discovered">⚡ Ready</span>';
+    // Status Badge with Interactive Dropdown Menu
+    let statusBadgeText = '⚡ Ready';
+    let statusBadgeClass = 'discovered';
     if (post.status === 'APPLIED') {
-      statusBadge = '<span class="tag-easy-status applied">✓ Applied</span>';
+      statusBadgeText = '✓ Applied';
+      statusBadgeClass = 'applied';
     } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
-      statusBadge = '<span class="tag-easy-status questionnaire" title="Requires questionnaire screening">📋 Screening</span>';
+      statusBadgeText = '📋 Screening';
+      statusBadgeClass = 'questionnaire';
     } else if (post.status === 'REJECTED') {
-      statusBadge = '<span class="tag-easy-status rejected">✕ Dismissed</span>';
+      statusBadgeText = '✕ Dismissed';
+      statusBadgeClass = 'rejected';
     }
+
+    const statusDropdown = `
+      <div class="easy-status-wrap" id="status-wrap-${post.id}">
+        <span class="tag-easy-status ${statusBadgeClass} tag-easy-status-btn" onclick="toggleEasyStatusMenu('${post.id}', event)" title="Click to change status">
+          <span>${statusBadgeText}</span>
+          <span class="status-caret">▾</span>
+        </span>
+        <div class="easy-status-menu" id="status-menu-${post.id}">
+          <button class="status-menu-opt opt-ready" onclick="setEasyPostStatus('${post.id}', 'DISCOVERED', event)">
+            <span>⚡</span><span>Ready (Queue)</span>
+          </button>
+          <button class="status-menu-opt opt-screening" onclick="setEasyPostStatus('${post.id}', 'REQUIRES_QUESTIONNAIRE', event)">
+            <span>📋</span><span>Screening Required</span>
+          </button>
+          <button class="status-menu-opt opt-applied" onclick="setEasyPostStatus('${post.id}', 'APPLIED', event)">
+            <span>✓</span><span>Mark Applied</span>
+          </button>
+        </div>
+      </div>
+    `;
 
     const expText = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
     const dateText = typeof formatPostDateTimeWithRelative === 'function'
@@ -177,22 +201,22 @@ function renderEasyApplyTable() {
           </span>
         </div>
       </td>
-      <td width="190">
+      <td width="180">
         <span class="easy-location-text" title="${escapeHtml(post.location || 'India')}">
           <span style="opacity: 0.7;">📍</span>
           <span>${escapeHtml(post.location || 'India')}</span>
         </span>
       </td>
-      <td width="105">
+      <td width="110">
         <span class="pill-badge badge-exp" style="font-size: 0.7rem;">${escapeHtml(expText)}</span>
       </td>
-      <td width="135">
-        ${statusBadge}
+      <td width="160">
+        ${statusDropdown}
       </td>
-      <td width="165">
+      <td width="155">
         <span class="easy-date-text" title="${escapeHtml(post.created_at || '')}">${escapeHtml(dateText)}</span>
       </td>
-      <td width="145" style="text-align: right;">
+      <td width="140" style="text-align: right;">
         <div class="easy-actions-cell">
           <button class="icon-btn sm" onclick="copyEasyJobLink('${post.id}')" title="Copy LinkedIn Job Link">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -311,6 +335,7 @@ function openEasyDetailsModal(postId) {
   const expText = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
   document.getElementById('easyModalExp').textContent = expText;
   document.getElementById('easyModalStatus').textContent = post.status;
+  updateModalStatusChips(post.status);
   document.getElementById('easyModalFullText').textContent = post.full_text || 'No description extracted.';
 
   const linkEl = document.getElementById('easyModalLink');
@@ -458,6 +483,112 @@ async function batchApplySelectedEasyJobs() {
   fetchEasyApplyPosts();
 }
 
+// Status Transitions & Interactivity
+function toggleEasyStatusMenu(postId, event) {
+  if (event) event.stopPropagation();
+  const wrap = document.getElementById(`status-wrap-${postId}`);
+  if (!wrap) return;
+  const isOpen = wrap.classList.contains('open');
+  document.querySelectorAll('.easy-status-wrap.open').forEach((el) => {
+    if (el !== wrap) el.classList.remove('open');
+  });
+  wrap.classList.toggle('open', !isOpen);
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.easy-status-wrap')) {
+    document.querySelectorAll('.easy-status-wrap.open').forEach((el) => {
+      el.classList.remove('open');
+    });
+  }
+});
+
+async function setEasyPostStatus(postId, newStatus, event) {
+  if (event) event.stopPropagation();
+  const wrap = document.getElementById(`status-wrap-${postId}`);
+  if (wrap) wrap.classList.remove('open');
+
+  try {
+    const res = await fetch(`/api/posts/${postId}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      const post = easyApplyPosts.find((p) => p.id === postId);
+      if (post) {
+        post.status = newStatus;
+      }
+      if (activeEasyModalPost && activeEasyModalPost.id === postId) {
+        activeEasyModalPost.status = newStatus;
+        updateModalStatusChips(newStatus);
+      }
+      updateEasyKPIs();
+      renderEasyApplyTable();
+      showToast(`✓ Status updated to ${newStatus}`, 'success');
+    } else {
+      const err = await res.json();
+      showAlert('Failed to Update Status', err.detail || 'Could not update status');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function batchSetEasyStatus(newStatus) {
+  const ids = Array.from(selectedEasyJobIds);
+  if (ids.length === 0) return;
+
+  try {
+    const res = await fetch('/api/posts/status-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, status: newStatus }),
+    });
+
+    if (res.ok) {
+      ids.forEach((id) => {
+        const post = easyApplyPosts.find((p) => p.id === id);
+        if (post) post.status = newStatus;
+      });
+      selectedEasyJobIds.clear();
+      updateEasyKPIs();
+      renderEasyApplyTable();
+      showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+    } else {
+      const err = await res.json();
+      showAlert('Batch Update Failed', err.detail || 'Could not update jobs');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function setModalPostStatus(newStatus) {
+  if (!activeEasyModalPost) return;
+  await setEasyPostStatus(activeEasyModalPost.id, newStatus);
+}
+
+function updateModalStatusChips(status) {
+  const statusEl = document.getElementById('easyModalStatus');
+  if (statusEl) statusEl.textContent = status;
+
+  ['chipReady', 'chipScreening', 'chipApplied'].forEach((id) => {
+    const chip = document.getElementById(id);
+    if (chip) chip.classList.remove('active');
+  });
+
+  if (status === 'DISCOVERED') {
+    document.getElementById('chipReady')?.classList.add('active');
+  } else if (status === 'REQUIRES_QUESTIONNAIRE') {
+    document.getElementById('chipScreening')?.classList.add('active');
+  } else if (status === 'APPLIED') {
+    document.getElementById('chipApplied')?.classList.add('active');
+  }
+}
+
 window.fetchEasyApplyPosts = fetchEasyApplyPosts;
 window.filterEasyApplyStatus = filterEasyApplyStatus;
 window.handleEasyTableSearch = handleEasyTableSearch;
@@ -473,3 +604,7 @@ window.toggleSelectAllEasyJobs = toggleSelectAllEasyJobs;
 window.batchCopyEasyLinks = batchCopyEasyLinks;
 window.batchDismissEasyJobs = batchDismissEasyJobs;
 window.batchApplySelectedEasyJobs = batchApplySelectedEasyJobs;
+window.toggleEasyStatusMenu = toggleEasyStatusMenu;
+window.setEasyPostStatus = setEasyPostStatus;
+window.batchSetEasyStatus = batchSetEasyStatus;
+window.setModalPostStatus = setModalPostStatus;

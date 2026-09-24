@@ -374,15 +374,56 @@
   box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.2);
 }
 
+/* Batch Actions Floating Banner */
+.easy-batch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.85rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 0 12px rgba(14, 165, 233, 0.15);
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.easy-batch-banner .batch-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.easy-batch-banner .batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.batch-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-medium);
+  margin: 0 0.2rem;
+}
+
 /* Table Card & Reach-Table overrides */
+#tabEasyApply .reach-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
 #tabEasyApply .reach-table th {
-  padding: 0.75rem 0.95rem;
-  font-size: 0.73rem;
-  letter-spacing: 0.04em;
+  padding: 0.85rem 1.05rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 #tabEasyApply .reach-table td {
-  padding: 0.75rem 0.95rem;
+  padding: 0.85rem 1.05rem;
   vertical-align: middle;
 }
 
@@ -440,7 +481,12 @@
   white-space: nowrap;
 }
 
-/* Status Badges */
+/* Status Badges & Interactive Dropdown Menu */
+.easy-status-wrap {
+  position: relative;
+  display: inline-block;
+}
+
 .tag-easy-status {
   display: inline-flex;
   align-items: center;
@@ -451,6 +497,84 @@
   border-radius: 4px;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.tag-easy-status-btn {
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.tag-easy-status-btn:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.status-caret {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  margin-left: 0.2rem;
+  transition: transform 0.15s ease;
+}
+
+.easy-status-wrap.open .status-caret {
+  transform: rotate(180deg);
+}
+
+.easy-status-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1000;
+  background: #0f172a;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  min-width: 175px;
+  padding: 0.35rem 0;
+  display: none;
+}
+
+.easy-status-wrap.open .easy-status-menu {
+  display: block;
+}
+
+.status-menu-opt {
+  width: 100%;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.status-menu-opt:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.status-menu-opt.opt-ready:hover {
+  color: #38bdf8;
+  background: rgba(6, 182, 212, 0.12);
+}
+
+.status-menu-opt.opt-screening:hover {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.status-menu-opt.opt-applied:hover {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
 }
 
 .tag-easy-status.applied {
@@ -475,6 +599,42 @@
   background: rgba(244, 63, 94, 0.12);
   color: #fda4af;
   border: 1px solid rgba(244, 63, 94, 0.25);
+}
+
+/* Modal status button chips */
+.modal-status-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.btn-modal-status-chip {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.28rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+
+.btn-modal-status-chip:hover {
+  border-color: var(--border-medium);
+  color: #fff;
+  background: var(--bg-surface-hover);
+}
+
+.btn-modal-status-chip.active {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(14, 165, 233, 0.45);
+  color: #38bdf8;
 }
 
 /* Modal styling */

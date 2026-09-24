@@ -67,7 +67,18 @@ This directory contains the modular styling system for the Reach web application
 - **Scope**: Modal overlays, dialog boxes, settings, add JD, direct outreach, notification unblock help, toasts.
 - **Key Classes**: `.modal-overlay`, `.modal-box`, `.modal-top`, `.modal-body`, `.modal-bottom`, `.notif-modal-box`, `.notif-status-grid`, `.toast-container`, `.toast`.
 
-### 11. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
+### 11. [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css)
+- **Scope**: LinkedIn Easy Apply & Direct Jobs workspace (`#tabEasyApply`), crawler header, KPI ribbon, floating batch banner, fixed table layout, interactive status dropdowns, and details modal.
+- **Key Classes**:
+  - Header & Form: `.easy-apply-header`, `.easy-crawler-form`, `.easy-input`, `.btn-easy-crawl`.
+  - KPI Metrics: `.easy-kpi-ribbon`, `.easy-kpi-card`, `.kpi-num`, `.kpi-lbl`.
+  - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.easy-search-box`.
+  - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-actions`, `.batch-divider`.
+  - Table: `#tabEasyApply .reach-table`, `.easy-role-cell`, `.easy-job-title-link`, `.easy-actions-cell`.
+  - Status Menu: `.easy-status-wrap`, `.tag-easy-status-btn`, `.status-caret`, `.easy-status-menu`, `.status-menu-opt`.
+  - Details Modal: `.easy-modal-meta-grid`, `.easy-jd-box`, `.modal-status-toggle-wrap`, `.btn-modal-status-chip`.
+
+### 12. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
 - **Scope**: Media queries (`<= 1024px`, `<= 768px`, `<= 480px`), off-canvas mobile drawer, compact headers, mobile cards.
 - **Key Breakpoints**:
   - `@media (max-width: 1024px)`: Compact sidebar (240px) and tablet grid adjustments.

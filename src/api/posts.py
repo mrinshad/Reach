@@ -26,6 +26,8 @@ from src.services.experience_extractor import extract_experience
 from .models import (
     ManualPostPayload,
     UpdateEmailPayload,
+    UpdateStatusPayload,
+    BatchStatusPayload,
     RejectPostPayload,
     SpamPostPayload,
     BatchPostActionPayload,
@@ -261,3 +263,59 @@ def api_mark_post_spam(post_id: str, payload: Optional[SpamPostPayload] = None):
         return {"success": True, "message": f"Post marked as {reason} and moved to Others."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/posts/{post_id}/status")
+def api_update_post_status(post_id: str, payload: UpdateStatusPayload):
+    """
+    Update post workflow status directly (e.g., DISCOVERED, REQUIRES_QUESTIONNAIRE, APPLIED, REJECTED).
+    Allows bidirectional transitions between Ready, Screening, and Applied.
+    """
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "EMAIL_GENERATED", "SENT"}
+    new_status = (payload.status or "").strip().upper()
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}. Allowed: {allowed_statuses}")
+
+    try:
+        reason = payload.reason
+        if reason is None and new_status in ("DISCOVERED", "APPLIED"):
+            reason = ""  # Clear previous screening/rejection reason
+        update_post_status(post_id, new_status, rejection_reason=reason)
+        return {"success": True, "post_id": post_id, "status": new_status, "message": f"Status updated to {new_status}."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/posts/status-batch")
+def api_update_posts_status_batch(payload: BatchStatusPayload):
+    """Batch update status for multiple selected posts."""
+    if not payload.post_ids:
+        raise HTTPException(status_code=400, detail="No post IDs provided.")
+
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED"}
+    new_status = (payload.status or "").strip().upper()
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+
+    reason = payload.reason
+    if reason is None and new_status in ("DISCOVERED", "APPLIED"):
+        reason = ""
+
+    updated_count = 0
+    for pid in payload.post_ids:
+        try:
+            update_post_status(pid, new_status, rejection_reason=reason)
+            updated_count += 1
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "count": updated_count,
+        "status": new_status,
+        "message": f"Updated {updated_count} posts to {new_status}."
+    }
