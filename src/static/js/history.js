@@ -113,7 +113,9 @@ function filterOthersByReason(reason) {
 async function fetchSentPosts() {
   const tbody = document.getElementById('sentTableBody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
+  if (!state.sentPosts || state.sentPosts.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading history...</td></tr>';
+  }
 
   try {
     const statusVal = state.othersFilter === 'ALL' ? 'OTHERS' : state.othersFilter;

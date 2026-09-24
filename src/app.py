@@ -100,11 +100,16 @@ def get_rendered_index_html() -> str:
         pattern = re.compile(r"<!--\s*@include\s+([^\s]+)\s*-->")
         assembled = pattern.sub(replace_include, content)
 
-        # Keep static index.html in sync on disk for static file serving/caching
+        # Keep static index.html in sync on disk only when content actually changes
         try:
             index_file = os.path.join(STATIC_DIR, "index.html")
-            with open(index_file, "w", encoding="utf-8") as f:
-                f.write(assembled)
+            existing = None
+            if os.path.exists(index_file):
+                with open(index_file, "r", encoding="utf-8") as ef:
+                    existing = ef.read()
+            if existing != assembled:
+                with open(index_file, "w", encoding="utf-8") as f:
+                    f.write(assembled)
         except Exception:
             pass
 
