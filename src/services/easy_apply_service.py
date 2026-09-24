@@ -199,12 +199,21 @@ def fill_contact_info(page: Page):
             current_val = city_input.input_value().strip()
             if not current_val:
                 city_input.click()
-                city_input.press_sequentially("Malappuram, Kerala, India", delay=20)
-                page.wait_for_timeout(400)
-                page.keyboard.press("Enter")
-                page.wait_for_timeout(200)
-                page.keyboard.press("Escape")
-                page.wait_for_timeout(200)
+                city_input.press_sequentially("Malappuram", delay=25)
+                page.wait_for_timeout(600)
+                
+                # Explicitly click the floating autocomplete suggestion to close the popover
+                options = page.locator("[data-floating-ui-portal] p, [data-floating-ui-portal] li, [data-floating-ui-portal] [role='option'], .basic-typeahead__selectable-list li").all()
+                if options:
+                    try:
+                        options[0].click(timeout=2000)
+                    except Exception:
+                        city_input.press("ArrowDown")
+                        city_input.press("Enter")
+                else:
+                    city_input.press("ArrowDown")
+                    city_input.press("Enter")
+                page.wait_for_timeout(300)
     except Exception:
         pass
 
@@ -323,7 +332,6 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                     try:
                         submit_btn.click(timeout=5000)
                     except Exception:
-                        page.keyboard.press("Escape")
                         submit_btn.click(force=True, timeout=5000)
                     page.wait_for_timeout(2500)
 
@@ -351,7 +359,6 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                     try:
                         review_btn.click(timeout=5000)
                     except Exception:
-                        page.keyboard.press("Escape")
                         review_btn.click(force=True, timeout=5000)
                     page.wait_for_timeout(1500)
                     continue
@@ -372,7 +379,6 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                     try:
                         next_btn.click(timeout=5000)
                     except Exception:
-                        page.keyboard.press("Escape")
                         next_btn.click(force=True, timeout=5000)
                     page.wait_for_timeout(1500)
                     continue
