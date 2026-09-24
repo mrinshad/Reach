@@ -1021,6 +1021,25 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
     )
 
 
+def run_linkedin_easy_apply_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+    """
+    Run the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox context.
+    Filters specifically for Easy Apply listings (f_AL=true), extracts JDs, and auto-applies
+    or saves for questionnaire screening.
+    """
+    from src.services.easy_apply_service import run_easy_apply_crawler
+    q = query or get_setting("search_query", "Full Stack Developer") or "Full Stack Developer"
+    loc = location or get_setting("search_location", "India") or "India"
+    tf = time_filter or "24h"
+    run_easy_apply_crawler(keywords=q, location=loc, time_filter=tf, max_jobs=25, task_manager=task_manager)
+
+
+def run_single_easy_apply(post_id: str):
+    """Run Easy Apply submission for a single job post in Firefox."""
+    from src.services.easy_apply_service import apply_to_single_easy_apply_post
+    apply_to_single_easy_apply_post(post_id, task_manager=task_manager)
+
+
 SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
     "linkedin": {
         "id": "linkedin",
@@ -1028,6 +1047,13 @@ SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
         "icon": "💼",
         "description": "Scrapes hiring posts via search query in headed Firefox",
         "runner": run_linkedin_scraper,
+    },
+    "linkedin_jobs": {
+        "id": "linkedin_jobs",
+        "name": "LinkedIn Easy Apply",
+        "icon": "⚡",
+        "description": "Scrapes linkedin.com/jobs with Easy Apply (f_AL=true) and submits applications",
+        "runner": run_linkedin_easy_apply_scraper,
     },
     "infopark": {
         "id": "infopark",
@@ -1062,5 +1088,8 @@ def run_scraper_by_source(source_id: str, query: Optional[str] = None, location:
     
     if source_lower == "linkedin":
         run_linkedin_scraper(query=query, location=location, time_filter=time_filter)
+    elif source_lower in ("linkedin_jobs", "easy_apply"):
+        run_linkedin_easy_apply_scraper(query=query, location=location, time_filter=time_filter)
     else:
         scraper["runner"]()
+

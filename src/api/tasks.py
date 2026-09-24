@@ -90,8 +90,17 @@ def format_wait_time(wait_seconds: int) -> str:
 
 def build_crawler_labels(source: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
     """Generate clean full_name, short_name, and descriptive snippet for crawler tasks."""
-    src_title = "LinkedIn" if (source or "").lower() == "linkedin" else (source or "Web").capitalize()
-    short_name = f"{src_title} Scraper"
+    s_lower = (source or "").lower()
+    if s_lower in ("linkedin_jobs", "easy_apply"):
+        src_title = "LinkedIn Easy Apply"
+        short_name = "Easy Apply Crawler"
+    elif s_lower == "linkedin":
+        src_title = "LinkedIn"
+        short_name = "LinkedIn Scraper"
+    else:
+        src_title = (source or "Web").capitalize()
+        short_name = f"{src_title} Scraper"
+
     snippet_parts = []
     if query and query.strip():
         clean_q = query.strip().strip("'\"")
@@ -357,6 +366,49 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
         metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
+    return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/easy-apply")
+def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
+    """Enqueue the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox."""
+    from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+    query = payload.search_query if payload else None
+    loc = payload.location if payload else None
+    time_filter = (payload.time_filter or "24h") if payload else "24h"
+
+    full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
+    res = task_manager.enqueue_task(
+        task_type="crawler",
+        task_name=full_name,
+        short_name=short_name,
+        snippet=snippet,
+        runner_func=run_linkedin_easy_apply_scraper,
+        args=(query, loc, time_filter),
+        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter},
+    )
+    msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
+    return {"success": True, "message": msg, **res}
+
+
+@router.post("/easy-apply/{post_id}")
+def api_trigger_single_easy_apply(post_id: str):
+    """Enqueue Easy Apply submission for a specific job post."""
+    from src.services.automation_tasks import run_single_easy_apply
+    post = get_post_by_id(post_id)
+    title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
+    company = (post.get("author_name") if post else None) or "Company"
+
+    res = task_manager.enqueue_task(
+        task_type="easy_apply",
+        task_name=f"Easy Apply — {title} @ {company}",
+        short_name="Easy Apply",
+        snippet=f"{company}",
+        runner_func=run_single_easy_apply,
+        args=(post_id,),
+        metadata={"post_id": post_id, "title": title, "company": company},
+    )
+    msg = f"Queued Easy Apply for {title} (Position #{res['position']})" if res["queued"] else f"Easy Apply started for {title}."
     return {"success": True, "message": msg, **res}
 
 

@@ -64,6 +64,13 @@
             <span class="nav-label">Discovered Jobs</span>
             <span class="badge-count" id="countDiscovered">0</span>
           </button>
+          <button class="nav-item" id="btnTabEasyApply" onclick="switchTab('tabEasyApply')" title="LinkedIn Job Portal & Easy Apply">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z"/></svg>
+            </span>
+            <span class="nav-label">Easy Apply</span>
+            <span class="badge-count" id="countEasyApply">0</span>
+          </button>
           <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')" title="Review & Drafts">
             <span class="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
@@ -300,6 +307,7 @@
                 <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source"
                   onchange="handleCrawlerSourceChange()">
                   <option value="linkedin">LinkedIn Hiring Posts</option>
+                  <option value="linkedin_jobs">LinkedIn Job Portal (Easy Apply)</option>
                   <option value="infopark">Infopark Kochi Companies</option>
                 </select>
               </div>
@@ -501,7 +509,7 @@
               <div class="portal-category">Direct Job Search & Easy Apply</div>
             </div>
           </div>
-          <span class="portal-badge-planning">In Planning</span>
+          <span class="section-status-pill ok">Operational</span>
         </div>
 
         <div class="portal-body">
@@ -512,7 +520,7 @@
           <div class="portal-spec-list">
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean filters</span>
+              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean & <code>f_AL=true</code> filters</span>
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
@@ -524,16 +532,17 @@
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Safety: Persistent Firefox cookie session & stealth pacing</span>
+              <span>Screening: Saves direct link for custom questionnaires without blocking</span>
             </div>
           </div>
         </div>
 
         <div class="portal-footer">
-          <button class="btn btn-outline btn-sm btn-portal-disabled" disabled>
-            <span>🚧 Scripting in Planning</span>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('tabEasyApply')" title="Open Easy Apply Workspace">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Open Easy Apply Hub</span>
           </button>
-          <span class="portal-version-tag">v2.0 Target</span>
+          <span class="portal-version-tag">Active v2.0</span>
         </div>
       </div>
 
@@ -858,6 +867,198 @@
         </div>
       </div>
     </div>
+
+      <!-- TAB: LinkedIn Easy Apply Workspace -->
+<div class="tab-panel hidden" id="tabEasyApply">
+  <!-- Top Header Toolbar -->
+  <div class="easy-apply-header">
+    <div class="header-left">
+      <div class="easy-apply-badge-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <h2 class="easy-apply-title">LinkedIn Job Portal & Easy Apply</h2>
+          <span class="tag-status live">Operational</span>
+        </div>
+        <p class="easy-apply-subtitle">
+          Autonomous direct job crawling, auto-apply submissions, and link screening for custom questionnaire roles.
+        </p>
+      </div>
+    </div>
+
+    <!-- Crawler Launch Form -->
+    <div class="easy-crawler-form">
+      <div class="crawler-inputs-row">
+        <div class="input-box sm">
+          <input type="text" id="easySearchQuery" placeholder="Job title or keywords..." value="Full Stack Developer" />
+        </div>
+        <div class="input-box sm">
+          <input type="text" id="easySearchLocation" placeholder="Location..." value="India" />
+        </div>
+        <select id="easyTimeFilter" class="select-clean sm">
+          <option value="24h" selected>Past 24 Hours</option>
+          <option value="week">Past Week</option>
+          <option value="month">Past Month</option>
+          <option value="all">Anytime</option>
+        </select>
+        <button class="btn btn-primary btn-sm btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Crawl & Auto-Apply</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Ribbon -->
+  <div class="easy-kpi-ribbon">
+    <div class="easy-kpi-card" onclick="filterEasyApplyStatus('ALL')">
+      <span class="kpi-num" id="easyKpiTotal">0</span>
+      <span class="kpi-lbl">Total Easy Apply Jobs</span>
+    </div>
+    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')">
+      <span class="kpi-num" id="easyKpiApplied">0</span>
+      <span class="kpi-lbl">Successfully Applied</span>
+    </div>
+    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')">
+      <span class="kpi-num" id="easyKpiQuestionnaire">0</span>
+      <span class="kpi-lbl">Screening (Questionnaires)</span>
+    </div>
+    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')">
+      <span class="kpi-num" id="easyKpiReady">0</span>
+      <span class="kpi-lbl">Ready in Queue</span>
+    </div>
+  </div>
+
+  <!-- Filter & Actions Bar -->
+  <div class="easy-filter-bar">
+    <div class="status-pill-group">
+      <button class="filter-pill active" id="pillEasyAll" onclick="filterEasyApplyStatus('ALL')">All Jobs</button>
+      <button class="filter-pill" id="pillEasyDiscovered" onclick="filterEasyApplyStatus('DISCOVERED')">Ready to Apply</button>
+      <button class="filter-pill" id="pillEasyQuestionnaire" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')">
+        <span>Requires Questionnaire</span>
+        <span class="pill-dot amber"></span>
+      </button>
+      <button class="filter-pill" id="pillEasyApplied" onclick="filterEasyApplyStatus('APPLIED')">
+        <span>Applied</span>
+        <span class="pill-dot green"></span>
+      </button>
+    </div>
+
+    <!-- Batch Controls -->
+    <div class="batch-actions-wrap hidden" id="easyBatchToolbar">
+      <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
+      <button class="btn btn-outline btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Apply Selected</span>
+      </button>
+      <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy Links</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
+        <span>Dismiss</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Table Section -->
+  <div class="easy-table-wrapper">
+    <table class="data-table" id="easyApplyTable">
+      <thead>
+        <tr>
+          <th style="width: 38px;">
+            <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)" title="Select all" />
+          </th>
+          <th>Role & Company</th>
+          <th>Location</th>
+          <th>Experience</th>
+          <th>Status</th>
+          <th>Date</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="easyApplyTableBody">
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">
+            Loading LinkedIn Easy Apply opportunities...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal for Job Details & Screening View -->
+<div class="modal-backdrop hidden" id="modalEasyDetails" onclick="closeEasyDetailsModal(event)">
+  <div class="modal-card modal-lg" onclick="event.stopPropagation()">
+    <div class="modal-head">
+      <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <span class="portal-logo-icon linkedin sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z"/></svg>
+        </span>
+        <h3 id="easyModalJobTitle" class="modal-title">Job Details</h3>
+      </div>
+      <button class="modal-close-btn" onclick="closeEasyDetailsModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="easy-modal-meta-grid">
+        <div class="meta-item">
+          <span class="meta-lbl">Company</span>
+          <strong id="easyModalCompany" class="meta-val">-</strong>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Location</span>
+          <span id="easyModalLocation" class="meta-val">-</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Experience</span>
+          <span id="easyModalExp" class="meta-val">-</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-lbl">Current Status</span>
+          <span id="easyModalStatus" class="meta-val">-</span>
+        </div>
+      </div>
+
+      <!-- Questionnaire Alert Banner if applicable -->
+      <div class="questionnaire-screening-alert hidden" id="easyModalQuestionnaireBox">
+        <div style="display: flex; gap: 0.5rem; align-items: flex-start;">
+          <span style="font-size: 1.1rem;">📋</span>
+          <div>
+            <strong>Custom Questionnaire Detected:</strong>
+            <p id="easyModalQuestionnaireNotes" style="margin: 0.25rem 0 0; font-size: 0.76rem; color: #fbbf24;"></p>
+            <p style="margin: 0.25rem 0 0; font-size: 0.72rem; color: #94a3b8;">
+              This role requires specialized form questions. You can copy the link below to screen or complete it manually.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+          <span class="section-subtitle">Full Job Description</span>
+          <a id="easyModalLink" href="#" target="_blank" rel="noopener noreferrer" class="link-btn-text">
+            <span>Open on LinkedIn ↗</span>
+          </a>
+        </div>
+        <div class="easy-jd-box" id="easyModalFullText"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline btn-sm" onclick="copyEasyModalLink()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy Link</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnEasyModalApply" onclick="triggerEasyModalApply()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Apply via Easy Apply</span>
+      </button>
+    </div>
+  </div>
+</div>
 
       <!-- TAB 2: Review & Drafts (Side-by-Side) -->
     <div class="tab-panel hidden" id="tabReview">
@@ -1937,6 +2138,7 @@
   <script src="/static/js/sidebar.js?v=5.0"></script>
   <script src="/static/js/api.js?v=5.0"></script>
   <script src="/static/js/discovered.js?v=5.0"></script>
+  <script src="/static/js/easy_apply.js?v=5.0"></script>
   <script src="/static/js/review.js?v=5.0"></script>
   <script src="/static/js/history.js?v=5.0"></script>
   <script src="/static/js/crawler.js?v=5.0"></script>

@@ -125,6 +125,9 @@ function showSnackbar({
         ${preview ? `<div class="snackbar-preview">${escapeHtml(preview)}</div>` : ''}
       </div>
       <div class="snackbar-actions">
+        <button class="snackbar-btn snackbar-copy-btn" title="Copy message" onclick="copySnackbarText('${id}', event)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
         ${hasExpandableContent ? `<button class="snackbar-btn snackbar-toggle-btn" title="View details" onclick="event.stopPropagation(); toggleSnackbar('${id}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </button>` : ''}
@@ -154,9 +157,15 @@ function showSnackbar({
     timer = setTimeout(() => dismissSnackbar(id), autoDismissMs);
   }
 
+  const copyParts = [];
+  if (heading) copyParts.push(heading);
+  if (preview && preview !== heading) copyParts.push(preview);
+  if (fullDetails && fullDetails !== preview) copyParts.push(fullDetails);
+  const fullText = copyParts.join('\n\n').trim() || message || '';
+
   activeSnackbars.set(id, {
     timer,
-    fullText: `${heading}\n\n${preview}\n\n${fullDetails || ''}`.trim(),
+    fullText,
   });
 
   const items = container.querySelectorAll('.snackbar-item');
@@ -203,14 +212,43 @@ function copySnackbarText(id, event) {
   const itemData = activeSnackbars.get(id);
   if (!itemData) return;
 
-  navigator.clipboard.writeText(itemData.fullText).then(() => {
-    const btn = event.currentTarget;
+  const textToCopy = itemData.fullText || '';
+  const btn = event.currentTarget;
+
+  const showSuccessFeedback = () => {
     if (btn) {
       const orig = btn.innerHTML;
-      btn.innerHTML = `<span>✓ Copied</span>`;
-      setTimeout(() => { btn.innerHTML = orig; }, 1600);
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+      btn.title = 'Copied to clipboard!';
+      setTimeout(() => {
+        btn.innerHTML = orig;
+        btn.title = 'Copy message';
+      }, 1800);
     }
-  });
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(textToCopy).then(showSuccessFeedback).catch(() => {
+      fallbackCopy(textToCopy, showSuccessFeedback);
+    });
+  } else {
+    fallbackCopy(textToCopy, showSuccessFeedback);
+  }
+}
+
+function fallbackCopy(text, callback) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    if (callback) callback();
+  } catch (_) {}
+  document.body.removeChild(ta);
 }
 
 function showToast(message, type = 'info') {

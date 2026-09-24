@@ -56,6 +56,7 @@
                 <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source"
                   onchange="handleCrawlerSourceChange()">
                   <option value="linkedin">LinkedIn Hiring Posts</option>
+                  <option value="linkedin_jobs">LinkedIn Job Portal (Easy Apply)</option>
                   <option value="infopark">Infopark Kochi Companies</option>
                 </select>
               </div>
@@ -257,7 +258,7 @@
               <div class="portal-category">Direct Job Search & Easy Apply</div>
             </div>
           </div>
-          <span class="portal-badge-planning">In Planning</span>
+          <span class="section-status-pill ok">Operational</span>
         </div>
 
         <div class="portal-body">
@@ -268,7 +269,7 @@
           <div class="portal-spec-list">
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean filters</span>
+              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean & <code>f_AL=true</code> filters</span>
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
@@ -280,16 +281,17 @@
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Safety: Persistent Firefox cookie session & stealth pacing</span>
+              <span>Screening: Saves direct link for custom questionnaires without blocking</span>
             </div>
           </div>
         </div>
 
         <div class="portal-footer">
-          <button class="btn btn-outline btn-sm btn-portal-disabled" disabled>
-            <span>🚧 Scripting in Planning</span>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('tabEasyApply')" title="Open Easy Apply Workspace">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Open Easy Apply Hub</span>
           </button>
-          <span class="portal-version-tag">v2.0 Target</span>
+          <span class="portal-version-tag">Active v2.0</span>
         </div>
       </div>
 

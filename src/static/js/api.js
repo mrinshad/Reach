@@ -150,6 +150,8 @@ async function loadDashboardData() {
 
   if (state.activeTab === 'tabDiscovered') {
     await fetchDiscoveredPosts();
+  } else if (state.activeTab === 'tabEasyApply') {
+    if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
   } else if (state.activeTab === 'tabReview') {
     await fetchReviewPosts();
   } else if (state.activeTab === 'tabSent') {
@@ -214,6 +216,14 @@ async function fetchStats() {
     const reviewQueueBadge = document.getElementById('reviewQueueCount');
     if (reviewQueueBadge) {
       reviewQueueBadge.textContent = draftsReady;
+    }
+
+    // 2b. LinkedIn Easy Apply badge
+    const countEasyApplyEl = document.getElementById('countEasyApply');
+    if (countEasyApplyEl) {
+      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : (stats.easy_apply_total || 0);
+      countEasyApplyEl.textContent = eaPending;
+      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready`;
     }
 
     // 3. Sent & History: Others tab counters

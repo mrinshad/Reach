@@ -68,6 +68,10 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
         COUNT(*) FILTER (WHERE status = 'REJECTED') AS rejected_total,
         COUNT(*) FILTER (WHERE status IN ('SENT', 'REJECTED')) AS others_total,
         COUNT(*) FILTER (WHERE category = 'DRAFT_PORTAL') AS draft_portal_total,
+        COUNT(*) FILTER (WHERE category = 'EASY_APPLY') AS easy_apply_total,
+        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'DISCOVERED') AS easy_apply_pending,
+        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_questionnaire,
+        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
         COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
         COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails
     FROM posts;
@@ -86,6 +90,10 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
                 "rejected_total": 0,
                 "others_total": 0,
                 "draft_portal_total": 0,
+                "easy_apply_total": 0,
+                "easy_apply_pending": 0,
+                "easy_apply_questionnaire": 0,
+                "easy_apply_applied": 0,
                 "potential_spam_total": 0,
                 "with_emails": 0,
             }
