@@ -15,7 +15,9 @@ function handleSearchReview(val) {
 async function fetchReviewPosts() {
   const container = document.getElementById('reviewQueueList');
   if (!container) return;
-  container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #64748b;">Loading drafts...</div>';
+  if (!state.reviewPosts || state.reviewPosts.length === 0) {
+    container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #64748b;">Loading drafts...</div>';
+  }
 
   try {
     const params = new URLSearchParams({
@@ -47,6 +49,8 @@ async function fetchReviewPosts() {
       if (emptyStateEl) emptyStateEl.classList.remove('hidden');
       const wsPanel = document.getElementById('workspacePanel');
       if (wsPanel) wsPanel.classList.add('hidden');
+      state.activeReviewPost = null;
+      state.activePostId = null;
       return;
     }
 
@@ -85,17 +89,89 @@ async function fetchReviewPosts() {
       selectReviewPost(state.reviewPosts[0]);
     } else if (state.activeReviewPost) {
       const exists = state.reviewPosts.find((p) => p.id === state.activeReviewPost.id);
-      if (exists) selectReviewPost(exists);
-      else if (state.reviewPosts.length > 0) selectReviewPost(state.reviewPosts[0]);
+      if (exists) {
+        selectReviewPost(exists);
+      } else if (state.reviewPosts.length > 0) {
+        selectReviewPost(state.reviewPosts[0]);
+      } else {
+        state.activeReviewPost = null;
+        state.activePostId = null;
+      }
     }
   } catch (err) {
     container.innerHTML = `<div style="text-align: center; padding: 2rem;">Error: ${escapeHtml(err.message)}</div>`;
   }
 }
 
+let draftAutoSaveTimer = null;
+let isDraftDirty = false;
+const DRAFT_DEBOUNCE_MS = 1000;
+
+function updateDraftSaveStatus(status) {
+  const statusEl = document.getElementById('draftSaveStatus');
+  const btnBody = document.getElementById('btnSaveDraftBody');
+
+  if (statusEl) {
+    statusEl.className = `draft-save-status status-${status}`;
+    if (status === 'saved') {
+      statusEl.textContent = '✓ Saved';
+    } else if (status === 'dirty') {
+      statusEl.textContent = '● Unsaved';
+    } else if (status === 'saving') {
+      statusEl.textContent = '⟳ Saving...';
+    }
+  }
+
+  if (btnBody) {
+    btnBody.classList.toggle('dirty', status === 'dirty');
+  }
+}
+
+function onDraftInputChange() {
+  if (!state.activeReviewPost) return;
+  isDraftDirty = true;
+  updateDraftSaveStatus('dirty');
+
+  if (draftAutoSaveTimer) clearTimeout(draftAutoSaveTimer);
+  draftAutoSaveTimer = setTimeout(() => {
+    saveActiveDraftEdits({ silent: true });
+  }, DRAFT_DEBOUNCE_MS);
+}
+
+function setupDraftInputListeners() {
+  const subjInput = document.getElementById('draftSubject');
+  const bodyInput = document.getElementById('draftBody');
+
+  [subjInput, bodyInput].forEach((input) => {
+    if (!input || input._hasDraftListener) return;
+    input._hasDraftListener = true;
+
+    input.addEventListener('input', onDraftInputChange);
+    input.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveActiveDraftEdits({ silent: false });
+      }
+    });
+  });
+}
+
 function selectReviewPost(post) {
+  if (!post) return;
+
+  // If previous post had unsaved edits and is different from selected post, flush save
+  if (isDraftDirty && state.activeReviewPost && state.activeReviewPost.id !== post.id) {
+    saveActiveDraftEdits({ silent: true });
+  }
+
+  const isSamePost = state.activeReviewPost && state.activeReviewPost.id === post.id;
+  const subjInput = document.getElementById('draftSubject');
+  const bodyInput = document.getElementById('draftBody');
+  const hasFocus = (subjInput && document.activeElement === subjInput) ||
+                    (bodyInput && document.activeElement === bodyInput);
+
   state.activeReviewPost = post;
-  state.activePostId = post ? post.id : null;
+  state.activePostId = post.id;
 
   document.querySelectorAll('.queue-item').forEach((el) => el.classList.remove('active'));
   const activeCard = document.getElementById(`queue-item-${post.id}`);
@@ -140,11 +216,15 @@ function selectReviewPost(post) {
     }
   }
 
-  const subjEl = document.getElementById('draftSubject');
-  if (subjEl) subjEl.value = post.generated_subject || '';
+  // Only update textarea content if not actively typing the same post
+  if (!isSamePost || (!isDraftDirty && !hasFocus)) {
+    if (subjInput) subjInput.value = post.generated_subject || '';
+    if (bodyInput) bodyInput.value = post.generated_body || '';
+    isDraftDirty = false;
+    updateDraftSaveStatus('saved');
+  }
 
-  const bodyEl = document.getElementById('draftBody');
-  if (bodyEl) bodyEl.value = post.generated_body || '';
+  setupDraftInputListeners();
 
   const resume = state.config.resume_path || '';
   const resFilenameEl = document.getElementById('draftResumeFilename');
@@ -163,28 +243,55 @@ async function openPostInReview(postId) {
   if (post) selectReviewPost(post);
 }
 
-async function saveActiveDraftEdits() {
-  if (!state.activeReviewPost) return;
+async function saveActiveDraftEdits(options = {}) {
+  const silent = Boolean(options && options.silent);
+  if (draftAutoSaveTimer) {
+    clearTimeout(draftAutoSaveTimer);
+    draftAutoSaveTimer = null;
+  }
+
+  const targetPost = state.activeReviewPost;
+  if (!targetPost) return;
 
   const subject = (document.getElementById('draftSubject')?.value || '').trim();
   const body = (document.getElementById('draftBody')?.value || '').trim();
 
+  updateDraftSaveStatus('saving');
+
   try {
-    const res = await fetch(`/api/posts/${state.activeReviewPost.id}`, {
+    const res = await fetch(`/api/posts/${targetPost.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subject, body }),
     });
+
     if (res.ok) {
-      showToast('✓ Draft changes saved', 'success');
-      state.activeReviewPost.generated_subject = subject;
-      state.activeReviewPost.generated_body = body;
+      isDraftDirty = false;
+      targetPost.generated_subject = subject;
+      targetPost.generated_body = body;
+
+      const match = (state.reviewPosts || []).find((p) => p.id === targetPost.id);
+      if (match) {
+        match.generated_subject = subject;
+        match.generated_body = body;
+      }
+
+      updateDraftSaveStatus('saved');
+      if (!silent) {
+        showToast('✓ Draft changes saved', 'success');
+      }
     } else {
-      const err = await res.json();
-      showAlert('Save Error', err.detail || 'Could not save draft.');
+      updateDraftSaveStatus('dirty');
+      if (!silent) {
+        const err = await res.json();
+        showAlert('Save Error', err.detail || 'Could not save draft.');
+      }
     }
   } catch (err) {
-    showAlert('Save Error', err.message);
+    updateDraftSaveStatus('dirty');
+    if (!silent) {
+      showAlert('Save Error', err.message);
+    }
   }
 }
 

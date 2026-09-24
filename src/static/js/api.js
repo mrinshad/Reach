@@ -276,10 +276,6 @@ async function fetchStats() {
     );
 
     state.lastStatsSnapshot = { ...stats };
-
-    if (statsChanged && prevStats) {
-      refreshActiveTabRealtime(stats);
-    }
   } catch (err) {
     console.error('Error fetching stats:', err);
   }

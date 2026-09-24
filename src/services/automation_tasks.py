@@ -382,8 +382,8 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                         jd_text = (post.get("full_text") or "").strip()
                         subject, body = send_jd_and_get_email(page, jd_text)
 
-                        # If force=True, user explicitly requested an email draft for this opportunity
-                        is_unsuitable = (not force) and (subject == "UNSUITABLE_JD" or is_unsuitable_response(body))
+                        # If ChatGPT classifies the JD as unsuitable, auto-cancel immediately
+                        is_unsuitable = (subject == "UNSUITABLE_JD" or is_unsuitable_response(body))
                         if is_unsuitable:
                             reason = extract_unsuitable_reason(body)
                             update_post_status(post_id, "REJECTED", rejection_reason=reason)
@@ -391,8 +391,6 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                             rejected_count += 1
                             task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                         else:
-                            if subject == "UNSUITABLE_JD":
-                                subject = "Application for Full Stack Developer"
                             save_chatgpt_response(post_id, subject, body)
                             success_count += 1
                             task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")

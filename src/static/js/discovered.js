@@ -4,7 +4,9 @@
  */
 
 async function fetchDiscoveredPosts() {
-  renderSkeletonRows();
+  if (!state.posts || state.posts.length === 0) {
+    renderSkeletonRows();
+  }
 
   try {
     const offset = (state.page - 1) * state.limit;

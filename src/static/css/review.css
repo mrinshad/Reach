@@ -283,6 +283,62 @@
     color: var(--accent-emerald);
   }
 
+  .btn-save-draft {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-medium);
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-save-draft:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+
+  .btn-save-draft.dirty {
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #fbbf24;
+  }
+
+  .btn-save-draft.dirty:hover {
+    background: rgba(245, 158, 11, 0.3);
+    border-color: #fbbf24;
+    color: #fff;
+  }
+
+  .draft-save-status {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.12rem 0.45rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+  }
+
+  .draft-save-status.status-saved {
+    color: var(--accent-emerald);
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .draft-save-status.status-dirty {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.14);
+  }
+
+  .draft-save-status.status-saving {
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.12);
+  }
+
   .post-specs {
     font-size: 0.78rem;
     display: flex;
