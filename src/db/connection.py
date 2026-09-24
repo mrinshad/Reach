@@ -84,6 +84,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_potential_spam BOOLEAN DEFAULT FALSE;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS potential_spam_reason TEXT;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(128);
+    ALTER TABLE posts ALTER COLUMN post_url TYPE TEXT;
     CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
     """
     with get_connection(db_url) as conn:

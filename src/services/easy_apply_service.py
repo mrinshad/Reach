@@ -85,12 +85,18 @@ def extract_job_card_metadata(card) -> Dict[str, Any]:
         if m:
             job_id = m.group(1)
 
+    # Canonical clean URL
+    if job_id:
+        clean_url = f"{LINKEDIN_BASE}/jobs/view/{job_id}/"
+    else:
+        clean_url = href.split("?")[0] if href else ""
+
     return {
         "job_id": job_id,
         "title": title,
         "company": company or "Unknown Company",
         "location": location,
-        "url": href,
+        "url": clean_url,
     }
 
 
@@ -99,39 +105,51 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
     Inspect the Easy Apply modal dialog for multi-step questions and determine
     if it can be auto-submitted or if it requires custom questionnaire answers.
     """
-    modal = page.locator("div.jobs-easy-apply-modal, div[role='dialog']:has-text('Easy Apply')")
-    if modal.count() == 0:
-        return {"has_modal": False, "requires_questionnaire": False, "questions": []}
-
     questions = []
+    standard_skip = [
+        "phone", "mobile", "email", "first name", "last name", "resume",
+        "select language", "search", "location", "city", "country code",
+        "contact info", "work experience", "additional"
+    ]
 
-    # Check for question labels
-    form_sections = modal.locator(".fb-dash-form-element, .jobs-easy-apply-form-section")
-    for i in range(form_sections.count()):
-        sec = form_sections.nth(i)
-        label_el = sec.locator("label, .fb-dash-form-element__label, span.t-14")
-        if label_el.count() > 0:
-            txt = label_el.first.inner_text().strip()
-            if txt and not any(skip in txt.lower() for skip in ["phone", "email", "resume", "first name", "last name"]):
+    # Check visible form labels
+    labels = page.locator("label:visible").all()
+    for l in labels:
+        try:
+            txt = l.inner_text().strip()
+            txt_low = txt.lower()
+            if not txt or any(skip in txt_low for skip in standard_skip):
+                continue
+            if txt not in questions:
                 questions.append(txt)
+        except Exception:
+            pass
 
-    # Check for custom text inputs/textareas
-    custom_inputs = modal.locator("textarea, input[type='text']:not([id*='phone']):not([name*='phone'])")
-    if custom_inputs.count() > 0:
-        for idx in range(min(custom_inputs.count(), 3)):
-            inp = custom_inputs.nth(idx)
-            aria = inp.get_attribute("aria-label") or inp.get_attribute("id") or ""
-            if aria and aria not in questions:
+    # Check visible inputs, selects, and textareas with custom aria labels
+    inputs = page.locator("input:visible, select:visible, textarea:visible").all()
+    for inp in inputs:
+        try:
+            aria = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
+            aria_low = aria.lower()
+            if not aria or any(skip in aria_low for skip in standard_skip):
+                continue
+            if aria not in questions:
                 questions.append(aria)
+        except Exception:
+            pass
 
-    # Check for radio question groups
-    radio_groups = modal.locator("fieldset")
-    for r_idx in range(radio_groups.count()):
-        legend = radio_groups.nth(r_idx).locator("legend")
-        if legend.count() > 0:
-            legend_txt = legend.first.inner_text().strip()
-            if legend_txt and legend_txt not in questions:
-                questions.append(legend_txt)
+    # Check fieldsets
+    radio_groups = page.locator("fieldset:visible").all()
+    for rg in radio_groups:
+        try:
+            legend = rg.locator("legend")
+            if legend.count() > 0:
+                ltxt = legend.first.inner_text().strip()
+                if ltxt and not any(skip in ltxt.lower() for skip in standard_skip):
+                    if ltxt not in questions:
+                        questions.append(ltxt)
+        except Exception:
+            pass
 
     requires_questionnaire = len(questions) > 0
     return {
@@ -145,42 +163,58 @@ def dismiss_easy_apply_modal(page: Page):
     """Safely dismiss and discard an open Easy Apply modal without saving partial drafts."""
     try:
         dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
-        if dismiss_btn.count() > 0:
+        if dismiss_btn.count() > 0 and dismiss_btn.is_visible():
             dismiss_btn.click()
-            page.wait_for_timeout(700)
+            page.wait_for_timeout(800)
 
             # Confirm discard dialog if it appears
             discard_btn = page.locator(
                 "button[data-control-name='discard_application_confirm_btn'], "
                 "button:has-text('Discard')"
             ).first
-            if discard_btn.count() > 0:
+            if discard_btn.count() > 0 and discard_btn.is_visible():
                 discard_btn.click()
-                page.wait_for_timeout(700)
+                page.wait_for_timeout(600)
     except Exception:
         pass
 
 
-def fill_contact_info(page: Page, modal):
-    """Fill standard contact information if empty."""
+def fill_contact_info(page: Page):
+    """Fill standard contact information if empty using synthetic typing."""
     try:
-        phone_input = modal.locator("input[id*='phoneNumber'], input[name*='phoneNumber'], input[type='tel']").first
-        if phone_input.count() > 0:
+        phone_input = page.locator("input[type='tel'], input[id*='phone'], input[name*='phone']").first
+        if phone_input.count() > 0 and phone_input.is_visible():
             current_val = phone_input.input_value().strip()
             if not current_val:
-                phone_input.fill("9895612423")
+                phone_input.click()
+                phone_input.press_sequentially("9895612423", delay=30)
+                page.wait_for_timeout(300)
+    except Exception:
+        pass
+
+    try:
+        city_input = page.locator("input[id*='city'], input[name*='city'], input[placeholder*='city']").first
+        if city_input.count() > 0 and city_input.is_visible():
+            current_val = city_input.input_value().strip()
+            if not current_val:
+                city_input.click()
+                city_input.press_sequentially("Malappuram, Kerala, India", delay=20)
                 page.wait_for_timeout(400)
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(200)
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(200)
     except Exception:
         pass
 
 
-def upload_or_select_resume(page: Page, modal, resume_path: Optional[str]):
+def upload_or_select_resume(page: Page, resume_path: Optional[str]):
     """Select or upload the resume if requested on the resume step."""
     if not resume_path or not os.path.exists(resume_path):
         return
 
     try:
-        file_input = modal.locator("input[type='file']").first
+        file_input = page.locator("input[type='file']").first
         if file_input.count() > 0:
             file_input.set_input_files(resume_path)
             page.wait_for_timeout(1000)
@@ -198,36 +232,52 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
       - 'ALREADY_APPLIED': LinkedIn indicates you've already applied
     """
     try:
-        page.goto(job_url, wait_until="commit", timeout=30000)
-        page.wait_for_timeout(3500)
-
+        page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+        
         # Check if already applied
-        applied_badge = page.locator(".jobs-s-apply__status--applied, .artdeco-inline-feedback--success")
-        if applied_badge.count() > 0 or "applied" in page.locator(".jobs-apply-button").first.inner_text().lower():
+        applied_badge = page.locator(
+            ".jobs-s-apply__status--applied, "
+            ".artdeco-inline-feedback--success, "
+            ".jobs-apply-button--disabled, "
+            "button:has-text('Applied')"
+        )
+        if applied_badge.count() > 0:
             logger("  ℹ️ Already applied to this position on LinkedIn.")
             return "APPLIED", "Already applied previously on LinkedIn"
 
-        # Find Easy Apply button
+        # Wait for Easy Apply button
+        try:
+            page.wait_for_selector(
+                "button:has-text('Easy Apply'), [aria-label*='Easy Apply'], button.jobs-apply-button",
+                timeout=7000
+            )
+        except Exception:
+            pass
+
         apply_btn = page.locator(
-            "button.jobs-apply-button, "
             "button:has-text('Easy Apply'), "
-            "[aria-label*='Easy Apply']"
+            "[aria-label*='Easy Apply'], "
+            "button.jobs-apply-button"
         ).first
 
-        if apply_btn.count() == 0:
+        if apply_btn.count() == 0 or not apply_btn.is_visible():
+            if page.locator("button:has-text('Applied')").count() > 0:
+                logger("  ℹ️ Already applied to this position on LinkedIn.")
+                return "APPLIED", "Already applied previously on LinkedIn"
             logger("  ⚠️ No Easy Apply button found on page.")
             return "FAILED", "No Easy Apply button visible"
 
         logger("  Clicking 'Easy Apply' button...")
         apply_btn.click()
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(2500)
 
-        modal = page.locator("div.jobs-easy-apply-modal, div[role='dialog']:has-text('Easy Apply')").first
-        if modal.count() == 0:
+        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
+        if dismiss_btn.count() == 0:
+            logger("  ⚠️ Easy Apply dialog did not open.")
             return "FAILED", "Easy Apply dialog did not open"
 
-        # Multi-step wizard loop (up to 6 steps max)
-        for step in range(1, 7):
+        # Multi-step wizard loop (up to 7 steps max)
+        for step in range(1, 8):
             page.wait_for_timeout(1000)
             inspection = inspect_easy_apply_modal(page)
 
@@ -238,49 +288,62 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                 dismiss_easy_apply_modal(page)
                 return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
-            fill_contact_info(page, modal)
-            upload_or_select_resume(page, modal, resume_path)
+            fill_contact_info(page)
+            upload_or_select_resume(page, resume_path)
 
             # Check for Submit application button
-            submit_btn = modal.locator(
+            submit_btn = page.locator(
                 "button[aria-label='Submit application'], "
-                "button:has-text('Submit application')"
+                "button:has-text('Submit application'), "
+                "button:has-text('Submit')"
             ).first
 
             if submit_btn.count() > 0 and submit_btn.is_visible():
                 logger("  Submitting application...")
-                submit_btn.click()
+                try:
+                    submit_btn.click(timeout=5000)
+                except Exception:
+                    page.keyboard.press("Escape")
+                    submit_btn.click(force=True, timeout=5000)
                 page.wait_for_timeout(2500)
 
                 # Check confirmation
                 done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
-                if done_btn.count() > 0:
+                if done_btn.count() > 0 and done_btn.is_visible():
                     done_btn.click()
 
                 logger("  ✓ Easy Apply successfully submitted!")
                 return "APPLIED", "Application submitted successfully"
 
             # Check for Review button
-            review_btn = modal.locator(
+            review_btn = page.locator(
                 "button[aria-label='Review your application'], "
                 "button:has-text('Review')"
             ).first
 
             if review_btn.count() > 0 and review_btn.is_visible():
                 logger(f"  Step {step}: Reviewing application...")
-                review_btn.click()
+                try:
+                    review_btn.click(timeout=5000)
+                except Exception:
+                    page.keyboard.press("Escape")
+                    review_btn.click(force=True, timeout=5000)
                 page.wait_for_timeout(1500)
                 continue
 
             # Check for Next step button
-            next_btn = modal.locator(
+            next_btn = page.locator(
                 "button[aria-label='Continue to next step'], "
                 "button:has-text('Next')"
             ).first
 
             if next_btn.count() > 0 and next_btn.is_visible():
                 logger(f"  Step {step}: Advancing to next step...")
-                next_btn.click()
+                try:
+                    next_btn.click(timeout=5000)
+                except Exception:
+                    page.keyboard.press("Escape")
+                    next_btn.click(force=True, timeout=5000)
                 page.wait_for_timeout(1500)
                 continue
 
@@ -365,7 +428,7 @@ def run_easy_apply_crawler(
         total_cards = min(job_cards.count(), max_jobs)
         logger(f"  Found {job_cards.count()} job cards. Processing up to {total_cards}...")
 
-        if task_manager:
+        if task_manager and hasattr(task_manager, "set_total_posts"):
             task_manager.set_total_posts(total_cards)
 
         extracted_jobs = []

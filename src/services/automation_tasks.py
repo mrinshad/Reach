@@ -285,6 +285,14 @@ class TaskManager:
         with self._lock:
             self.state["current_step"] = step
 
+    def set_total_posts(self, total: int):
+        with self._lock:
+            self.state["total_items"] = max(1, total)
+
+    def set_total_items(self, total: int):
+        with self._lock:
+            self.state["total_items"] = max(1, total)
+
     def update_progress(self, completed: int, current_step: str = ""):
         with self._lock:
             self.state["completed_items"] = completed
@@ -1024,14 +1032,32 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
 def run_linkedin_easy_apply_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
     """
     Run the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox context.
-    Filters specifically for Easy Apply listings (f_AL=true), extracts JDs, and auto-applies
-    or saves for questionnaire screening.
+    Executes scripts/linkedin_job_search.py via run_scraper_subprocess_with_timeout
+    with 90-second inactivity watchdog and real-time terminal streaming.
     """
-    from src.services.easy_apply_service import run_easy_apply_crawler
-    q = query or get_setting("search_query", "Full Stack Developer") or "Full Stack Developer"
-    loc = location or get_setting("search_location", "India") or "India"
-    tf = time_filter or "24h"
-    run_easy_apply_crawler(keywords=q, location=loc, time_filter=tf, max_jobs=25, task_manager=task_manager)
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_job_search.py")
+    task_label = "LinkedIn Easy Apply Crawler"
+    if location and location.strip():
+        task_label = f"LinkedIn Easy Apply Crawler ({location.strip()})"
+
+    extra_env = {
+        "SCRAPER_SOURCE": "dashboard",
+        "SCRAPER_LIMIT": "20",
+    }
+    if query:
+        extra_env["SCRAPER_SEARCH_QUERY"] = query.strip()
+    if location:
+        extra_env["SCRAPER_LOCATION"] = location.strip()
+    if time_filter:
+        extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
+
+    run_scraper_subprocess_with_timeout(
+        task_name=task_label,
+        script_path=script_path,
+        inactivity_timeout_seconds=90.0,
+        finish_message="LinkedIn Easy Apply crawling finished successfully.",
+        extra_env=extra_env,
+    )
 
 
 def run_single_easy_apply(post_id: str):
