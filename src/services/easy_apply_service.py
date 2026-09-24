@@ -109,7 +109,8 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
     standard_skip = [
         "phone", "mobile", "email", "first name", "last name", "resume",
         "select language", "search", "location", "city", "country code",
-        "contact info", "work experience", "additional"
+        "contact info", "work experience", "additional", "photo",
+        "cover letter", "headline", "summary", "website", "terms"
     ]
 
     # Check visible form labels
@@ -269,7 +270,13 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
 
         logger("  Clicking 'Easy Apply' button...")
         apply_btn.click()
-        page.wait_for_timeout(2500)
+        try:
+            page.wait_for_selector(
+                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text']",
+                timeout=9000
+            )
+        except Exception:
+            page.wait_for_timeout(3000)
 
         dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
         if dismiss_btn.count() == 0:
@@ -278,7 +285,15 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
 
         # Multi-step wizard loop (up to 7 steps max)
         for step in range(1, 8):
-            page.wait_for_timeout(1000)
+            # Wait for content or step transition to stabilize
+            try:
+                page.wait_for_selector(
+                    "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review')",
+                    timeout=5000
+                )
+            except Exception:
+                page.wait_for_timeout(1500)
+
             inspection = inspect_easy_apply_modal(page)
 
             # If custom questionnaire questions detected:
@@ -298,22 +313,27 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                 "button:has-text('Submit')"
             ).first
 
-            if submit_btn.count() > 0 and submit_btn.is_visible():
-                logger("  Submitting application...")
+            if submit_btn.count() > 0:
                 try:
-                    submit_btn.click(timeout=5000)
+                    submit_btn.scroll_into_view_if_needed()
                 except Exception:
-                    page.keyboard.press("Escape")
-                    submit_btn.click(force=True, timeout=5000)
-                page.wait_for_timeout(2500)
+                    pass
+                if submit_btn.is_visible():
+                    logger("  Submitting application...")
+                    try:
+                        submit_btn.click(timeout=5000)
+                    except Exception:
+                        page.keyboard.press("Escape")
+                        submit_btn.click(force=True, timeout=5000)
+                    page.wait_for_timeout(2500)
 
-                # Check confirmation
-                done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
-                if done_btn.count() > 0 and done_btn.is_visible():
-                    done_btn.click()
+                    # Check confirmation
+                    done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
+                    if done_btn.count() > 0 and done_btn.is_visible():
+                        done_btn.click()
 
-                logger("  ✓ Easy Apply successfully submitted!")
-                return "APPLIED", "Application submitted successfully"
+                    logger("  ✓ Easy Apply successfully submitted!")
+                    return "APPLIED", "Application submitted successfully"
 
             # Check for Review button
             review_btn = page.locator(
@@ -321,15 +341,20 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                 "button:has-text('Review')"
             ).first
 
-            if review_btn.count() > 0 and review_btn.is_visible():
-                logger(f"  Step {step}: Reviewing application...")
+            if review_btn.count() > 0:
                 try:
-                    review_btn.click(timeout=5000)
+                    review_btn.scroll_into_view_if_needed()
                 except Exception:
-                    page.keyboard.press("Escape")
-                    review_btn.click(force=True, timeout=5000)
-                page.wait_for_timeout(1500)
-                continue
+                    pass
+                if review_btn.is_visible():
+                    logger(f"  Step {step}: Reviewing application...")
+                    try:
+                        review_btn.click(timeout=5000)
+                    except Exception:
+                        page.keyboard.press("Escape")
+                        review_btn.click(force=True, timeout=5000)
+                    page.wait_for_timeout(1500)
+                    continue
 
             # Check for Next step button
             next_btn = page.locator(
@@ -337,15 +362,20 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                 "button:has-text('Next')"
             ).first
 
-            if next_btn.count() > 0 and next_btn.is_visible():
-                logger(f"  Step {step}: Advancing to next step...")
+            if next_btn.count() > 0:
                 try:
-                    next_btn.click(timeout=5000)
+                    next_btn.scroll_into_view_if_needed()
                 except Exception:
-                    page.keyboard.press("Escape")
-                    next_btn.click(force=True, timeout=5000)
-                page.wait_for_timeout(1500)
-                continue
+                    pass
+                if next_btn.is_visible():
+                    logger(f"  Step {step}: Advancing to next step...")
+                    try:
+                        next_btn.click(timeout=5000)
+                    except Exception:
+                        page.keyboard.press("Escape")
+                        next_btn.click(force=True, timeout=5000)
+                    page.wait_for_timeout(1500)
+                    continue
 
             # If neither Next, Review, nor Submit is visible, inspect if stuck
             logger(f"  Step {step}: Unhandled form state, saving for screening.")

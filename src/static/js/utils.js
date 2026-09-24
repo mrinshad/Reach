@@ -389,6 +389,10 @@ function formatDateTime(dateVal) {
   return `${day}/${month}/${year} ${hoursStr}:${minutes} ${ampm}`;
 }
 
+function formatDate(dateVal) {
+  return formatDateTime(dateVal);
+}
+
 function copyEmailToClipboard(email) {
   navigator.clipboard.writeText(email).then(() => {
     showToast(`Copied: ${email}`, 'success');
@@ -458,6 +462,7 @@ window.escapeHtml = escapeHtml;
 window.formatRelativeLabel = formatRelativeLabel;
 window.formatPostDateTimeWithRelative = formatPostDateTimeWithRelative;
 window.formatDateTime = formatDateTime;
+window.formatDate = formatDate;
 window.copyEmailToClipboard = copyEmailToClipboard;
 window.copyJobDescription = copyJobDescription;
 window.copyEmailDraft = copyEmailDraft;

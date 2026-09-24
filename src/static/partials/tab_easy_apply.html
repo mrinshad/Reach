@@ -4,12 +4,12 @@
   <div class="easy-apply-header">
     <div class="header-left">
       <div class="easy-apply-badge-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
           <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
         </svg>
       </div>
       <div>
-        <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <div style="display: flex; align-items: center; gap: 0.55rem;">
           <h2 class="easy-apply-title">LinkedIn Job Portal & Easy Apply</h2>
           <span class="tag-status live">Operational</span>
         </div>
@@ -22,19 +22,21 @@
     <!-- Crawler Launch Form -->
     <div class="easy-crawler-form">
       <div class="crawler-inputs-row">
-        <div class="input-box sm">
-          <input type="text" id="easySearchQuery" placeholder="Job title or keywords..." value="Full Stack Developer" />
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="easySearchQuery" class="easy-input" placeholder="Job title or keywords..." value="Full Stack Developer" />
         </div>
-        <div class="input-box sm">
-          <input type="text" id="easySearchLocation" placeholder="Location..." value="India" />
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+          <input type="text" id="easySearchLocation" class="easy-input" placeholder="Location..." value="India" />
         </div>
-        <select id="easyTimeFilter" class="select-clean sm">
+        <select id="easyTimeFilter" class="select-clean easy-select-time">
           <option value="24h" selected>Past 24 Hours</option>
           <option value="week">Past Week</option>
           <option value="month">Past Month</option>
           <option value="all">Anytime</option>
         </select>
-        <button class="btn btn-primary btn-sm btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
+        <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>Crawl & Auto-Apply</span>
         </button>
@@ -44,20 +46,32 @@
 
   <!-- KPI Metrics Ribbon -->
   <div class="easy-kpi-ribbon">
-    <div class="easy-kpi-card" onclick="filterEasyApplyStatus('ALL')">
-      <span class="kpi-num" id="easyKpiTotal">0</span>
+    <div class="easy-kpi-card accent-indigo" onclick="filterEasyApplyStatus('ALL')" title="View all Easy Apply opportunities">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiTotal">0</span>
+        <span class="kpi-icon-badge badge-indigo">💼</span>
+      </div>
       <span class="kpi-lbl">Total Easy Apply Jobs</span>
     </div>
-    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')">
-      <span class="kpi-num" id="easyKpiApplied">0</span>
+    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')" title="View successfully submitted applications">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiApplied">0</span>
+        <span class="kpi-icon-badge badge-green">✓</span>
+      </div>
       <span class="kpi-lbl">Successfully Applied</span>
     </div>
-    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')">
-      <span class="kpi-num" id="easyKpiQuestionnaire">0</span>
+    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')" title="View roles requiring custom questionnaires">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiQuestionnaire">0</span>
+        <span class="kpi-icon-badge badge-amber">📋</span>
+      </div>
       <span class="kpi-lbl">Screening (Questionnaires)</span>
     </div>
-    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')">
-      <span class="kpi-num" id="easyKpiReady">0</span>
+    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')" title="View jobs ready in queue for auto-apply">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiReady">0</span>
+        <span class="kpi-icon-badge badge-blue">⚡</span>
+      </div>
       <span class="kpi-lbl">Ready in Queue</span>
     </div>
   </div>
@@ -65,49 +79,66 @@
   <!-- Filter & Actions Bar -->
   <div class="easy-filter-bar">
     <div class="status-pill-group">
-      <button class="filter-pill active" id="pillEasyAll" onclick="filterEasyApplyStatus('ALL')">All Jobs</button>
-      <button class="filter-pill" id="pillEasyDiscovered" onclick="filterEasyApplyStatus('DISCOVERED')">Ready to Apply</button>
+      <button class="filter-pill active" id="pillEasyAll" onclick="filterEasyApplyStatus('ALL')">
+        <span>All Jobs</span>
+        <span class="pill-badge-count" id="countPillAll">0</span>
+      </button>
+      <button class="filter-pill" id="pillEasyDiscovered" onclick="filterEasyApplyStatus('DISCOVERED')">
+        <span class="pill-dot cyan"></span>
+        <span>Ready to Apply</span>
+        <span class="pill-badge-count" id="countPillReady">0</span>
+      </button>
       <button class="filter-pill" id="pillEasyQuestionnaire" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')">
-        <span>Requires Questionnaire</span>
         <span class="pill-dot amber"></span>
+        <span>Requires Questionnaire</span>
+        <span class="pill-badge-count" id="countPillScreening">0</span>
       </button>
       <button class="filter-pill" id="pillEasyApplied" onclick="filterEasyApplyStatus('APPLIED')">
-        <span>Applied</span>
         <span class="pill-dot green"></span>
+        <span>Applied</span>
+        <span class="pill-badge-count" id="countPillApplied">0</span>
       </button>
     </div>
 
-    <!-- Batch Controls -->
-    <div class="batch-actions-wrap hidden" id="easyBatchToolbar">
-      <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
-      <button class="btn btn-outline btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>Apply Selected</span>
-      </button>
-      <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <span>Copy Links</span>
-      </button>
-      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
-        <span>Dismiss</span>
-      </button>
+    <div class="easy-filter-right">
+      <!-- Live In-Table Search Input -->
+      <div class="easy-search-box">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..." oninput="handleEasyTableSearch(this.value)" />
+      </div>
+
+      <!-- Batch Controls -->
+      <div class="batch-actions-wrap hidden" id="easyBatchToolbar">
+        <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
+        <button class="btn btn-outline btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Apply Selected</span>
+        </button>
+        <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>Copy Links</span>
+        </button>
+        <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
+          <span>Dismiss</span>
+        </button>
+      </div>
     </div>
   </div>
 
-  <!-- Main Table Section -->
-  <div class="easy-table-wrapper">
-    <table class="data-table" id="easyApplyTable">
+  <!-- Main Table Section using Reach Table System -->
+  <div class="table-card">
+    <table class="reach-table" id="easyApplyTable">
       <thead>
         <tr>
-          <th style="width: 38px;">
+          <th width="38">
             <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)" title="Select all" />
           </th>
           <th>Role & Company</th>
-          <th>Location</th>
-          <th>Experience</th>
-          <th>Status</th>
-          <th>Date</th>
-          <th style="text-align: right;">Actions</th>
+          <th width="190">Location</th>
+          <th width="105">Experience</th>
+          <th width="135">Status</th>
+          <th width="165">Crawled Date</th>
+          <th width="145" style="text-align: right;">Actions</th>
         </tr>
       </thead>
       <tbody id="easyApplyTableBody">

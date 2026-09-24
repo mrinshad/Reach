@@ -5,6 +5,7 @@
 
 let easyApplyPosts = [];
 let easyApplyStatusFilter = 'ALL';
+let easyTableSearchQuery = '';
 const selectedEasyJobIds = new Set();
 let activeEasyModalPost = null;
 
@@ -19,6 +20,7 @@ async function fetchEasyApplyPosts() {
   try {
     const params = new URLSearchParams({
       category: 'EASY_APPLY',
+      status: 'ALL',
       limit: '200',
     });
 
@@ -54,6 +56,19 @@ function updateEasyKPIs(posts) {
   const readyEl = document.getElementById('easyKpiReady');
   if (readyEl) readyEl.textContent = ready;
 
+  // Filter Pill Counter Badges
+  const countAll = document.getElementById('countPillAll');
+  if (countAll) countAll.textContent = total;
+
+  const countReady = document.getElementById('countPillReady');
+  if (countReady) countReady.textContent = ready;
+
+  const countScreening = document.getElementById('countPillScreening');
+  if (countScreening) countScreening.textContent = questionnaire;
+
+  const countApplied = document.getElementById('countPillApplied');
+  if (countApplied) countApplied.textContent = applied;
+
   const badgeEl = document.getElementById('countEasyApply');
   if (badgeEl) {
     badgeEl.textContent = ready;
@@ -79,19 +94,42 @@ function filterEasyApplyStatus(status) {
   renderEasyApplyTable();
 }
 
+function handleEasyTableSearch(query) {
+  easyTableSearchQuery = (query || '').trim().toLowerCase();
+  renderEasyApplyTable();
+}
+
 function renderEasyApplyTable() {
   const tbody = document.getElementById('easyApplyTableBody');
   if (!tbody) return;
 
   let filtered = easyApplyPosts;
   if (easyApplyStatusFilter !== 'ALL') {
-    filtered = easyApplyPosts.filter((p) => p.status === easyApplyStatusFilter);
+    filtered = filtered.filter((p) => p.status === easyApplyStatusFilter);
+  }
+
+  if (easyTableSearchQuery) {
+    filtered = filtered.filter((p) => {
+      const headline = (p.author_headline || '').toLowerCase();
+      const company = (p.author_name || '').toLowerCase();
+      const location = (p.location || '').toLowerCase();
+      const text = (p.full_text || '').toLowerCase();
+      return (
+        headline.includes(easyTableSearchQuery) ||
+        company.includes(easyTableSearchQuery) ||
+        location.includes(easyTableSearchQuery) ||
+        text.includes(easyTableSearchQuery)
+      );
+    });
   }
 
   if (filtered.length === 0) {
-    const emptyMsg = easyApplyStatusFilter === 'ALL'
-      ? 'No LinkedIn Easy Apply jobs scraped yet. Click "Crawl & Auto-Apply" to discover jobs!'
-      : `No jobs found with status "${easyApplyStatusFilter}".`;
+    let emptyMsg = 'No LinkedIn Easy Apply jobs scraped yet. Click "Crawl & Auto-Apply" to discover jobs!';
+    if (easyTableSearchQuery) {
+      emptyMsg = `No jobs matched search "${escapeHtml(easyTableSearchQuery)}".`;
+    } else if (easyApplyStatusFilter !== 'ALL') {
+      emptyMsg = `No jobs found with status "${easyApplyStatusFilter}".`;
+    }
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 3rem; color: #64748b; font-size: 0.82rem;">${emptyMsg}</td></tr>`;
     return;
   }
@@ -103,56 +141,66 @@ function renderEasyApplyTable() {
     const isSelected = selectedEasyJobIds.has(post.id);
 
     // Status Badge
-    let statusBadge = '<span class="tag-easy-status discovered">Ready</span>';
+    let statusBadge = '<span class="tag-easy-status discovered">⚡ Ready</span>';
     if (post.status === 'APPLIED') {
       statusBadge = '<span class="tag-easy-status applied">✓ Applied</span>';
     } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
       statusBadge = '<span class="tag-easy-status questionnaire" title="Requires questionnaire screening">📋 Screening</span>';
     } else if (post.status === 'REJECTED') {
-      statusBadge = '<span class="tag-easy-status rejected">Dismissed</span>';
+      statusBadge = '<span class="tag-easy-status rejected">✕ Dismissed</span>';
     }
 
     const expText = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
-    const dateText = formatDate(post.created_at);
+    const dateText = typeof formatPostDateTimeWithRelative === 'function'
+      ? formatPostDateTimeWithRelative(post)
+      : (typeof formatDateTime === 'function' ? formatDateTime(post.created_at) : (post.created_at || '—'));
+
+    let actionBtn = `<button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>`;
+    if (post.status === 'APPLIED') {
+      actionBtn = `<span class="tag-easy-status applied" style="opacity: 0.9; font-size: 0.68rem; cursor: default;">✓ Submitted</span>`;
+    } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
+      actionBtn = `<button class="btn btn-outline btn-xs" onclick="openEasyDetailsModal('${post.id}')" title="Screen questionnaire requirements" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>`;
+    }
 
     tr.innerHTML = `
-      <td>
+      <td width="38">
         <input type="checkbox" class="easy-checkbox" value="${post.id}" ${isSelected ? 'checked' : ''} onchange="toggleSelectEasyJob('${post.id}', this.checked)" />
       </td>
       <td>
-        <div style="display: flex; flex-direction: column; gap: 0.15rem;">
-          <a href="javascript:void(0)" onclick="openEasyDetailsModal('${post.id}')" style="font-weight: 600; color: #fff; text-decoration: none;">
+        <div class="easy-role-cell">
+          <a href="javascript:void(0)" onclick="openEasyDetailsModal('${post.id}')" class="easy-job-title-link" title="Click to view full job details">
             ${escapeHtml(post.author_headline || 'Software Role')}
           </a>
-          <span style="font-size: 0.72rem; color: #94a3b8;">${escapeHtml(post.author_name || 'Company')}</span>
+          <span class="easy-company-name">
+            <span style="opacity: 0.7;">🏢</span>
+            <span>${escapeHtml(post.author_name || 'Company')}</span>
+          </span>
         </div>
       </td>
-      <td>
-        <span style="font-size: 0.75rem; color: #cbd5e1;">📍 ${escapeHtml(post.location || 'India')}</span>
+      <td width="190">
+        <span class="easy-location-text" title="${escapeHtml(post.location || 'India')}">
+          <span style="opacity: 0.7;">📍</span>
+          <span>${escapeHtml(post.location || 'India')}</span>
+        </span>
       </td>
-      <td>
+      <td width="105">
         <span class="pill-badge badge-exp" style="font-size: 0.7rem;">${escapeHtml(expText)}</span>
       </td>
-      <td>
+      <td width="135">
         ${statusBadge}
       </td>
-      <td>
-        <span style="font-size: 0.72rem; color: #64748b;">${escapeHtml(dateText)}</span>
+      <td width="165">
+        <span class="easy-date-text" title="${escapeHtml(post.created_at || '')}">${escapeHtml(dateText)}</span>
       </td>
-      <td style="text-align: right;">
-        <div style="display: inline-flex; align-items: center; gap: 0.35rem;">
-          <button class="btn btn-outline btn-xs" onclick="copyEasyJobLink('${post.id}')" title="Copy LinkedIn Job Link">
+      <td width="145" style="text-align: right;">
+        <div class="easy-actions-cell">
+          <button class="icon-btn sm" onclick="copyEasyJobLink('${post.id}')" title="Copy LinkedIn Job Link">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span>Copy</span>
           </button>
-          <a href="${post.post_url}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-xs" title="Open Job on LinkedIn">
-            <span>↗</span>
+          <a href="${post.post_url}" target="_blank" rel="noopener noreferrer" class="icon-btn sm" title="Open Job on LinkedIn">
+            <span style="font-size: 0.72rem; line-height: 1;">↗</span>
           </a>
-          ${post.status !== 'APPLIED' ? `
-            <button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission">
-              <span>Apply</span>
-            </button>
-          ` : ''}
+          ${actionBtn}
         </div>
       </td>
     `;
@@ -412,6 +460,7 @@ async function batchApplySelectedEasyJobs() {
 
 window.fetchEasyApplyPosts = fetchEasyApplyPosts;
 window.filterEasyApplyStatus = filterEasyApplyStatus;
+window.handleEasyTableSearch = handleEasyTableSearch;
 window.triggerEasyApplyCrawl = triggerEasyApplyCrawl;
 window.triggerSingleEasyApply = triggerSingleEasyApply;
 window.copyEasyJobLink = copyEasyJobLink;
