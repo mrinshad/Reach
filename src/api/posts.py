@@ -275,7 +275,7 @@ def api_update_post_status(post_id: str, payload: UpdateStatusPayload):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "EMAIL_GENERATED", "SENT"}
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "EMAIL_GENERATED", "SENT", "NOT_FOUND"}
     new_status = (payload.status or "").strip().upper()
     if new_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}. Allowed: {allowed_statuses}")
@@ -296,7 +296,7 @@ def api_update_posts_status_batch(payload: BatchStatusPayload):
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided.")
 
-    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED"}
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "NOT_FOUND"}
     new_status = (payload.status or "").strip().upper()
     if new_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")

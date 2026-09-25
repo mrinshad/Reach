@@ -453,37 +453,50 @@
   transform: scale(1.05);
 }
 
-/* Table Card & Reach-Table overrides */
+/* Table Card & Reach-Table overrides — Compact Zero-Scroll Layout */
 #tabEasyApply .reach-table {
   table-layout: fixed;
   width: 100%;
 }
 
 #tabEasyApply .reach-table th {
-  padding: 0.85rem 1.05rem;
-  font-size: 0.72rem;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.71rem;
   letter-spacing: 0.05em;
   white-space: nowrap;
 }
 
 #tabEasyApply .reach-table td {
-  padding: 0.85rem 1.05rem;
+  padding: 0.6rem 0.7rem;
   vertical-align: middle;
 }
+
+/* Column width classes (applied via HTML colgroup or th/td attributes) */
+.col-check  { width: 36px; }
+.col-role   { /* fluid auto — gets remaining space */ }
+.col-location { width: 125px; }
+.col-exp    { width: 80px; }
+.col-status { width: 125px; }
+.col-date   { width: 95px; }
+.col-actions { width: 115px; text-align: right; }
 
 .easy-role-cell {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  min-width: 0;
 }
 
 .easy-job-title-link {
   font-weight: 600;
   color: #fff;
   text-decoration: none;
-  font-size: 0.83rem;
+  font-size: 0.82rem;
   line-height: 1.35;
   transition: color 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .easy-job-title-link:hover {
@@ -492,15 +505,36 @@
 }
 
 .easy-company-name {
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--text-dim);
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Role subline — used for responsive fold-in of Location/Date */
+.easy-role-subline {
+  font-size: 0.69rem;
+  color: var(--text-muted);
+  display: none; /* shown via breakpoints */
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.easy-role-subline .col-mobile-loc,
+.easy-role-subline .col-mobile-date {
+  display: none; /* individually toggled at breakpoints */
 }
 
 .easy-location-text {
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   color: #cbd5e1;
   display: inline-flex;
   align-items: center;
@@ -508,11 +542,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;
+  max-width: 125px;
 }
 
 .easy-date-text {
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -521,7 +555,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.35rem;
+  gap: 0.3rem;
   white-space: nowrap;
 }
 
@@ -534,10 +568,10 @@
 .tag-easy-status {
   display: inline-flex;
   align-items: center;
-  gap: 0.32rem;
-  font-size: 0.71rem;
+  gap: 0.3rem;
+  font-size: 0.7rem;
   font-weight: 700;
-  padding: 0.22rem 0.55rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 4px;
   line-height: 1.2;
   white-space: nowrap;
@@ -557,9 +591,9 @@
 }
 
 .status-caret {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   opacity: 0.7;
-  margin-left: 0.2rem;
+  margin-left: 0.15rem;
   transition: transform 0.15s ease;
 }
 
@@ -567,11 +601,10 @@
   transform: rotate(180deg);
 }
 
+/* FIXED-position dropdown — escapes .table-card overflow clipping */
 .easy-status-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 1000;
+  position: fixed;
+  z-index: 99999;
   background: #0f172a;
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-sm);
@@ -581,14 +614,14 @@
   display: none;
 }
 
-.easy-status-wrap.open .easy-status-menu {
+.easy-status-menu.menu-visible {
   display: block;
 }
 
 .status-menu-opt {
   width: 100%;
-  padding: 0.45rem 0.75rem;
-  font-size: 0.73rem;
+  padding: 0.42rem 0.7rem;
+  font-size: 0.72rem;
   font-weight: 600;
   text-align: left;
   background: transparent;
@@ -621,6 +654,11 @@
   background: rgba(16, 185, 129, 0.12);
 }
 
+.status-menu-opt.opt-not-found:hover {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+}
+
 .tag-easy-status.applied {
   background: rgba(16, 185, 129, 0.12);
   color: #34d399;
@@ -643,6 +681,12 @@
   background: rgba(244, 63, 94, 0.12);
   color: #fda4af;
   border: 1px solid rgba(244, 63, 94, 0.25);
+}
+
+.tag-easy-status.not-found {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 /* Modal status button chips */
@@ -679,6 +723,26 @@
   background: rgba(14, 165, 233, 0.16);
   border-color: rgba(14, 165, 233, 0.45);
   color: #38bdf8;
+}
+
+/* Not Found KPI card accent */
+.easy-kpi-card.accent-slate::before {
+  background: #94a3b8;
+}
+
+.easy-kpi-card.accent-slate .kpi-num {
+  color: #94a3b8;
+}
+
+.kpi-icon-badge.badge-slate {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+/* Not Found filter pill dot */
+.pill-dot.slate {
+  background: #94a3b8;
+  box-shadow: 0 0 6px rgba(148, 163, 184, 0.6);
 }
 
 /* Modal styling */
@@ -733,6 +797,192 @@
   overflow-y: auto;
 }
 
+/* =============================================
+   SCREENING QUESTIONNAIRE MODAL
+   ============================================= */
+
+.screening-modal {
+  max-width: 560px;
+}
+
+.screening-modal-head {
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2) !important;
+}
+
+.screening-head-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* Job Info Header Card */
+.screening-job-card {
+  background: var(--bg-body);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid rgba(245, 158, 11, 0.6);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.screening-job-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.35;
+  margin-bottom: 0.3rem;
+}
+
+.screening-job-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.73rem;
+  color: var(--text-dim);
+  flex-wrap: wrap;
+}
+
+/* Warning Banner */
+.screening-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 1rem;
+  font-size: 0.77rem;
+  color: #fbbf24;
+  line-height: 1.45;
+}
+
+.screening-warning-banner strong {
+  color: #fbbf24;
+  font-weight: 700;
+}
+
+.screening-warning-banner span:not(.screening-warning-icon) {
+  color: #d4a017;
+  margin-left: 0.25rem;
+}
+
+.screening-warning-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+/* Question Cards */
+.screening-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.screening-question-card {
+  background: var(--bg-body);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid rgba(245, 158, 11, 0.5);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.85rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.screening-question-card:hover {
+  border-color: rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.04);
+}
+
+.screening-q-num {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  font-size: 0.65rem;
+  font-weight: 800;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.screening-q-text {
+  font-size: 0.8rem;
+  color: #e2e8f0;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.screening-q-type {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Empty State */
+.screening-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1rem;
+  gap: 0.5rem;
+}
+
+.screening-empty p {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* Footer */
+.screening-modal-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  border-top: 1px solid rgba(245, 158, 11, 0.15) !important;
+}
+
+.screening-foot-left,
+.screening-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* =============================================
+   RESPONSIVE PROGRESSIVE DISCLOSURE BREAKPOINTS
+   ============================================= */
+
+/* Fold Crawled Date into Role subline at ≤ 1080px */
+@media (max-width: 1080px) {
+  .col-date { display: none; }
+  th.col-date { display: none; }
+  .easy-role-subline { display: flex; }
+  .easy-role-subline .col-mobile-date { display: inline; }
+}
+
+/* Fold Location into Role subline at ≤ 860px */
+@media (max-width: 860px) {
+  .col-location { display: none; }
+  th.col-location { display: none; }
+  .easy-role-subline .col-mobile-loc { display: inline; }
+}
+
 @media (max-width: 900px) {
   .easy-kpi-ribbon {
     grid-template-columns: repeat(2, 1fr);
@@ -741,3 +991,4 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+

@@ -68,15 +68,16 @@ This directory contains the modular styling system for the Reach web application
 - **Key Classes**: `.modal-overlay`, `.modal-box`, `.modal-top`, `.modal-body`, `.modal-bottom`, `.notif-modal-box`, `.notif-status-grid`, `.toast-container`, `.toast`.
 
 ### 11. [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css)
-- **Scope**: LinkedIn Easy Apply & Direct Jobs workspace (`#tabEasyApply`), crawler header, KPI ribbon, floating batch banner, fixed table layout, interactive status dropdowns, and details modal.
+- **Scope**: LinkedIn Easy Apply workspace (`#tabEasyApply`), crawler header, 5-KPI ribbon, floating batch banner, zero-scroll responsive table layout, fixed-position status dropdowns, details modal, and dedicated Screening Questionnaire Modal.
 - **Key Classes**:
   - Header & Form: `.easy-apply-header`, `.easy-crawler-form`, `.easy-input`, `.btn-easy-crawl`.
-  - KPI Metrics: `.easy-kpi-ribbon`, `.easy-kpi-card`, `.kpi-num`, `.kpi-lbl`.
-  - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.easy-search-box`.
+  - KPI Metrics: `.easy-kpi-ribbon` (5 columns: Ready, Screening, Applied, Failed, Not Found), `.easy-kpi-card`, `.accent-slate`, `.kpi-num`, `.kpi-lbl`.
+  - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.pill-dot.slate`, `.easy-search-box`.
   - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-banner-right`, `.batch-select-badge`, `.batch-transition-lbl`, `.batch-divider`, `.btn-batch-close`.
-  - Table: `#tabEasyApply .reach-table`, `.easy-role-cell`, `.easy-job-title-link`, `.easy-actions-cell`.
-  - Status Menu: `.easy-status-wrap`, `.tag-easy-status-btn`, `.status-caret`, `.easy-status-menu`, `.status-menu-opt`.
+  - Responsive Table: `#tabEasyApply .reach-table`, `.col-check`, `.col-role`, `.col-location`, `.col-exp`, `.col-status`, `.col-date`, `.col-actions`, `.easy-role-subline`, `.col-mobile-loc`, `.col-mobile-date`.
+  - Status Menu: `.easy-status-wrap`, `.tag-easy-status-btn`, `.status-caret`, `.easy-status-menu` (`position: fixed; z-index: 99999`), `.status-menu-opt`, `.opt-not-found`.
   - Details Modal: `.easy-modal-meta-grid`, `.easy-jd-box`, `.modal-status-toggle-wrap`, `.btn-modal-status-chip`.
+  - Screening Modal: `.screening-modal`, `.screening-job-card`, `.screening-warning-banner`, `.screening-question-card`, `.screening-q-num`, `.screening-q-text`, `.screening-q-type`, `.screening-empty`, `.screening-modal-foot`.
 
 ### 12. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
 - **Scope**: Media queries (`<= 1024px`, `<= 768px`, `<= 480px`), off-canvas mobile drawer, compact headers, mobile cards.

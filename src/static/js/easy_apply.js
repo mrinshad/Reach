@@ -44,6 +44,7 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const applied = list.filter((p) => p.status === 'APPLIED').length;
   const questionnaire = list.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
   const ready = list.filter((p) => p.status === 'DISCOVERED').length;
+  const notFound = list.filter((p) => p.status === 'NOT_FOUND').length;
 
   const totalEl = document.getElementById('easyKpiTotal');
   if (totalEl) totalEl.textContent = total;
@@ -57,6 +58,9 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const readyEl = document.getElementById('easyKpiReady');
   if (readyEl) readyEl.textContent = ready;
 
+  const notFoundEl = document.getElementById('easyKpiNotFound');
+  if (notFoundEl) notFoundEl.textContent = notFound;
+
   // Filter Pill Counter Badges
   const countAll = document.getElementById('countPillAll');
   if (countAll) countAll.textContent = total;
@@ -69,6 +73,9 @@ function updateEasyKPIs(posts = easyApplyPosts) {
 
   const countApplied = document.getElementById('countPillApplied');
   if (countApplied) countApplied.textContent = applied;
+
+  const countNF = document.getElementById('countPillNotFound');
+  if (countNF) countNF.textContent = notFound;
 
   const badgeEl = document.getElementById('countEasyApply');
   if (badgeEl) {
@@ -86,6 +93,7 @@ function filterEasyApplyStatus(status) {
     DISCOVERED: document.getElementById('pillEasyDiscovered'),
     REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
     APPLIED: document.getElementById('pillEasyApplied'),
+    NOT_FOUND: document.getElementById('pillEasyNotFound'),
   };
 
   Object.entries(pills).forEach(([key, el]) => {
@@ -153,6 +161,9 @@ function renderEasyApplyTable() {
     } else if (post.status === 'REJECTED') {
       statusBadgeText = '✕ Dismissed';
       statusBadgeClass = 'rejected';
+    } else if (post.status === 'NOT_FOUND') {
+      statusBadgeText = '🚫 Not Found';
+      statusBadgeClass = 'not-found';
     }
 
     const statusDropdown = `
@@ -171,6 +182,9 @@ function renderEasyApplyTable() {
           <button class="status-menu-opt opt-applied" onclick="setEasyPostStatus('${post.id}', 'APPLIED', event)">
             <span>✓</span><span>Mark Applied</span>
           </button>
+          <button class="status-menu-opt opt-not-found" onclick="setEasyPostStatus('${post.id}', 'NOT_FOUND', event)">
+            <span>🚫</span><span>Not Found / Closed</span>
+          </button>
         </div>
       </div>
     `;
@@ -179,19 +193,22 @@ function renderEasyApplyTable() {
     const dateText = typeof formatPostDateTimeWithRelative === 'function'
       ? formatPostDateTimeWithRelative(post)
       : (typeof formatDateTime === 'function' ? formatDateTime(post.created_at) : (post.created_at || '—'));
+    const locText = escapeHtml(post.location || 'India');
 
     let actionBtn = `<button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>`;
     if (post.status === 'APPLIED') {
       actionBtn = `<span class="tag-easy-status applied" style="opacity: 0.9; font-size: 0.68rem; cursor: default;">✓ Submitted</span>`;
     } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
-      actionBtn = `<button class="btn btn-outline btn-xs" onclick="openEasyDetailsModal('${post.id}')" title="Screen questionnaire requirements" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>`;
+      actionBtn = `<button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>`;
+    } else if (post.status === 'NOT_FOUND') {
+      actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;">🚫 Closed</span>`;
     }
 
     tr.innerHTML = `
-      <td width="38">
+      <td class="col-check">
         <input type="checkbox" class="easy-checkbox" value="${post.id}" ${isSelected ? 'checked' : ''} onchange="toggleSelectEasyJob('${post.id}', this.checked)" />
       </td>
-      <td>
+      <td class="col-role">
         <div class="easy-role-cell">
           <a href="javascript:void(0)" onclick="openEasyDetailsModal('${post.id}')" class="easy-job-title-link" title="Click to view full job details">
             ${escapeHtml(post.author_headline || 'Software Role')}
@@ -200,24 +217,28 @@ function renderEasyApplyTable() {
             <span style="opacity: 0.7;">🏢</span>
             <span>${escapeHtml(post.author_name || 'Company')}</span>
           </span>
+          <span class="easy-role-subline">
+            <span class="col-mobile-loc">📍 ${locText}</span>
+            <span class="col-mobile-date">⏱ ${escapeHtml(dateText)}</span>
+          </span>
         </div>
       </td>
-      <td width="180">
+      <td class="col-location">
         <span class="easy-location-text" title="${escapeHtml(post.location || 'India')}">
           <span style="opacity: 0.7;">📍</span>
-          <span>${escapeHtml(post.location || 'India')}</span>
+          <span>${locText}</span>
         </span>
       </td>
-      <td width="110">
+      <td class="col-exp">
         <span class="pill-badge badge-exp" style="font-size: 0.7rem;">${escapeHtml(expText)}</span>
       </td>
-      <td width="160">
+      <td class="col-status">
         ${statusDropdown}
       </td>
-      <td width="155">
+      <td class="col-date">
         <span class="easy-date-text" title="${escapeHtml(post.created_at || '')}">${escapeHtml(dateText)}</span>
       </td>
-      <td width="140" style="text-align: right;">
+      <td class="col-actions">
         <div class="easy-actions-cell">
           <button class="icon-btn sm" onclick="copyEasyJobLink('${post.id}')" title="Copy LinkedIn Job Link">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -347,11 +368,14 @@ function openEasyDetailsModal(postId) {
   // Questionnaire box
   const qBox = document.getElementById('easyModalQuestionnaireBox');
   const qNotes = document.getElementById('easyModalQuestionnaireNotes');
+  const viewQBtn = document.getElementById('btnEasyModalViewQuestions');
   if (post.status === 'REQUIRES_QUESTIONNAIRE' && post.rejection_reason) {
     if (qBox) qBox.classList.remove('hidden');
     if (qNotes) qNotes.textContent = post.rejection_reason;
+    if (viewQBtn) viewQBtn.classList.remove('hidden');
   } else {
     if (qBox) qBox.classList.add('hidden');
+    if (viewQBtn) viewQBtn.classList.add('hidden');
   }
 
   modal.classList.remove('hidden');
@@ -504,25 +528,60 @@ async function batchApplySelectedEasyJobs() {
   fetchEasyApplyPosts();
 }
 
-// Status Transitions & Interactivity
+// Status Transitions & Interactivity — Fixed-Position Smart Dropdown
 function toggleEasyStatusMenu(postId, event) {
   if (event) event.stopPropagation();
   const wrap = document.getElementById(`status-wrap-${postId}`);
-  if (!wrap) return;
-  const isOpen = wrap.classList.contains('open');
-  document.querySelectorAll('.easy-status-wrap.open').forEach((el) => {
-    if (el !== wrap) el.classList.remove('open');
+  const menu = document.getElementById(`status-menu-${postId}`);
+  if (!wrap || !menu) return;
+
+  const isVisible = menu.classList.contains('menu-visible');
+
+  // Close all other open menus
+  closeAllEasyStatusMenus();
+
+  if (isVisible) return; // was open, now closed
+
+  // Position menu using fixed coordinates relative to viewport
+  const btn = wrap.querySelector('.tag-easy-status-btn');
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  const menuHeight = 170; // approx height of 4 menu items
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+
+  menu.style.left = `${rect.left}px`;
+
+  if (spaceBelow < menuHeight && spaceAbove > menuHeight) {
+    // Open upward
+    menu.style.top = `${rect.top - menuHeight - 4}px`;
+  } else {
+    // Open downward
+    menu.style.top = `${rect.bottom + 4}px`;
+  }
+
+  menu.classList.add('menu-visible');
+  wrap.classList.add('open');
+}
+
+function closeAllEasyStatusMenus() {
+  document.querySelectorAll('.easy-status-menu.menu-visible').forEach((el) => {
+    el.classList.remove('menu-visible');
   });
-  wrap.classList.toggle('open', !isOpen);
+  document.querySelectorAll('.easy-status-wrap.open').forEach((el) => {
+    el.classList.remove('open');
+  });
 }
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.easy-status-wrap')) {
-    document.querySelectorAll('.easy-status-wrap.open').forEach((el) => {
-      el.classList.remove('open');
-    });
+    closeAllEasyStatusMenus();
   }
 });
+
+// Close menus on scroll/resize to prevent orphaned floating menus
+window.addEventListener('scroll', closeAllEasyStatusMenus, true);
+window.addEventListener('resize', closeAllEasyStatusMenus);
 
 async function setEasyPostStatus(postId, newStatus, event) {
   if (event) event.stopPropagation();
@@ -594,19 +653,175 @@ async function setModalPostStatus(newStatus) {
 
 function updateModalStatusChips(status) {
   const statusEl = document.getElementById('easyModalStatus');
-  if (statusEl) statusEl.textContent = status;
+  if (statusEl) {
+    const labels = {
+      DISCOVERED: '⚡ Ready',
+      REQUIRES_QUESTIONNAIRE: '📋 Screening',
+      APPLIED: '✓ Applied',
+      NOT_FOUND: '🚫 Not Found',
+      REJECTED: '✕ Dismissed',
+    };
+    statusEl.textContent = labels[status] || status;
+  }
 
-  ['chipReady', 'chipScreening', 'chipApplied'].forEach((id) => {
-    const chip = document.getElementById(id);
-    if (chip) chip.classList.remove('active');
+  // Highlight matching modal chip via inline onclick attribute value matching
+  document.querySelectorAll('.modal-status-toggle-wrap .btn-modal-status-chip').forEach((chip) => {
+    const onclick = chip.getAttribute('onclick') || '';
+    const isActive = onclick.includes(`'${status}'`);
+    chip.classList.toggle('active', isActive);
   });
+}
 
-  if (status === 'DISCOVERED') {
-    document.getElementById('chipReady')?.classList.add('active');
-  } else if (status === 'REQUIRES_QUESTIONNAIRE') {
-    document.getElementById('chipScreening')?.classList.add('active');
-  } else if (status === 'APPLIED') {
-    document.getElementById('chipApplied')?.classList.add('active');
+// =============================================
+// SCREENING QUESTIONNAIRE MODAL
+// =============================================
+
+let activeScreeningPost = null;
+
+/**
+ * Parse screening questions from rejection_reason.
+ * Supports both legacy format ("Questions: Q1; Q2; Q3") and
+ * future JSON format ({"questions": [{"label": "...", "type": "...", "step": N}]})
+ */
+function parseScreeningQuestions(rejectionReason) {
+  if (!rejectionReason) return [];
+
+  // Try JSON format first
+  try {
+    const parsed = JSON.parse(rejectionReason);
+    if (parsed && Array.isArray(parsed.questions)) {
+      return parsed.questions.map((q) => ({
+        label: q.label || q,
+        type: q.type || null,
+        step: q.step || null,
+      }));
+    }
+  } catch (_) {
+    // Not JSON — use legacy string parsing
+  }
+
+  // Legacy format: "Questions: Q1; Q2; Q3"
+  let raw = rejectionReason;
+  if (raw.startsWith('Questions: ')) {
+    raw = raw.substring('Questions: '.length);
+  }
+  return raw.split('; ').filter(Boolean).map((q) => ({ label: q.trim(), type: null, step: null }));
+}
+
+function openScreeningModal(postId) {
+  const post = easyApplyPosts.find((p) => p.id === postId);
+  if (!post) return;
+  activeScreeningPost = post;
+
+  const modal = document.getElementById('modalScreeningQuestions');
+  if (!modal) return;
+
+  // Populate job info
+  document.getElementById('screeningJobTitle').textContent = post.author_headline || 'Job Details';
+  document.getElementById('screeningJobCompany').textContent = `🏢 ${post.author_name || 'Company'}`;
+  document.getElementById('screeningJobLocation').textContent = `📍 ${post.location || 'India'}`;
+
+  const dateText = typeof formatPostDateTimeWithRelative === 'function'
+    ? formatPostDateTimeWithRelative(post)
+    : (typeof formatDateTime === 'function' ? formatDateTime(post.created_at) : (post.created_at || '—'));
+  document.getElementById('screeningJobDate').textContent = `📅 ${dateText}`;
+
+  const linkEl = document.getElementById('screeningOpenLink');
+  if (linkEl) linkEl.href = post.post_url || '#';
+
+  // Parse and render questions
+  const questions = parseScreeningQuestions(post.rejection_reason);
+  const listEl = document.getElementById('screeningQuestionsList');
+  const emptyEl = document.getElementById('screeningEmptyState');
+
+  if (questions.length > 0) {
+    listEl.classList.remove('hidden');
+    emptyEl.classList.add('hidden');
+
+    listEl.innerHTML = questions.map((q, i) => {
+      const typeTag = q.type
+        ? `<div class="screening-q-type">${escapeHtml(q.type)}${q.step ? ` · Step ${q.step}` : ''}</div>`
+        : (q.step ? `<div class="screening-q-type">Step ${q.step}</div>` : '');
+      return `
+        <div class="screening-question-card">
+          <span class="screening-q-num">${i + 1}</span>
+          <div>
+            <div class="screening-q-text">${escapeHtml(q.label)}</div>
+            ${typeTag}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    listEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeScreeningModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('modal-close-btn')) {
+    return;
+  }
+  const modal = document.getElementById('modalScreeningQuestions');
+  if (modal) modal.classList.add('hidden');
+  activeScreeningPost = null;
+}
+
+function openScreeningFromDetails() {
+  if (!activeEasyModalPost) return;
+  const postId = activeEasyModalPost.id;
+  closeEasyDetailsModal();
+  openScreeningModal(postId);
+}
+
+function copyScreeningLink() {
+  if (activeScreeningPost && activeScreeningPost.post_url) {
+    navigator.clipboard.writeText(activeScreeningPost.post_url).then(() => {
+      showToast('✓ Job link copied for manual screening!', 'success');
+    }).catch(() => {
+      showToast('Failed to copy to clipboard', 'error');
+    });
+  }
+}
+
+async function markScreeningAsReady() {
+  if (!activeScreeningPost) return;
+  await setEasyPostStatus(activeScreeningPost.id, 'DISCOVERED');
+  closeScreeningModal();
+  showToast('✓ Marked as Ready — you can now apply manually', 'success');
+}
+
+async function triggerScreeningRescan() {
+  if (!activeScreeningPost) return;
+  const postId = activeScreeningPost.id;
+  const title = activeScreeningPost.author_headline || 'this job';
+
+  const confirmed = await showConfirm(
+    'Re-Scan Screening Questions',
+    `Re-crawl all Easy Apply form pages for "${title}" to collect every question?\n\nThis will navigate through all steps with dummy data but will NOT submit the application.`,
+    { confirmText: 'Re-Scan Now' }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/easy-apply/${postId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scan_only: true }),
+    });
+    if (res.ok) {
+      showToast('⚡ Re-scan queued — questions will be updated when complete', 'info');
+      closeScreeningModal();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Re-Scan Failed', err.detail || 'Could not start re-scan.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
   }
 }
 
@@ -626,7 +841,14 @@ window.batchCopyEasyLinks = batchCopyEasyLinks;
 window.batchDismissEasyJobs = batchDismissEasyJobs;
 window.batchApplySelectedEasyJobs = batchApplySelectedEasyJobs;
 window.toggleEasyStatusMenu = toggleEasyStatusMenu;
+window.closeAllEasyStatusMenus = closeAllEasyStatusMenus;
 window.setEasyPostStatus = setEasyPostStatus;
 window.batchSetEasyStatus = batchSetEasyStatus;
 window.setModalPostStatus = setModalPostStatus;
 window.clearEasySelection = clearEasySelection;
+window.openScreeningModal = openScreeningModal;
+window.closeScreeningModal = closeScreeningModal;
+window.openScreeningFromDetails = openScreeningFromDetails;
+window.copyScreeningLink = copyScreeningLink;
+window.markScreeningAsReady = markScreeningAsReady;
+window.triggerScreeningRescan = triggerScreeningRescan;
