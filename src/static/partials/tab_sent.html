@@ -1,75 +1,165 @@
-<!-- TAB 3: Others (Sent & Cancelled Applications History) -->
+<!-- TAB 3: Others (Sent & Cancelled Applications History + Activity & Run Logs) -->
     <div class="tab-panel hidden" id="tabSent">
-      <div class="toolbar" style="margin-bottom: 0.85rem;">
-        <div class="filter-pills" id="othersPills">
-          <button class="pill active" data-others="ALL" onclick="setOthersFilter('ALL')">
-            <span>All Others</span> <span class="badge-count" id="countOthersAll">0</span>
-          </button>
-          <button class="pill" data-others="SENT" onclick="setOthersFilter('SENT')">
-            <span>✉ Sent</span> <span class="badge-count" id="countOthersSent">0</span>
-          </button>
-          <button class="pill" data-others="REJECTED" onclick="setOthersFilter('REJECTED')">
-            <span>🚫 Cancelled</span> <span class="badge-count" id="countOthersCancelled">0</span>
-          </button>
-        </div>
-        <div class="toolbar-right">
-          <button class="btn btn-primary btn-sm hidden" id="btnBatchRestoreSent" onclick="restoreBatchSelectedSent()" title="Restore selected applications back to Review & Drafts">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            <span>Restore (<span id="selectedSentCount">0</span>)</span>
-          </button>
-          <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
-            <option value="ALL" selected>All Reasons</option>
-          </select>
-          <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
-          <div class="search-box">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
+      <!-- Top Level Workspace View Switcher -->
+      <div class="history-view-switcher">
+        <button class="view-switch-btn active" id="btnViewApplications" onclick="switchHistoryView('applications')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Application Outreach</span>
+          <span class="view-switch-badge" id="badgeApplicationsCount">0</span>
+        </button>
+        <button class="view-switch-btn" id="btnViewActivityLogs" onclick="switchHistoryView('logs')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <span>Activity & Run Logs</span>
+          <span class="view-switch-badge" id="badgeActivityLogsCount">0</span>
+        </button>
+      </div>
+
+      <!-- SECTION 1: Applications Outreach (Sent & Cancelled History) -->
+      <div id="sectionApplicationsHistory">
+        <div class="toolbar" style="margin-bottom: 0.85rem;">
+          <div class="filter-pills" id="othersPills">
+            <button class="pill active" data-others="ALL" onclick="setOthersFilter('ALL')">
+              <span>All Others</span> <span class="badge-count" id="countOthersAll">0</span>
+            </button>
+            <button class="pill" data-others="SENT" onclick="setOthersFilter('SENT')">
+              <span>✉ Sent</span> <span class="badge-count" id="countOthersSent">0</span>
+            </button>
+            <button class="pill" data-others="REJECTED" onclick="setOthersFilter('REJECTED')">
+              <span>🚫 Cancelled</span> <span class="badge-count" id="countOthersCancelled">0</span>
+            </button>
           </div>
-          <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
-            <span>✕ Clear</span>
-          </button>
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm hidden" id="btnBatchRestoreSent" onclick="restoreBatchSelectedSent()" title="Restore selected applications back to Review & Drafts">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              <span>Restore (<span id="selectedSentCount">0</span>)</span>
+            </button>
+            <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
+              <option value="ALL" selected>All Reasons</option>
+            </select>
+            <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
+            <div class="search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
+            </div>
+            <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
+              <span>✕ Clear</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table class="reach-table">
+            <thead>
+              <tr>
+                <th width="35">
+                  <input type="checkbox" id="selectAllSentCheckbox" onchange="toggleSelectAllSent(this.checked)" title="Select all on this page" />
+                </th>
+                <th>Recruiter / Author</th>
+                <th>Recipient Email</th>
+                <th>Subject / Note</th>
+                <th>Status & Reason</th>
+                <th>Updated</th>
+                <th width="175" style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sentTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Sent Table Footer / Pagination Controls -->
+          <div class="table-footer" id="sentTableFooter">
+            <div class="pagination-info" id="sentPaginationInfo">
+              Showing 0–0 of 0 applications
+            </div>
+
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectSentLimit" onchange="changeSentRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+
+              <div class="page-buttons" id="sentPageButtons">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="table-card">
-        <table class="reach-table">
-          <thead>
-            <tr>
-              <th width="35">
-                <input type="checkbox" id="selectAllSentCheckbox" onchange="toggleSelectAllSent(this.checked)" title="Select all on this page" />
-              </th>
-              <th>Recruiter / Author</th>
-              <th>Recipient Email</th>
-              <th>Subject / Note</th>
-              <th>Status & Reason</th>
-              <th>Updated</th>
-              <th width="175" style="text-align: right;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="sentTableBody">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-
-        <!-- Sent Table Footer / Pagination Controls -->
-        <div class="table-footer" id="sentTableFooter">
-          <div class="pagination-info" id="sentPaginationInfo">
-            Showing 0–0 of 0 applications
+      <!-- SECTION 2: Activity & Run Logs (Automated Background Operations) -->
+      <div id="sectionActivityLogs" class="hidden">
+        <div class="toolbar" style="margin-bottom: 0.85rem;">
+          <div class="filter-pills" id="activityLogPills">
+            <button class="pill active" data-act-type="ALL" onclick="setActivityLogTypeFilter('ALL')">
+              <span>All Activities</span> <span class="badge-count" id="countLogsAll">0</span>
+            </button>
+            <button class="pill" data-act-type="crawler" onclick="setActivityLogTypeFilter('crawler')">
+              <span>💼 LinkedIn Crawls</span>
+            </button>
+            <button class="pill" data-act-type="easy_apply_scraper" onclick="setActivityLogTypeFilter('easy_apply_scraper')">
+              <span>⚡ Easy Apply</span>
+            </button>
+            <button class="pill" data-act-type="chatgpt_batch" onclick="setActivityLogTypeFilter('chatgpt_batch')">
+              <span>🤖 AI Drafts</span>
+            </button>
           </div>
+          <div class="toolbar-right">
+            <select id="selectActivityLogStatus" class="select-clean" onchange="applyActivityLogStatusFilter()" title="Filter by outcome status">
+              <option value="ALL" selected>All Statuses</option>
+              <option value="completed">✓ Completed</option>
+              <option value="running">⚡ Running</option>
+              <option value="error">✗ Failed</option>
+              <option value="stopped">🛑 Stopped</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="fetchActivityLogs()" title="Refresh Activity Logs">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
 
-          <div class="pagination-controls">
-            <div class="rows-per-page">
-              <span>Rows:</span>
-              <select id="selectSentLimit" onchange="changeSentRowsPerPage(this.value)">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
+        <div class="table-card">
+          <table class="reach-table activity-logs-table">
+            <thead>
+              <tr>
+                <th width="210">Activity</th>
+                <th>Involved (Parameters / Scope)</th>
+                <th>Result & Summary</th>
+                <th width="120">Duration</th>
+                <th width="140">When</th>
+                <th width="120" style="text-align: right;">Terminal Log</th>
+              </tr>
+            </thead>
+            <tbody id="activityLogsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Activity Logs Table Footer / Pagination Controls -->
+          <div class="table-footer" id="activityLogsTableFooter">
+            <div class="pagination-info" id="activityLogsPaginationInfo">
+              Showing 0–0 of 0 activity runs
             </div>
 
-            <div class="page-buttons" id="sentPageButtons">
-              <!-- Rendered dynamically -->
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectActivityLogsLimit" onchange="changeActivityLogsRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+
+              <div class="page-buttons" id="activityLogsPageButtons">
+                <!-- Rendered dynamically -->
+              </div>
             </div>
           </div>
         </div>

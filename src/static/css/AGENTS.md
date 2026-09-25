@@ -56,8 +56,8 @@ This directory contains the modular styling system for the Reach web application
   - Draft Editor: `.email-draft-container`, `.email-subject-input`, `.email-body-textarea`, `.review-actions-bar`.
 
 ### 8. [`history.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/history.css)
-- **Scope**: Sent and cancelled history tab (`#tabSent`), status filter tabs, sent emails data table.
-- **Key Classes**: `.history-filter-bar`, `.history-table`, `.status-badge-sent`, `.status-badge-cancelled`, `.reason-pill`.
+- **Scope**: Sent and cancelled history tab (`#tabSent`), segmented view switcher, sent applications data table, automated activity & run log history table, parameter chips, status badges, and terminal output modal.
+- **Key Classes**: `.history-view-switcher`, `.view-switch-btn`, `.view-switch-badge`, `.history-filter-bar`, `.history-table`, `.status-badge-sent`, `.status-badge-cancelled`, `.reason-pill`, `.activity-logs-table`, `.activity-icon-box`, `.param-pill`, `.run-status-badge`, `.btn-view-run-logs`, `.logs-history-btn`, `.run-logs-dialog`, `.run-terminal-box`.
 
 ### 9. [`tasks.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/tasks.css)
 - **Scope**: Background automation tasks, live task drawer, terminal log monitor, alert banner.

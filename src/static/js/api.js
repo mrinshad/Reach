@@ -155,7 +155,11 @@ async function loadDashboardData() {
   } else if (state.activeTab === 'tabReview') {
     await fetchReviewPosts();
   } else if (state.activeTab === 'tabSent') {
-    await fetchSentPosts();
+    if (typeof currentHistoryView !== 'undefined' && currentHistoryView === 'logs') {
+      if (typeof fetchActivityLogs === 'function') await fetchActivityLogs();
+    } else {
+      await fetchSentPosts();
+    }
   } else if (state.activeTab === 'tabAnalytics') {
     await loadAnalytics(state.analyticsDays || 30);
   }

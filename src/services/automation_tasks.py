@@ -22,6 +22,9 @@ from src.db import (
     update_post_status,
     get_recently_sent_recipients,
     SEND_COOLDOWN_DAYS,
+    create_activity_log,
+    update_activity_log_progress,
+    finish_activity_log,
 )
 from .firefox_connector import launch_firefox_context
 from .chatgpt_service import (
@@ -53,6 +56,9 @@ class TaskManager:
         self._active_proc: Optional[Any] = None
         self._active_context: Optional[Any] = None
         self._current_task: Optional[Dict[str, Any]] = None
+        self._current_run_id: Optional[str] = None
+        self._current_task_type: Optional[str] = None
+        self._current_task_params: Optional[Dict[str, Any]] = None
         self.state: Dict[str, Any] = {
             "status": "idle",       # idle | running | completed | error
             "task_name": "",
@@ -120,6 +126,17 @@ class TaskManager:
             self.state["current_step"] = "Stopped by user"
             self.state["finished_at"] = time.time()
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] 🛑 {task_name} was stopped by user.")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="stopped",
+                    result_summary="Stopped by user",
+                    crawl_stats=self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                )
             return True
 
     def enqueue_task(
@@ -199,9 +216,22 @@ class TaskManager:
 
             self._cancel_requested.clear()
             self._current_task = current_item
+            self._current_run_id = current_item.get("id")
+            self._current_task_type = current_item.get("type") or "task"
+            self._current_task_params = current_item.get("metadata") or {}
             runner = current_item["runner"]
             args = current_item.get("args", ())
             kwargs = current_item.get("kwargs", {})
+
+            # Persist initial activity run in DB
+            create_activity_log(
+                log_id=self._current_run_id,
+                task_type=self._current_task_type,
+                task_name=current_item.get("name", "Task"),
+                short_name=current_item.get("short_name", ""),
+                parameters=self._current_task_params,
+                total_items=1,
+            )
 
             try:
                 runner(*args, **kwargs)
@@ -271,6 +301,24 @@ class TaskManager:
                 "finished_at": None,
                 "crawl_stats": None,
             }
+            if not self._current_run_id:
+                self._current_run_id = f"task_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+                self._current_task_type = "task"
+                self._current_task_params = {}
+                create_activity_log(
+                    log_id=self._current_run_id,
+                    task_type=self._current_task_type,
+                    task_name=task_name,
+                    short_name=short_name or task_name,
+                    parameters=self._current_task_params,
+                    total_items=total_items,
+                )
+            else:
+                update_activity_log_progress(
+                    self._current_run_id,
+                    completed_items=0,
+                    logs=self.state["logs"],
+                )
 
     def log(self, message: str):
         with self._lock:
@@ -307,6 +355,17 @@ class TaskManager:
             if crawl_stats:
                 self.state["crawl_stats"] = crawl_stats
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✓ {success_message}")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="completed",
+                    result_summary=success_message,
+                    crawl_stats=crawl_stats or self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                )
 
     def fail_task(self, error_message: str):
         with self._lock:
@@ -315,6 +374,17 @@ class TaskManager:
             self.state["current_step"] = f"Failed: {error_message}"
             self.state["finished_at"] = time.time()
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✗ Error: {error_message}")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="error",
+                    result_summary=f"Failed: {error_message}",
+                    crawl_stats=self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                )
 
     def clear_task(self):
         with self._lock:
@@ -969,11 +1039,19 @@ def run_scraper_subprocess_with_timeout(
             )
         elif proc.returncode == 0:
             if parsed_stats:
-                custom_msg = (
-                    f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
-                    f"{parsed_stats.get('newly_added', 0)} newly added, "
-                    f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
-                )
+                if "applied" in parsed_stats:
+                    custom_msg = (
+                        f"Finished: {parsed_stats.get('total_crawled', 0)} jobs found — "
+                        f"{parsed_stats.get('applied', 0)} applied, "
+                        f"{parsed_stats.get('requires_questionnaire', 0)} screening questions, "
+                        f"{parsed_stats.get('ready_in_queue', 0)} ready in queue."
+                    )
+                else:
+                    custom_msg = (
+                        f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
+                        f"{parsed_stats.get('newly_added', 0)} newly added, "
+                        f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
+                    )
                 task_manager.finish_task(custom_msg, crawl_stats=parsed_stats)
             else:
                 task_manager.finish_task(finish_message)

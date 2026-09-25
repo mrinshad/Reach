@@ -346,6 +346,44 @@
     </div>
   </div>
 
+  <!-- Activity Run Terminal Logs Viewer Modal -->
+  <div class="modal-overlay hidden" id="modalRunTerminalLogs" onclick="closeRunLogsModal(event)">
+    <div class="modal-box modal-lg run-logs-dialog" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <div class="run-logs-icon-badge" id="runLogsModalIcon">📋</div>
+          <div>
+            <h3 id="runLogsModalTitle" style="font-size: 1.05rem; font-weight: 700; color: #fff;">Activity Terminal Log</h3>
+            <div id="runLogsModalSubtitle" style="font-size: 0.78rem; color: var(--text-muted);">Execution console output</div>
+          </div>
+        </div>
+        <button class="close-x" onclick="closeRunLogsModal()">×</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 0.5rem;">
+        <div class="run-logs-meta-bar" id="runLogsMetaBar">
+          <span class="run-meta-pill" id="runLogsMetaStatus">Completed</span>
+          <span class="run-meta-pill text-muted" id="runLogsMetaDuration">Duration: 45s</span>
+          <span class="run-meta-pill text-muted" id="runLogsMetaDate">When: Today</span>
+        </div>
+        <div class="run-logs-terminal-wrap">
+          <div class="run-logs-terminal-toolbar">
+            <span class="terminal-title">Terminal Console Output</span>
+            <button class="btn-copy-logs" onclick="copyRunLogs()" id="btnCopyRunLogs">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy Output</span>
+            </button>
+          </div>
+          <pre class="run-logs-terminal-body" id="runLogsTerminalBody"></pre>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="justify-content: flex-end;">
+        <button class="btn btn-secondary btn-sm" onclick="closeRunLogsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Non-Native Custom Confirm / Alert Dialog Component -->
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">

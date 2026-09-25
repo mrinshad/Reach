@@ -4,10 +4,18 @@ FastAPI router for sequential FIFO task queue management and automation job trig
 
 import uuid
 from datetime import datetime
-from typing import Optional
-from fastapi import APIRouter, HTTPException
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
 
-from src.db import upsert_post, get_post_by_id, get_recently_sent_recipients, SEND_COOLDOWN_DAYS
+from src.db import (
+    upsert_post,
+    get_post_by_id,
+    get_recently_sent_recipients,
+    SEND_COOLDOWN_DAYS,
+    get_activity_logs,
+    get_activity_log_by_id,
+    clear_activity_logs,
+)
 from src.services.automation_tasks import (
     task_manager,
     run_chatgpt_batch,
@@ -570,4 +578,35 @@ def api_launch_service_login(service: str):
         "message": f"Opening headed Firefox for {label} login...",
         **res,
     }
+
+
+# =====================================================================
+# ACTIVITY RUN LOGS & AUTOMATION HISTORY ENDPOINTS
+# =====================================================================
+
+@router.get("/activity-logs")
+def api_get_activity_logs(
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    type: Optional[str] = Query(None, description="Filter by task type, e.g. scraper, easy_apply"),
+    status: Optional[str] = Query(None, description="Filter by status, e.g. completed, error, stopped"),
+):
+    """Retrieve paginated activity run logs for automated background operations."""
+    return get_activity_logs(limit=limit, offset=offset, task_type=type, status=status)
+
+
+@router.get("/activity-logs/{log_id}")
+def api_get_activity_log_detail(log_id: str):
+    """Retrieve full activity log record including all console terminal logs."""
+    run = get_activity_log_by_id(log_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Activity log with ID '{log_id}' not found.")
+    return run
+
+
+@router.delete("/activity-logs")
+def api_clear_activity_logs():
+    """Clear all stored activity logs history."""
+    count = clear_activity_logs()
+    return {"success": True, "message": f"Cleared {count} activity log(s).", "count": count}
 

@@ -78,6 +78,28 @@ def init_db(db_url: str = DEFAULT_DB_URL):
         value TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS activity_logs (
+        id VARCHAR(64) PRIMARY KEY,
+        task_type VARCHAR(64) NOT NULL,
+        task_name VARCHAR(256) NOT NULL,
+        short_name VARCHAR(128),
+        parameters JSONB DEFAULT '{}',
+        status VARCHAR(32) NOT NULL DEFAULT 'running',
+        result_summary TEXT,
+        crawl_stats JSONB DEFAULT '{}',
+        logs TEXT[] DEFAULT '{}',
+        total_items INT DEFAULT 0,
+        completed_items INT DEFAULT 0,
+        started_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        finished_at TIMESTAMP WITH TIME ZONE,
+        duration_seconds REAL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(task_type);
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_status ON activity_logs(status);
     """
     alter_sql = """
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
@@ -94,4 +116,4 @@ def init_db(db_url: str = DEFAULT_DB_URL):
         conn.commit()
 
     seed_default_settings(db_url)
-    print("✓ PostgreSQL database initialized (tables: posts, settings).")
+    print("✓ PostgreSQL database initialized (tables: posts, settings, activity_logs).")
