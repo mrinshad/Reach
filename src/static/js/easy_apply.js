@@ -390,7 +390,7 @@ function openEasyDetailsModal(postId) {
 }
 
 function closeEasyDetailsModal(e) {
-  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn')) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn') && !e.target.classList.contains('close-dialog-btn')) {
     return;
   }
   const modal = document.getElementById('modalEasyDetails');
@@ -770,7 +770,7 @@ function openScreeningModal(postId) {
 }
 
 function closeScreeningModal(e) {
-  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn')) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn') && !e.target.classList.contains('close-dialog-btn')) {
     return;
   }
   const modal = document.getElementById('modalScreeningQuestions');

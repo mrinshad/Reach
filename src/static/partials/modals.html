@@ -384,6 +384,261 @@
     </div>
   </div>
 
+  <!-- LinkedIn Easy Apply Job Details & Screening Dialog Modal -->
+  <div class="modal-overlay hidden" id="modalEasyDetails" onclick="closeEasyDetailsModal(event)">
+    <div class="modal-box modal-lg easy-details-dialog" onclick="event.stopPropagation()">
+      <div class="modal-top easy-dialog-top">
+        <div class="easy-dialog-header-left">
+          <span class="portal-logo-icon linkedin sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z"/></svg>
+          </span>
+          <div class="easy-dialog-header-text">
+            <h3 id="easyModalJobTitle" class="easy-dialog-title" title="Job Details">Job Details</h3>
+            <div class="easy-dialog-subtitle">
+              <span id="easyModalHeaderCompany">-</span> &bull; <span id="easyModalHeaderLocation">-</span>
+            </div>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeEasyDetailsModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body easy-dialog-body">
+        <!-- 3-Card Meta Highlights Grid -->
+        <div class="easy-dialog-meta-grid">
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">🏢 Company</span>
+            <strong id="easyModalCompany" class="meta-tile-val">-</strong>
+          </div>
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">📍 Location</span>
+            <span id="easyModalLocation" class="meta-tile-val">-</span>
+          </div>
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">🎓 Experience</span>
+            <span id="easyModalExp" class="meta-tile-val">-</span>
+          </div>
+        </div>
+
+        <!-- Dedicated Status Switcher Card -->
+        <div class="easy-dialog-status-card">
+          <div class="status-card-header">
+            <span class="status-card-lbl">Current Application Status:</span>
+            <span id="easyModalStatus" class="status-card-badge">-</span>
+          </div>
+          <div class="modal-status-segmented">
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('DISCOVERED')" title="Move to Ready in Queue">
+              <span class="chip-dot cyan"></span>
+              <span>⚡ Ready</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('REQUIRES_QUESTIONNAIRE')" title="Move to Screening">
+              <span class="chip-dot amber"></span>
+              <span>📋 Screening</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('APPLIED')" title="Mark as Applied">
+              <span class="chip-dot green"></span>
+              <span>✓ Applied</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('NOT_FOUND')" title="Mark as Not Found / Closed">
+              <span class="chip-dot slate"></span>
+              <span>🚫 Not Found</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Questionnaire Alert Banner if applicable -->
+        <div class="questionnaire-screening-alert hidden" id="easyModalQuestionnaireBox">
+          <div style="display: flex; gap: 0.65rem; align-items: flex-start;">
+            <span style="font-size: 1.25rem; line-height: 1;">📋</span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <strong style="color: #fbbf24; font-size: 0.85rem;">Custom Questionnaire Detected:</strong>
+                <button class="btn btn-outline btn-xs" onclick="openScreeningFromDetails()" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); padding: 0.15rem 0.55rem;">
+                  <span>View Full Questions &rarr;</span>
+                </button>
+              </div>
+              <p id="easyModalQuestionnaireNotes" style="margin: 0.35rem 0 0; font-size: 0.77rem; color: #fde68a; line-height: 1.45;"></p>
+              <p style="margin: 0.25rem 0 0; font-size: 0.72rem; color: #94a3b8;">
+                This role requires questionnaire answers. Review questions before manual submission.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Description Container -->
+        <div class="easy-dialog-jd-section">
+          <div class="jd-section-header">
+            <span class="section-subtitle">Full Job Description</span>
+            <a id="easyModalLink" href="#" target="_blank" rel="noopener noreferrer" class="link-btn-text">
+              <span>Open on LinkedIn ↗</span>
+            </a>
+          </div>
+          <div class="easy-jd-box" id="easyModalFullText"></div>
+        </div>
+      </div>
+
+      <div class="modal-bottom easy-dialog-bottom">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="copyEasyModalLink()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy Link</span>
+          </button>
+          <button class="btn btn-outline btn-sm hidden" id="btnEasyModalViewQuestions" onclick="openScreeningFromDetails()" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">
+            <span>📋 View Questions</span>
+          </button>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeEasyDetailsModal()">Close</button>
+          <button class="btn btn-primary btn-sm" id="btnEasyModalApply" onclick="triggerEasyModalApply()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Apply via Easy Apply</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Screening Questionnaire Modal -->
+  <div class="modal-overlay hidden" id="modalScreeningQuestions" onclick="closeScreeningModal(event)">
+    <div class="modal-box modal-md screening-modal" onclick="event.stopPropagation()">
+      <div class="modal-top screening-modal-top">
+        <div style="display: flex; align-items: center; gap: 0.55rem;">
+          <span class="screening-head-icon">📋</span>
+          <h3 class="modal-title">Screening Questions</h3>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeScreeningModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Job Info Header Card -->
+        <div class="screening-job-card">
+          <div class="screening-job-title" id="screeningJobTitle">-</div>
+          <div class="screening-job-meta">
+            <span id="screeningJobCompany">🏢 -</span>
+            <span id="screeningJobLocation">📍 -</span>
+            <span id="screeningJobDate">📅 -</span>
+          </div>
+        </div>
+
+        <!-- Warning Banner -->
+        <div class="screening-warning-banner">
+          <span class="screening-warning-icon">⚠️</span>
+          <div>
+            <strong>Custom questionnaire detected.</strong>
+            <span>Review the questions below before applying manually.</span>
+          </div>
+        </div>
+
+        <!-- Structured Question Cards -->
+        <div class="screening-questions-list" id="screeningQuestionsList">
+          <!-- Dynamically populated by JS -->
+        </div>
+
+        <!-- Empty State (no questions parsed) -->
+        <div class="screening-empty hidden" id="screeningEmptyState">
+          <span style="font-size: 1.5rem;">🔍</span>
+          <p>No structured questions were captured during the initial scan.</p>
+          <p style="font-size: 0.72rem; color: var(--text-muted);">Click "Re-Scan Questions" to re-crawl all form pages, or open the job on LinkedIn to review manually.</p>
+        </div>
+      </div>
+
+      <div class="modal-bottom screening-modal-foot">
+        <div class="screening-foot-left">
+          <button class="btn btn-outline btn-sm" onclick="copyScreeningLink()" title="Copy job link">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy Link</span>
+          </button>
+          <a class="btn btn-outline btn-sm" id="screeningOpenLink" href="#" target="_blank" rel="noopener noreferrer" title="Open on LinkedIn">
+            <span>↗ Open on LinkedIn</span>
+          </a>
+        </div>
+        <div class="screening-foot-right">
+          <button class="btn btn-outline btn-sm" onclick="markScreeningAsReady()" title="Mark as ready to apply manually">
+            <span>✓ Mark Screened</span>
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="triggerScreeningRescan()" title="Re-crawl all form pages for questions" id="btnScreeningRescan">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Re-Scan Questions</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Search & CSV Keyword Import Modal -->
+  <div class="modal-overlay hidden" id="modalBulkEasySearch" onclick="closeBulkSearchModal(event)">
+    <div class="modal-box modal-md bulk-search-modal" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <span class="bulk-search-icon">📁</span>
+          <div>
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">Bulk Search &amp; Keyword Import</h3>
+            <span style="font-size: 0.74rem; color: var(--text-dim);">Queue multiple role searches sequentially in background</span>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeBulkSearchModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body" style="gap: 1rem;">
+        <!-- File Upload Dropzone -->
+        <div class="bulk-dropzone" onclick="document.getElementById('bulkCsvFileInput').click()">
+          <input type="file" id="bulkCsvFileInput" accept=".csv,.txt" style="display: none;" onchange="handleBulkCsvUpload(event)" />
+          <span class="dropzone-icon">📥</span>
+          <div class="dropzone-text">
+            <strong>Click to upload CSV or TXT file</strong>
+            <span>Supports comma-separated or line-by-line role names (e.g. up to 50 roles)</span>
+          </div>
+        </div>
+
+        <!-- Direct Textarea Entry / Paste -->
+        <div class="form-block">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin: 0;">
+              Or Paste / Type Role Keywords:
+            </label>
+            <span id="bulkKeywordsCount" class="badge-subtle">0 keywords</span>
+          </div>
+          <textarea id="bulkKeywordsInput" class="input-clean bulk-keywords-textarea" rows="4" placeholder="e.g. Full Stack Developer, Frontend Engineer, React Developer, Node.js Backend, Python Engineer..." oninput="handleBulkKeywordsInput(this.value)"></textarea>
+        </div>
+
+        <!-- Keywords Chips Preview -->
+        <div class="bulk-keywords-preview hidden" id="bulkKeywordsPreview">
+          <!-- Rendered chips inserted here -->
+        </div>
+
+        <!-- Shared Configuration (Location & Time Filter) -->
+        <div class="bulk-config-grid">
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Location for all searches:</label>
+            <div class="easy-input-group" style="height: 36px;">
+              <svg class="easy-input-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+              <input type="text" id="bulkSearchLocation" class="easy-input" value="India" placeholder="Location..." />
+            </div>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Time Posted Filter:</label>
+            <select id="bulkTimeFilter" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="24h" selected>Past 24 Hours</option>
+              <option value="week">Past Week</option>
+              <option value="month">Past Month</option>
+              <option value="all">Anytime</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="clearBulkKeywords()">Clear List</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeBulkSearchModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawl" onclick="submitBulkEasySearch()" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="btnLaunchBulkCrawlText">Queue Searches</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Non-Native Custom Confirm / Alert Dialog Component -->
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">

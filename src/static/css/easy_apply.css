@@ -771,8 +771,39 @@
    JOB DETAILS MODAL DIALOG (EASY APPLY)
    ============================================= */
 
+@keyframes modalDialogPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .easy-details-dialog {
-  max-width: 760px;
+  max-width: 680px;
+  width: 92%;
+  margin: auto;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.88), 0 0 0 1px rgba(99, 102, 241, 0.18), 0 0 35px rgba(99, 102, 241, 0.08);
+  animation: modalDialogPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.easy-dialog-top {
+  background: #151f33;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .easy-dialog-header-left {
@@ -780,10 +811,16 @@
   align-items: center;
   gap: 0.75rem;
   min-width: 0;
+  flex: 1;
+}
+
+.easy-dialog-header-text {
+  min-width: 0;
+  flex: 1;
 }
 
 .easy-dialog-title {
-  font-size: 1.1rem;
+  font-size: 1.12rem;
   font-weight: 700;
   color: #fff;
   margin: 0;
@@ -796,10 +833,47 @@
 .easy-dialog-subtitle {
   font-size: 0.76rem;
   color: var(--text-dim);
-  margin-top: 0.15rem;
+  margin-top: 0.2rem;
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-dialog-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #94a3b8;
+  font-size: 1.25rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.close-dialog-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  transform: scale(1.04);
+}
+
+.easy-dialog-body {
+  padding: 1.15rem 1.25rem;
+  background: #111827;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  overflow-y: auto;
 }
 
 /* 3-Card Meta Highlights Grid */
@@ -807,13 +881,12 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.65rem;
-  margin-bottom: 0.75rem;
 }
 
 .meta-tile {
-  background: var(--bg-body);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  background: #0c1220;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
   padding: 0.65rem 0.85rem;
   display: flex;
   flex-direction: column;
@@ -829,7 +902,7 @@
 }
 
 .meta-tile-val {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: #fff;
   margin-top: 0.1rem;
   line-height: 1.35;
@@ -840,11 +913,10 @@
 
 /* Dedicated Status Switcher Card */
 .easy-dialog-status-card {
-  background: var(--bg-body);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 0.7rem 0.9rem;
-  margin-bottom: 0.75rem;
+  background: #0c1220;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -867,8 +939,9 @@
   font-weight: 700;
   color: #fff;
   background: rgba(255, 255, 255, 0.06);
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
 }
 
 .modal-status-segmented {
@@ -880,12 +953,12 @@
 .modal-status-segmented .btn-modal-status-chip {
   width: 100%;
   justify-content: center;
-  padding: 0.4rem 0.5rem;
-  font-size: 0.74rem;
+  padding: 0.42rem 0.5rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
@@ -895,16 +968,16 @@
 }
 
 .modal-status-segmented .btn-modal-status-chip:hover {
-  border-color: var(--border-medium);
+  border-color: rgba(255, 255, 255, 0.18);
   color: #fff;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .modal-status-segmented .btn-modal-status-chip.active {
-  background: rgba(99, 102, 241, 0.16);
+  background: rgba(99, 102, 241, 0.2);
   border-color: var(--accent-indigo);
   color: #fff;
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
 }
 
 .chip-dot {
@@ -922,9 +995,8 @@
 .questionnaire-screening-alert {
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
 }
 
 /* Job Description Section */
@@ -941,17 +1013,28 @@
 }
 
 .easy-jd-box {
-  background: var(--bg-body);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  background: #080d1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
   padding: 0.9rem 1rem;
   font-family: inherit;
-  font-size: 0.79rem;
+  font-size: 0.8rem;
   line-height: 1.6;
   color: #cbd5e1;
   white-space: pre-wrap;
-  max-height: 340px;
+  word-break: break-word;
+  max-height: 260px;
   overflow-y: auto;
+}
+
+.easy-dialog-bottom {
+  background: #151f33;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 /* =============================================
@@ -959,7 +1042,15 @@
    ============================================= */
 
 .screening-modal {
-  max-width: 560px;
+  max-width: 580px;
+  width: 92%;
+  margin: auto;
+  background: #111827;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.88), 0 0 25px rgba(245, 158, 11, 0.12);
+  animation: modalDialogPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
 .screening-modal-top,
@@ -1156,6 +1247,14 @@
 
 .bulk-search-modal {
   max-width: 580px;
+  width: 92%;
+  margin: auto;
+  background: #111827;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.88), 0 0 25px rgba(99, 102, 241, 0.12);
+  animation: modalDialogPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
 }
 
 .bulk-search-icon {
