@@ -82,6 +82,14 @@ class ScrapePayload(BaseModel):
     time_filter: Optional[str] = "24h"
 
 
+class EasyApplyBatchScrapePayload(BaseModel):
+    keywords: List[str]
+    location: Optional[str] = "India"
+    time_filter: Optional[str] = "24h"
+    max_jobs: Optional[int] = 20
+
+
+
 MAJOR_JOB_HUBS = [
     "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",
     "Toronto", "Vancouver", "Montreal",

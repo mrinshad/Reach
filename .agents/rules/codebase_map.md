@@ -17,7 +17,7 @@ Before reading large files or grepping through the repository, use this director
 - `review.css`     ➔ Review tab (`#tabReview`), queue sidebar, candidate card, natural post scroll, email editor, `[ ✨ Generate Mail from JD ]` button.
 - `history.css`    ➔ Outreach history tab (`#tabSent`), sent/cancelled tables, status tags, cancellation pills.
 - `tasks.css`      ➔ Background task drawer, progress bar, live terminal logs.
-- `easy_apply.css` ➔ LinkedIn Easy Apply table, KPI ribbon, fixed status dropdown, screening modal.
+- `easy_apply.css` ➔ LinkedIn Easy Apply table, KPI ribbon, fixed status dropdown, screening modal, bulk search modal.
 - `modals.css`     ➔ All dialog modals (`#postModal`, `#settingsModal`, `#modalAddJd`, `#modalDirectOutreach`, `#cancelReasonModal`, `#crawlSummaryModal`, `#notifHelpModal`), toasts.
 - `responsive.css` ➔ Mobile drawer, media queries (`<= 1024px`, `<= 768px`, `<= 480px`), touch UI.
 
@@ -28,7 +28,7 @@ Before reading large files or grepping through the repository, use this director
 - `tab_analytics.html`  ➔ Dashboard metrics cards, charts, and headless toggle.
 - `tab_discovered.html` ➔ Search input, filters, batch trigger, posts table.
 - `tab_review.html`     ➔ Candidate details, post scroll container, email draft editor, JD mail button.
-- `tab_easy_apply.html` ➔ LinkedIn Easy Apply workspace, 5-KPI ribbon, responsive table, screening modal (`#modalScreeningQuestions`).
+- `tab_easy_apply.html` ➔ LinkedIn Easy Apply workspace, 5-KPI ribbon, responsive table, screening modal (`#modalScreeningQuestions`), bulk search modal (`#modalBulkEasySearch`).
 - `tab_sent.html`       ➔ Sent & cancelled history table.
 - `modals.html`         ➔ All modal overlays and notification diagnostic dialog.
 

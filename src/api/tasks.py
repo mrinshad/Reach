@@ -25,6 +25,7 @@ from .models import (
     SendBatchPayload,
     DirectOutreachPayload,
     ScrapePayload,
+    EasyApplyBatchScrapePayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -389,6 +390,40 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
     return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/easy-apply/batch")
+def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
+    """Enqueue multiple LinkedIn Easy Apply crawler tasks sequentially for a list of keywords."""
+    from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    queued = []
+    loc = payload.location or "India"
+    time_filter = payload.time_filter or "24h"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=run_linkedin_easy_apply_scraper,
+            args=(kw, loc, time_filter),
+            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} Easy Apply searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
 
 
 @router.post("/easy-apply/{post_id}")

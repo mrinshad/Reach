@@ -351,9 +351,17 @@ function openEasyDetailsModal(postId) {
   const modal = document.getElementById('modalEasyDetails');
   if (!modal) return;
 
+  const comp = post.author_name || 'N/A';
+  const loc = post.location || 'India';
+
   document.getElementById('easyModalJobTitle').textContent = post.author_headline || 'Job Details';
-  document.getElementById('easyModalCompany').textContent = post.author_name || 'N/A';
-  document.getElementById('easyModalLocation').textContent = post.location || 'India';
+  const headerComp = document.getElementById('easyModalHeaderCompany');
+  const headerLoc = document.getElementById('easyModalHeaderLocation');
+  if (headerComp) headerComp.textContent = comp;
+  if (headerLoc) headerLoc.textContent = loc;
+
+  document.getElementById('easyModalCompany').textContent = comp;
+  document.getElementById('easyModalLocation').textContent = loc;
   const expText = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
   document.getElementById('easyModalExp').textContent = expText;
   document.getElementById('easyModalStatus').textContent = post.status;
@@ -382,7 +390,7 @@ function openEasyDetailsModal(postId) {
 }
 
 function closeEasyDetailsModal(e) {
-  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('modal-close-btn')) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn')) {
     return;
   }
   const modal = document.getElementById('modalEasyDetails');
@@ -665,7 +673,7 @@ function updateModalStatusChips(status) {
   }
 
   // Highlight matching modal chip via inline onclick attribute value matching
-  document.querySelectorAll('.modal-status-toggle-wrap .btn-modal-status-chip').forEach((chip) => {
+  document.querySelectorAll('.modal-status-segmented .btn-modal-status-chip, .modal-status-toggle-wrap .btn-modal-status-chip').forEach((chip) => {
     const onclick = chip.getAttribute('onclick') || '';
     const isActive = onclick.includes(`'${status}'`);
     chip.classList.toggle('active', isActive);
@@ -762,7 +770,7 @@ function openScreeningModal(postId) {
 }
 
 function closeScreeningModal(e) {
-  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('modal-close-btn')) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn')) {
     return;
   }
   const modal = document.getElementById('modalScreeningQuestions');
@@ -825,6 +833,179 @@ async function triggerScreeningRescan() {
   }
 }
 
+// =============================================
+// BULK SEARCH & CSV KEYWORD IMPORT
+// =============================================
+
+let bulkParsedKeywords = [];
+
+function openBulkSearchModal() {
+  const modal = document.getElementById('modalBulkEasySearch');
+  if (!modal) return;
+
+  // Pre-fill location & time filter from active crawler form if set
+  const currentLoc = document.getElementById('easySearchLocation')?.value || 'India';
+  const currentTime = document.getElementById('easyTimeFilter')?.value || '24h';
+  const locInput = document.getElementById('bulkSearchLocation');
+  const timeSelect = document.getElementById('bulkTimeFilter');
+  if (locInput) locInput.value = currentLoc;
+  if (timeSelect) timeSelect.value = currentTime;
+
+  modal.classList.remove('hidden');
+}
+
+function closeBulkSearchModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x')) {
+    return;
+  }
+  const modal = document.getElementById('modalBulkEasySearch');
+  if (modal) modal.classList.add('hidden');
+}
+
+function parseKeywordsString(text) {
+  if (!text) return [];
+  const ignoredHeaders = ['role', 'roles', 'keyword', 'keywords', 'title', 'titles', 'job title', 'job_title', 'search'];
+  const rawList = text.split(/[\r\n,;|\t]+/);
+  const seen = new Set();
+  const result = [];
+
+  for (let item of rawList) {
+    let clean = item.trim().replace(/^["']|["']$/g, '');
+    if (!clean || clean.length < 2) continue;
+    if (ignoredHeaders.includes(clean.toLowerCase())) continue;
+    const lower = clean.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(clean);
+    }
+  }
+  return result;
+}
+
+function renderBulkKeywordsChips() {
+  const container = document.getElementById('bulkKeywordsPreview');
+  const countBadge = document.getElementById('bulkKeywordsCount');
+  const submitBtn = document.getElementById('btnLaunchBulkCrawl');
+  const submitText = document.getElementById('btnLaunchBulkCrawlText');
+
+  if (!container || !countBadge) return;
+
+  const count = bulkParsedKeywords.length;
+  countBadge.textContent = `${count} keyword${count === 1 ? '' : 's'}`;
+
+  if (count > 0) {
+    container.classList.remove('hidden');
+    container.innerHTML = bulkParsedKeywords.map((kw, i) => `
+      <span class="bulk-keyword-chip">
+        <span>${escapeHtml(kw)}</span>
+        <span class="chip-del" onclick="removeBulkKeyword(${i})" title="Remove keyword">&times;</span>
+      </span>
+    `).join('');
+
+    if (submitBtn) submitBtn.disabled = false;
+    if (submitText) submitText.textContent = `Queue ${count} Search${count === 1 ? '' : 'es'}`;
+  } else {
+    container.classList.add('hidden');
+    container.innerHTML = '';
+    if (submitBtn) submitBtn.disabled = true;
+    if (submitText) submitText.textContent = 'Queue Searches';
+  }
+}
+
+function handleBulkKeywordsInput(text) {
+  bulkParsedKeywords = parseKeywordsString(text);
+  renderBulkKeywordsChips();
+}
+
+function handleBulkCsvUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const content = e.target.result || '';
+    const keywords = parseKeywordsString(content);
+    if (keywords.length === 0) {
+      showAlert('No Keywords Found', 'Could not detect any role names in the uploaded file. Please ensure it contains comma-separated or line-separated text.');
+      return;
+    }
+    bulkParsedKeywords = keywords;
+    const textarea = document.getElementById('bulkKeywordsInput');
+    if (textarea) textarea.value = bulkParsedKeywords.join(', ');
+    renderBulkKeywordsChips();
+    showToast(`✓ Imported ${keywords.length} keywords from ${file.name}`, 'success');
+  };
+  reader.onerror = function() {
+    showAlert('Upload Error', 'Failed to read the selected file.');
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function removeBulkKeyword(index) {
+  if (index >= 0 && index < bulkParsedKeywords.length) {
+    bulkParsedKeywords.splice(index, 1);
+    const textarea = document.getElementById('bulkKeywordsInput');
+    if (textarea) textarea.value = bulkParsedKeywords.join(', ');
+    renderBulkKeywordsChips();
+  }
+}
+
+function clearBulkKeywords() {
+  bulkParsedKeywords = [];
+  const textarea = document.getElementById('bulkKeywordsInput');
+  if (textarea) textarea.value = '';
+  renderBulkKeywordsChips();
+}
+
+async function submitBulkEasySearch() {
+  if (!bulkParsedKeywords || bulkParsedKeywords.length === 0) {
+    showAlert('No Keywords', 'Please enter or import at least one keyword to search.');
+    return;
+  }
+
+  const location = (document.getElementById('bulkSearchLocation')?.value || 'India').trim();
+  const timeFilter = document.getElementById('bulkTimeFilter')?.value || '24h';
+  const count = bulkParsedKeywords.length;
+
+  const confirmed = await showConfirm(
+    'Launch Bulk LinkedIn Search',
+    `Enqueue ${count} searches sequentially in background for "${location}"?\n\nEach search will run one after another in persistent Firefox.`,
+    { confirmText: `Queue ${count} Searches` }
+  );
+  if (!confirmed) return;
+
+  const submitBtn = document.getElementById('btnLaunchBulkCrawl');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/scrape/easy-apply/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: bulkParsedKeywords,
+        location: location,
+        time_filter: timeFilter,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(`🚀 Enqueued ${data.count || count} bulk search tasks!`, 'success');
+      closeBulkSearchModal();
+      clearBulkKeywords();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Bulk Search Error', err.detail || 'Could not enqueue bulk search tasks.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 window.fetchEasyApplyPosts = fetchEasyApplyPosts;
 window.filterEasyApplyStatus = filterEasyApplyStatus;
 window.handleEasyTableSearch = handleEasyTableSearch;
@@ -852,3 +1033,11 @@ window.openScreeningFromDetails = openScreeningFromDetails;
 window.copyScreeningLink = copyScreeningLink;
 window.markScreeningAsReady = markScreeningAsReady;
 window.triggerScreeningRescan = triggerScreeningRescan;
+window.openBulkSearchModal = openBulkSearchModal;
+window.closeBulkSearchModal = closeBulkSearchModal;
+window.handleBulkCsvUpload = handleBulkCsvUpload;
+window.handleBulkKeywordsInput = handleBulkKeywordsInput;
+window.removeBulkKeyword = removeBulkKeyword;
+window.clearBulkKeywords = clearBulkKeywords;
+window.submitBulkEasySearch = submitBulkEasySearch;
+
