@@ -564,6 +564,89 @@
     </div>
   </div>
 
+  <!-- Bulk Search & CSV Keyword Import Modal for LinkedIn Scraper & Crawlers -->
+  <div class="modal-overlay hidden" id="modalBulkCrawlerSearch" onclick="closeBulkCrawlerSearchModal(event)">
+    <div class="modal-box modal-md bulk-search-modal" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <span class="bulk-search-icon">📁</span>
+          <div>
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">Bulk Search &amp; Keyword Import</h3>
+            <span style="font-size: 0.74rem; color: var(--text-dim);">Queue multiple role searches sequentially in background (LinkedIn Scraper)</span>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeBulkCrawlerSearchModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body" style="gap: 1rem;">
+        <!-- File Upload Dropzone -->
+        <div class="bulk-dropzone" onclick="document.getElementById('bulkCrawlerCsvFileInput').click()">
+          <input type="file" id="bulkCrawlerCsvFileInput" accept=".csv,.txt" style="display: none;" onchange="handleBulkCrawlerCsvUpload(event)" />
+          <span class="dropzone-icon">📥</span>
+          <div class="dropzone-text">
+            <strong>Click to upload CSV or TXT file</strong>
+            <span>Supports comma-separated or line-by-line role names (e.g. 50+ roles)</span>
+          </div>
+        </div>
+
+        <!-- Direct Textarea Entry / Paste -->
+        <div class="form-block">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin: 0;">
+              Or Paste / Type Role Keywords:
+            </label>
+            <span id="bulkCrawlerKeywordsCount" class="badge-subtle">0 keywords</span>
+          </div>
+          <textarea id="bulkCrawlerKeywordsInput" class="input-clean bulk-keywords-textarea" rows="4" placeholder="e.g. Full Stack Developer, MEAN Stack Developer, Web Developer, DevOps Engineer, React Developer..." oninput="handleBulkCrawlerKeywordsInput(this.value)"></textarea>
+        </div>
+
+        <!-- Keywords Chips Preview -->
+        <div class="bulk-keywords-preview hidden" id="bulkCrawlerKeywordsPreview">
+          <!-- Rendered chips inserted here -->
+        </div>
+
+        <!-- Shared Configuration (Source, Location & Time Filter) -->
+        <div class="bulk-config-grid" style="grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Scraper Target:</label>
+            <select id="bulkCrawlerSource" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="linkedin" selected>LinkedIn Hiring Posts</option>
+              <option value="linkedin_jobs">LinkedIn Job Portal (Easy Apply)</option>
+            </select>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Time Window:</label>
+            <select id="bulkCrawlerTimeFilter" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="24h" selected>Last 24 Hours (Default)</option>
+              <option value="today">Today (Since Midnight)</option>
+              <option value="2d">Last 2 Days</option>
+              <option value="3d">Last 3 Days</option>
+              <option value="week">Past Week</option>
+            </select>
+          </div>
+          <div class="form-block" style="grid-column: 1 / -1;">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Location for all searches:</label>
+            <div class="easy-input-group" style="height: 36px;">
+              <svg class="easy-input-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+              <input type="text" id="bulkCrawlerLocation" class="easy-input" value="" placeholder="Anywhere (leave empty) or e.g. Dubai, Bengaluru, London, Remote..." />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="clearBulkCrawlerKeywords()">Clear List</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeBulkCrawlerSearchModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawlerCrawl" onclick="submitBulkCrawlerSearch()" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="btnLaunchBulkCrawlerCrawlText">Queue Searches</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Bulk Search & CSV Keyword Import Modal -->
   <div class="modal-overlay hidden" id="modalBulkEasySearch" onclick="closeBulkSearchModal(event)">
     <div class="modal-box modal-md bulk-search-modal" onclick="event.stopPropagation()">

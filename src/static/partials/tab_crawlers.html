@@ -63,7 +63,13 @@
             </div>
 
             <div class="crawler-field-group" id="crawlerSearchWrapper">
-              <label class="crawler-field-label">Search Keywords</label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label class="crawler-field-label" style="margin-bottom: 0;">Search Keywords</label>
+                <button type="button" class="crawler-bulk-link-btn" onclick="openBulkCrawlerSearchModal()" title="Import CSV or batch keywords to search multiple roles sequentially">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>Bulk Import (CSV)</span>
+                </button>
+              </div>
               <div class="crawler-select-wrapper">
                 <input type="text" id="crawlerSearchInput" class="crawler-source-select crawler-search-input"
                   placeholder="e.g. Full Stack Developer" autocomplete="off" spellcheck="false"
@@ -188,7 +194,7 @@
             <!-- <p class="crawler-action-desc">
               Executes headless or headed Playwright automation. Scraped posts are de-duplicated against existing records in PostgreSQL.
             </p> -->
-            <div class="crawler-btn-wrapper">
+            <div class="crawler-btn-wrapper" style="display: flex; flex-direction: column; gap: 0.6rem;">
               <button id="btnStartCrawl" class="btn btn-primary btn-crawl-start" onclick="triggerSelectedCrawl()"
                 title="Start Crawling Selected Source">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -196,6 +202,13 @@
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
                 <span class="btn-crawl-label">Start Crawl Task</span>
+              </button>
+              <button id="btnOpenBulkCrawlerModal" class="btn btn-outline btn-crawl-bulk" onclick="openBulkCrawlerSearchModal()"
+                title="Import CSV or batch keywords to search multiple roles sequentially">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>Bulk Search (CSV)</span>
               </button>
             </div>
             <!-- <div class="crawler-hints">

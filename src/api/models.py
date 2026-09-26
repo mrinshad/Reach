@@ -89,6 +89,19 @@ class EasyApplyBatchScrapePayload(BaseModel):
     max_jobs: Optional[int] = 20
 
 
+class LinkedInBatchScrapePayload(BaseModel):
+    keywords: List[str]
+    location: Optional[str] = None
+    time_filter: Optional[str] = "24h"
+
+
+class BatchScrapePayload(BaseModel):
+    source: Optional[str] = "linkedin"
+    keywords: List[str]
+    location: Optional[str] = None
+    time_filter: Optional[str] = "24h"
+
+
 
 MAJOR_JOB_HUBS = [
     "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",

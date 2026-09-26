@@ -34,6 +34,8 @@ from .models import (
     DirectOutreachPayload,
     ScrapePayload,
     EasyApplyBatchScrapePayload,
+    LinkedInBatchScrapePayload,
+    BatchScrapePayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -376,6 +378,81 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
     return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/linkedin/batch")
+def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
+    """Enqueue multiple LinkedIn hiring post crawler tasks sequentially for a list of keywords."""
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    queued = []
+    loc = (payload.location or "").strip() or None
+    time_filter = payload.time_filter or "24h"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels("linkedin", query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=run_linkedin_scraper,
+            args=(kw, loc, time_filter),
+            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} LinkedIn searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
+
+
+@router.post("/scrape/batch")
+def api_trigger_scrape_batch(payload: BatchScrapePayload):
+    """Enqueue multiple crawler tasks sequentially for a list of keywords based on source."""
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    source = (payload.source or "linkedin").lower().strip()
+    loc = (payload.location or "").strip() or None
+    time_filter = payload.time_filter or "24h"
+    queued = []
+
+    if source in ("linkedin_jobs", "easy_apply"):
+        from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+        runner = run_linkedin_easy_apply_scraper
+        source_key = "linkedin_jobs"
+    else:
+        runner = run_linkedin_scraper
+        source_key = "linkedin"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels(source_key, query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=runner,
+            args=(kw, loc, time_filter),
+            metadata={"source": source_key, "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} {source_key} searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
 
 
 @router.post("/scrape/easy-apply")
