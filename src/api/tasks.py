@@ -44,6 +44,7 @@ from .models import (
     BatchScrapePayload,
     ReexecuteBatchPayload,
     DeleteBatchActivityLogsPayload,
+    SaveQuestionAnswersPayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -373,6 +374,7 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
     time_filter = (payload.time_filter or "24h") if payload else "24h"
+    cycles = payload.cycles if payload else None
 
     full_name, short_name, snippet = build_crawler_labels("linkedin", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -381,8 +383,8 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
         short_name=short_name,
         snippet=snippet,
         runner_func=run_linkedin_scraper,
-        args=(query, loc, time_filter),
-        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
+        args=(query, loc, time_filter, cycles),
+        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
     return {"success": True, "message": msg, **res}
@@ -470,6 +472,8 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
     time_filter = (payload.time_filter or "24h") if payload else "24h"
+    cycles = payload.cycles if payload else None
+    pacing = payload.pacing if payload else None
 
     full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -478,8 +482,8 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
         short_name=short_name,
         snippet=snippet,
         runner_func=run_linkedin_easy_apply_scraper,
-        args=(query, loc, time_filter),
-        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter},
+        args=(query, loc, time_filter, cycles, pacing),
+        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
     return {"success": True, "message": msg, **res}
@@ -496,6 +500,8 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
     queued = []
     loc = payload.location or "India"
     time_filter = payload.time_filter or "24h"
+    cycles = payload.cycles
+    pacing = payload.pacing
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
@@ -505,8 +511,8 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=run_linkedin_easy_apply_scraper,
-            args=(kw, loc, time_filter),
-            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter},
+            args=(kw, loc, time_filter, cycles, pacing),
+            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing},
         )
         queued.append({"keyword": kw, **res})
 
@@ -538,6 +544,37 @@ def api_trigger_single_easy_apply(post_id: str):
     )
     msg = f"Queued Easy Apply for {title} (Position #{res['position']})" if res["queued"] else f"Easy Apply started for {title}."
     return {"success": True, "message": msg, **res}
+
+
+@router.get("/easy-apply/questions")
+def api_get_easy_apply_questions():
+    """Return aggregated, deduplicated screening questions and persistent answers from Question Bank."""
+    from src.services.question_bank_service import get_aggregated_question_bank
+    return get_aggregated_question_bank()
+
+
+@router.post("/easy-apply/questions/answers")
+def api_save_easy_apply_answers(payload: SaveQuestionAnswersPayload):
+    """Save and update answers to screening questions in persistent settings."""
+    from src.services.question_bank_service import save_stored_answers
+    if not isinstance(payload.answers, dict):
+        raise HTTPException(status_code=400, detail="answers must be a key-value dictionary.")
+    res = save_stored_answers(payload.answers)
+    return {"success": True, **res}
+
+
+@router.get("/easy-apply/rate-limit-status")
+def api_get_easy_apply_rate_limit_status():
+    """Return current LinkedIn rate limit / fast pace safeguard pause status."""
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    return get_rate_limit_safeguard_status()
+
+
+@router.post("/easy-apply/rate-limit-resume")
+def api_resume_easy_apply_rate_limit():
+    """Clear LinkedIn safeguard pause and allow resuming Easy Apply immediately."""
+    from src.services.question_bank_service import reset_rate_limit_safeguard
+    return reset_rate_limit_safeguard()
 
 
 @router.get("/scrapers")

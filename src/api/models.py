@@ -80,6 +80,8 @@ class ScrapePayload(BaseModel):
     location: Optional[str] = None
     search_query: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
 
 
 class EasyApplyBatchScrapePayload(BaseModel):
@@ -87,12 +89,15 @@ class EasyApplyBatchScrapePayload(BaseModel):
     location: Optional[str] = "India"
     time_filter: Optional[str] = "24h"
     max_jobs: Optional[int] = 20
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
 
 
 class LinkedInBatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
 
 
 class BatchScrapePayload(BaseModel):
@@ -100,6 +105,12 @@ class BatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
+
+
+class SaveQuestionAnswersPayload(BaseModel):
+    answers: dict
 
 
 

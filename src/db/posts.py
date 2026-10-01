@@ -670,10 +670,15 @@ def update_post_status(
     params = [new_status]
 
     if rejection_reason is not None:
-        from src.services.chatgpt_service import clean_and_truncate_reason
-        cleaned_reason = clean_and_truncate_reason(rejection_reason)
-        set_clauses.append("rejection_reason = %s")
-        params.append(cleaned_reason)
+        if new_status == "REQUIRES_QUESTIONNAIRE":
+            # Preserve raw screening questions intact — do not truncate or normalize
+            set_clauses.append("rejection_reason = %s")
+            params.append(rejection_reason)
+        else:
+            from src.services.chatgpt_service import clean_and_truncate_reason
+            cleaned_reason = clean_and_truncate_reason(rejection_reason)
+            set_clauses.append("rejection_reason = %s")
+            params.append(cleaned_reason)
 
         if is_potential_spam is None and ("potential scam" in rejection_reason.lower() or "potential spam" in rejection_reason.lower()):
             is_potential_spam = True

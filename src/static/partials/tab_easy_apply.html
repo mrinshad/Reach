@@ -1,5 +1,22 @@
 <!-- TAB: LinkedIn Easy Apply Workspace -->
 <div class="tab-panel hidden" id="tabEasyApply">
+  <!-- Safeguard Rate Limit Warning Banner -->
+  <div class="easy-safeguard-banner hidden" id="easyRateLimitBanner">
+    <div class="safeguard-banner-left">
+      <span class="safeguard-icon">🛡️</span>
+      <div class="safeguard-text">
+        <strong>LinkedIn Safeguard Active:</strong>
+        <span id="easyRateLimitMsg">LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.</span>
+        <span class="safeguard-timer" id="easyRateLimitTimer"></span>
+      </div>
+    </div>
+    <div class="safeguard-banner-actions">
+      <button id="btnResumeEasySafeguard" class="btn btn-xs btn-outline btn-safeguard-resume" onclick="resumeEasyApplySafeguard()" title="Clear pause and resume immediately if you're sure">
+        Resume Now
+      </button>
+    </div>
+  </div>
+
   <!-- Top Header Toolbar -->
   <div class="easy-apply-header">
     <div class="header-left">
@@ -30,15 +47,36 @@
           <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
           <input type="text" id="easySearchLocation" class="easy-input" placeholder="Location..." value="India" />
         </div>
-        <select id="easyTimeFilter" class="select-clean easy-select-time">
+        <select id="easyTimeFilter" class="select-clean easy-select-time" title="Filter jobs by posted date">
           <option value="24h" selected>Past 24 Hours</option>
           <option value="week">Past Week</option>
           <option value="month">Past Month</option>
           <option value="all">Anytime</option>
         </select>
+        <select id="selectEasyPacing" class="select-clean easy-select-pacing" title="Submission delay between applications to protect account from fast pace warnings">
+          <option value="safe" selected>🛡️ Safe (45-75s)</option>
+          <option value="slow">🐢 Extra Slow (75-120s)</option>
+          <option value="standard">⚡ Moderate (30-45s)</option>
+        </select>
+        <div class="cycles-control-wrap" title="Number of scroll & discovery passes">
+          <label for="easyCrawlerCycles" class="cycles-label">Cycles:</label>
+          <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="50" value="8" />
+          <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
+            <span class="tooltip-icon-circle">?</span>
+            <span class="tooltip-popover">
+              <strong>What is a Cycle?</strong><br>
+              A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs per cycle).<br>
+              Increase cycles (e.g. 5–15) to search deeper and find more jobs.
+            </span>
+          </span>
+        </div>
         <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
           <span>Crawl &amp; Auto-Apply</span>
+        </button>
+        <button class="btn btn-outline btn-easy-answers" id="btnOpenQuestionBankModal" onclick="openQuestionBankModal()" title="View and answer all screening questions collected across Easy Apply jobs">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          <span>Question Bank (<span id="totalQuestionsCount">0</span>)</span>
         </button>
         <button class="btn btn-outline btn-easy-import" id="btnOpenBulkSearchModal" onclick="openBulkSearchModal()" title="Import CSV or batch keywords to search multiple roles">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>

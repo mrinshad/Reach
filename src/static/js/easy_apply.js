@@ -39,6 +39,8 @@ async function fetchEasyApplyPosts() {
 
     updateEasyKPIs(easyApplyPosts);
     renderEasyApplyTable();
+    checkRateLimitSafeguard();
+    fetchQuestionBank(false);
   } catch (err) {
     console.error('Error fetching Easy Apply posts:', err);
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #ef4444;">Error loading jobs: ${escapeHtml(err.message)}</td></tr>`;
@@ -276,6 +278,8 @@ async function triggerEasyApplyCrawl() {
   const query = (document.getElementById('easySearchQuery')?.value || 'Full Stack Developer').trim();
   const location = (document.getElementById('easySearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('easyTimeFilter')?.value || '24h';
+  const cycles = parseInt(document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
 
   const btn = document.getElementById('btnLaunchEasyApplyCrawl');
   if (btn) {
@@ -294,6 +298,8 @@ async function triggerEasyApplyCrawl() {
         search_query: query,
         location: location,
         time_filter: timeFilter,
+        cycles: isNaN(cycles) ? 8 : cycles,
+        pacing: pacing,
       }),
     });
 
@@ -709,26 +715,78 @@ let activeScreeningPost = null;
 function parseScreeningQuestions(rejectionReason) {
   if (!rejectionReason) return [];
 
+  const genericPlaceholders = [
+    'requires screening questions',
+    'multi-step questionnaire (saved for screening)',
+    'multi-step form required manual input',
+    'exceeded step limit, saved for screening',
+  ];
+
   // Try JSON format first
   try {
     const parsed = JSON.parse(rejectionReason);
     if (parsed && Array.isArray(parsed.questions)) {
-      return parsed.questions.map((q) => ({
-        label: q.label || q,
-        type: q.type || null,
-        step: q.step || null,
-      }));
+      return parsed.questions
+        .map((q) => ({
+          label: (q.label || q || '').trim(),
+          type: q.type || null,
+          step: q.step || null,
+        }))
+        .filter((q) => q.label && !genericPlaceholders.includes(q.label.toLowerCase()));
     }
-  } catch (_) {
-    // Not JSON — use legacy string parsing
+  } catch (_) {}
+
+  // Legacy string format: "Questions: Q1; Q2; Q3" or semicolon-separated
+  let raw = rejectionReason.trim();
+  if (raw.toLowerCase().startsWith('questions:')) {
+    raw = raw.replace(/^questions:\s*/i, '').trim();
   }
 
-  // Legacy format: "Questions: Q1; Q2; Q3"
-  let raw = rejectionReason;
-  if (raw.startsWith('Questions: ')) {
-    raw = raw.substring('Questions: '.length);
+  return raw
+    .split(';')
+    .map((q) => q.replace(/^\s*\*\s*|\s*\*\s*$/g, '').trim())
+    .filter((q) => q && !genericPlaceholders.includes(q.toLowerCase()))
+    .map((q) => ({ label: q, type: null, step: null }));
+}
+
+function findQuestionBankAnswer(label) {
+  if (!label || !questionBankAnswers) return '';
+  const normKey = label.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (questionBankAnswers[normKey]) return questionBankAnswers[normKey];
+
+  // Smart aliases to standard answers
+  if (/(?:phone|mobile|contact number)/i.test(label)) {
+    if (questionBankAnswers['std_phone']) return questionBankAnswers['std_phone'];
+    if (questionBankAnswers['phonemobilenumber']) return questionBankAnswers['phonemobilenumber'];
   }
-  return raw.split('; ').filter(Boolean).map((q) => ({ label: q.trim(), type: null, step: null }));
+  if (/(?:email)/i.test(label)) {
+    if (questionBankAnswers['std_email']) return questionBankAnswers['std_email'];
+    if (questionBankAnswers['emailaddress']) return questionBankAnswers['emailaddress'];
+  }
+  if (/(?:city|current location|current city|present location)/i.test(label) && !/relocat/i.test(label)) {
+    if (questionBankAnswers['std_location']) return questionBankAnswers['std_location'];
+    if (questionBankAnswers['currentcitylocation']) return questionBankAnswers['currentcitylocation'];
+  }
+  if (/(?:current ctc|current salary|fix ctc|fixed ctc|in-hand salary)/i.test(label)) {
+    if (questionBankAnswers['std_current_ctc']) return questionBankAnswers['std_current_ctc'];
+    if (questionBankAnswers['currentctcsalaryinlpaorinr']) return questionBankAnswers['currentctcsalaryinlpaorinr'];
+  }
+  if (/(?:expected ctc|expected salary|desired compensation|expectation fix ctc|ectc)/i.test(label)) {
+    if (questionBankAnswers['std_expected_ctc']) return questionBankAnswers['std_expected_ctc'];
+    if (questionBankAnswers['expectedctcsalaryinlpaorinr']) return questionBankAnswers['expectedctcsalaryinlpaorinr'];
+  }
+  if (/(?:notice period|notice days|days left in your notice|how many days is your notice)/i.test(label)) {
+    if (questionBankAnswers['std_notice_period']) return questionBankAnswers['std_notice_period'];
+    if (questionBankAnswers['noticeperiodindays']) return questionBankAnswers['noticeperiodindays'];
+  }
+  if (/(?:total years|total experience|professional software engineering experience)/i.test(label)) {
+    if (questionBankAnswers['std_experience_total']) return questionBankAnswers['std_experience_total'];
+    if (questionBankAnswers['totalyearsofprofessionalsoftwareengineeringexperience']) return questionBankAnswers['totalyearsofprofessionalsoftwareengineeringexperience'];
+  }
+  if (/(?:english)/i.test(label)) {
+    if (questionBankAnswers['std_english']) return questionBankAnswers['std_english'];
+  }
+  return '';
 }
 
 function openScreeningModal(postId) {
@@ -765,12 +823,21 @@ function openScreeningModal(postId) {
       const typeTag = q.type
         ? `<div class="screening-q-type">${escapeHtml(q.type)}${q.step ? ` · Step ${q.step}` : ''}</div>`
         : (q.step ? `<div class="screening-q-type">Step ${q.step}</div>` : '');
+
+      const savedAnswer = findQuestionBankAnswer(q.label);
+      const savedPill = savedAnswer
+        ? `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+             <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
+           </div>`
+        : '';
+
       return `
         <div class="screening-question-card">
           <span class="screening-q-num">${i + 1}</span>
-          <div>
+          <div style="flex: 1;">
             <div class="screening-q-text">${escapeHtml(q.label)}</div>
             ${typeTag}
+            ${savedPill}
           </div>
         </div>
       `;
@@ -993,6 +1060,9 @@ async function submitBulkEasySearch() {
   const submitBtn = document.getElementById('btnLaunchBulkCrawl');
   if (submitBtn) submitBtn.disabled = true;
 
+  const cycles = parseInt(document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+
   try {
     const res = await fetch('/api/scrape/easy-apply/batch', {
       method: 'POST',
@@ -1001,6 +1071,8 @@ async function submitBulkEasySearch() {
         keywords: bulkParsedKeywords,
         location: location,
         time_filter: timeFilter,
+        cycles: isNaN(cycles) ? 8 : cycles,
+        pacing: pacing,
       }),
     });
 
@@ -1018,6 +1090,276 @@ async function submitBulkEasySearch() {
     showAlert('Error', err.message);
   } finally {
     if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+// --- Centralized Question & Answer Bank Controller ---
+let questionBankData = null;
+let questionBankAnswers = {};
+let activeQBankCategory = 'all';
+let qbankSearchFilter = '';
+let rateLimitTimerInterval = null;
+
+async function fetchQuestionBank(renderAfter = true) {
+  try {
+    const res = await fetch('/api/easy-apply/questions');
+    if (!res.ok) return;
+    const data = await res.json();
+    questionBankData = data;
+
+    // Cache answers in map for instant lookup
+    questionBankAnswers = {};
+    if (data.questions && Array.isArray(data.questions)) {
+      data.questions.forEach((q) => {
+        if (q.answer) {
+          questionBankAnswers[q.key] = q.answer;
+          if (q.id) questionBankAnswers[q.id] = q.answer;
+        }
+      });
+    }
+
+    // Update Question Bank button counter
+    const countEl = document.getElementById('totalQuestionsCount');
+    if (countEl) countEl.textContent = data.total_count || 0;
+
+    const allPillCount = document.getElementById('qbankCountAll');
+    if (allPillCount) allPillCount.textContent = data.total_count || 0;
+
+    if (renderAfter) {
+      renderQuestionBankList();
+    }
+  } catch (err) {
+    console.error('Error fetching question bank:', err);
+  }
+}
+
+function openQuestionBankModal() {
+  const modal = document.getElementById('modalQuestionBank');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  fetchQuestionBank(true);
+}
+
+function closeQuestionBankModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn') && !e.target.classList.contains('close-dialog-btn') && !e.target.closest('.close-dialog-btn')) {
+    return;
+  }
+  const modal = document.getElementById('modalQuestionBank');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setQuestionBankCategory(cat, btn) {
+  activeQBankCategory = cat;
+  document.querySelectorAll('.qbank-cat-pill').forEach((p) => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderQuestionBankList();
+}
+
+function filterQuestionBankList() {
+  const input = document.getElementById('qbankSearchInput');
+  qbankSearchFilter = (input ? input.value : '').toLowerCase().trim();
+  renderQuestionBankList();
+}
+
+function renderQuestionBankList() {
+  const listEl = document.getElementById('qbankQuestionsList');
+  if (!listEl) return;
+
+  if (!questionBankData || !questionBankData.questions) {
+    listEl.innerHTML = '<div class="qbank-loading"><span class="spinner-sm"></span> Loading questions...</div>';
+    return;
+  }
+
+  let questions = questionBankData.questions;
+
+  // Filter by category
+  if (activeQBankCategory === 'unanswered') {
+    questions = questions.filter((q) => !q.answer || !q.answer.trim());
+  } else if (activeQBankCategory !== 'all') {
+    questions = questions.filter((q) => q.category === activeQBankCategory);
+  }
+
+  // Filter by search keyword
+  if (qbankSearchFilter) {
+    questions = questions.filter((q) =>
+      q.question.toLowerCase().includes(qbankSearchFilter) ||
+      (q.answer && q.answer.toLowerCase().includes(qbankSearchFilter))
+    );
+  }
+
+  // Update footer statistics
+  const progressEl = document.getElementById('qbankAnsweredProgress');
+  if (progressEl && questionBankData) {
+    progressEl.innerHTML = `<strong>${questionBankData.answered_count}</strong> of <strong>${questionBankData.total_count}</strong> questions answered`;
+  }
+
+  if (questions.length === 0) {
+    listEl.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+        <span style="font-size: 1.8rem; display: block; margin-bottom: 0.5rem;">🔍</span>
+        <strong style="color: #cbd5e1;">No questions match your filter</strong>
+        <p style="font-size: 0.76rem; margin-top: 0.25rem;">Try selecting a different category or clearing the search keyword.</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = questions.map((q) => {
+    const isAnswered = Boolean(q.answer && q.answer.trim());
+    const occTag = q.occurrences > 1
+      ? `<span class="qbank-badge qbank-badge-occ" title="Captured across ${q.occurrences} different jobs">From ${q.occurrences} jobs</span>`
+      : '';
+    const stdTag = q.is_standard
+      ? `<span class="qbank-badge qbank-badge-standard" title="Standard Candidate Profile Question">Standard</span>`
+      : '';
+    const catTag = `<span class="qbank-badge qbank-badge-cat">${escapeHtml(q.category || 'general')}</span>`;
+    const ansBadge = isAnswered
+      ? `<span class="qbank-badge qbank-badge-answered">✓ Answered</span>`
+      : '';
+
+    const sampleJobInfo = !q.is_standard && q.sample_jobs && q.sample_jobs.length > 0
+      ? `<div class="qbank-sample-jobs" title="${escapeHtml(q.sample_jobs.join(' • '))}">
+           <span>💼</span> <span>${escapeHtml(q.sample_jobs.slice(0, 2).join(' • '))}</span>
+         </div>`
+      : '';
+
+    const inputVal = q.answer || '';
+    const placeholder = q.default_placeholder || 'Enter your default answer...';
+
+    return `
+      <div class="qbank-card" data-key="${escapeHtml(q.key)}">
+        <div class="qbank-card-header">
+          <div class="qbank-question-label">${escapeHtml(q.question)}</div>
+          <div class="qbank-badges">
+            ${stdTag}
+            ${catTag}
+            ${occTag}
+            ${ansBadge}
+          </div>
+        </div>
+        <input
+          type="text"
+          class="qbank-answer-input"
+          data-key="${escapeHtml(q.key)}"
+          placeholder="${escapeHtml(placeholder)}"
+          value="${escapeHtml(inputVal)}"
+        />
+        ${sampleJobInfo}
+      </div>
+    `;
+  }).join('');
+}
+
+async function saveQuestionBankAnswers() {
+  const btn = document.getElementById('btnSaveQuestionBank');
+  const inputs = document.querySelectorAll('.qbank-answer-input');
+  const answers = {};
+
+  inputs.forEach((inp) => {
+    const key = inp.getAttribute('data-key');
+    const val = inp.value.trim();
+    if (key) {
+      answers[key] = val;
+    }
+  });
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-sm"></span> <span>Saving...</span>`;
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+
+    if (res.ok) {
+      showToast('✓ Answers saved to Question Bank!', 'success');
+      await fetchQuestionBank(true);
+    } else {
+      const err = await res.json();
+      showAlert('Save Error', err.detail || 'Could not save answers.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>Save Answers</span>`;
+    }
+  }
+}
+
+// --- Safeguard Rate Limit Watchdog & Banner ---
+async function checkRateLimitSafeguard() {
+  const banner = document.getElementById('easyRateLimitBanner');
+  const msgEl = document.getElementById('easyRateLimitMsg');
+  const timerEl = document.getElementById('easyRateLimitTimer');
+  if (!banner) return;
+
+  try {
+    const res = await fetch('/api/easy-apply/rate-limit-status');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.is_paused && data.seconds_remaining > 0) {
+      banner.classList.remove('hidden');
+      if (msgEl) msgEl.textContent = data.safeguard_reason || 'LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.';
+
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+
+      let remaining = data.seconds_remaining;
+      const updateTimer = () => {
+        if (remaining <= 0) {
+          banner.classList.add('hidden');
+          if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+          return;
+        }
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        if (timerEl) timerEl.textContent = `(${m}m ${s < 10 ? '0' : ''}${s}s)`;
+        remaining--;
+      };
+      updateTimer();
+      rateLimitTimerInterval = setInterval(updateTimer, 1000);
+    } else {
+      banner.classList.add('hidden');
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+    }
+  } catch (err) {
+    console.warn('Error checking rate limit status:', err);
+  }
+}
+
+async function resumeEasyApplySafeguard() {
+  const confirmed = await showConfirm(
+    'Resume Easy Apply Now?',
+    'Are you sure you want to clear the safeguard pause? If LinkedIn recently displayed an automated activity warning, resuming too quickly may risk restrictions. Ensure you use Safe or Extra Slow pacing.',
+    { confirmText: 'Resume Easy Apply' }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/easy-apply/rate-limit-resume', { method: 'POST' });
+    if (res.ok) {
+      const banner = document.getElementById('easyRateLimitBanner');
+      if (banner) banner.classList.add('hidden');
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+      showToast('✓ Safeguard pause cleared. Easy Apply resumed.', 'success');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+// Auto-fetch question bank count on script execution
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => fetchQuestionBank(false));
+  } else {
+    fetchQuestionBank(false);
   }
 }
 
@@ -1056,4 +1398,11 @@ window.removeBulkKeyword = removeBulkKeyword;
 window.clearBulkKeywords = clearBulkKeywords;
 window.submitBulkEasySearch = submitBulkEasySearch;
 window.applyEasyDateFilter = applyEasyDateFilter;
+window.openQuestionBankModal = openQuestionBankModal;
+window.closeQuestionBankModal = closeQuestionBankModal;
+window.setQuestionBankCategory = setQuestionBankCategory;
+window.filterQuestionBankList = filterQuestionBankList;
+window.saveQuestionBankAnswers = saveQuestionBankAnswers;
+window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
+window.checkRateLimitSafeguard = checkRateLimitSafeguard;
 

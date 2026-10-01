@@ -191,9 +191,20 @@
               <span class="action-card-title">Run Extraction</span>
               <span class="action-card-badge">FIFO Queue</span>
             </div>
-            <!-- <p class="crawler-action-desc">
-              Executes headless or headed Playwright automation. Scraped posts are de-duplicated against existing records in PostgreSQL.
-            </p> -->
+            <div class="crawler-cycles-row" style="margin-bottom: 0.8rem;">
+              <div class="cycles-control-wrap" title="Number of scroll & discovery passes">
+                <label for="crawlerInputCycles" class="cycles-label">Cycles:</label>
+                <input type="number" id="crawlerInputCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
+                  <span class="tooltip-icon-circle">?</span>
+                  <span class="tooltip-popover">
+                    <strong>What is a Cycle?</strong><br>
+                    A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs per cycle).<br>
+                    Increase cycles (e.g. 5–15) to search deeper and find more jobs.
+                  </span>
+                </span>
+              </div>
+            </div>
             <div class="crawler-btn-wrapper" style="display: flex; flex-direction: column; gap: 0.6rem;">
               <button id="btnStartCrawl" class="btn btn-primary btn-crawl-start" onclick="triggerSelectedCrawl()"
                 title="Start Crawling Selected Source">

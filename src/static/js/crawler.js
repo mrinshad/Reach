@@ -244,6 +244,11 @@ async function triggerSelectedCrawl() {
         }
       }
     }
+    const cyclesInput = document.getElementById('crawlerInputCycles');
+    if (cyclesInput && cyclesInput.value) {
+      const c = parseInt(cyclesInput.value, 10);
+      if (!isNaN(c) && c > 0) payload.cycles = c;
+    }
     const res = await fetch('/api/scrape', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -472,7 +472,10 @@ def main():
         consecutive_older_posts = 0
 
         # Human-like scrolling to collect all posts today from 00:00 midnight until now
-        max_scroll_cycles = 60
+        try:
+            max_scroll_cycles = int(os.environ.get("SCRAPER_CYCLES", 60))
+        except Exception:
+            max_scroll_cycles = 60
         consecutive_no_new = 0
         total_scanned_count = 0
 

@@ -541,15 +541,18 @@
         </div>
       </div>
 
-      <div class="modal-bottom screening-modal-foot">
         <div class="screening-foot-left">
           <button class="btn btn-outline btn-sm" onclick="copyScreeningLink()" title="Copy job link">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2 2v1"/></svg>
             <span>Copy Link</span>
           </button>
           <a class="btn btn-outline btn-sm" id="screeningOpenLink" href="#" target="_blank" rel="noopener noreferrer" title="Open on LinkedIn">
             <span>↗ Open on LinkedIn</span>
           </a>
+          <button class="btn btn-outline btn-sm btn-open-qbank-link" onclick="openQuestionBankModal()" title="Open Question & Answer Bank">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <span>Question Bank</span>
+          </button>
         </div>
         <div class="screening-foot-right">
           <button class="btn btn-outline btn-sm" onclick="markScreeningAsReady()" title="Mark as ready to apply manually">
@@ -558,6 +561,60 @@
           <button class="btn btn-primary btn-sm" onclick="triggerScreeningRescan()" title="Re-crawl all form pages for questions" id="btnScreeningRescan">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>Re-Scan Questions</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Centralized Question & Answer Bank Modal -->
+  <div class="modal-overlay hidden" id="modalQuestionBank" onclick="closeQuestionBankModal(event)">
+    <div class="modal-box modal-lg question-bank-modal" onclick="event.stopPropagation()">
+      <div class="modal-top qbank-modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <span class="qbank-head-icon">📝</span>
+          <div>
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">Screening Question &amp; Answer Bank</h3>
+            <span style="font-size: 0.74rem; color: var(--text-dim);">Centralized repository of all screening questions collected across Easy Apply jobs</span>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeQuestionBankModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body qbank-modal-body">
+        <!-- Toolbar: Search + Category Filters + Stats -->
+        <div class="qbank-toolbar">
+          <div class="qbank-search-wrap">
+            <svg class="qbank-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="qbankSearchInput" class="qbank-search-input" placeholder="Search questions or keywords..." oninput="filterQuestionBankList()" />
+          </div>
+
+          <div class="qbank-category-pills">
+            <button class="qbank-cat-pill active" data-cat="all" onclick="setQuestionBankCategory('all', this)">All (<span id="qbankCountAll">0</span>)</button>
+            <button class="qbank-cat-pill" data-cat="contact" onclick="setQuestionBankCategory('contact', this)">Basic Contact</button>
+            <button class="qbank-cat-pill" data-cat="experience" onclick="setQuestionBankCategory('experience', this)">Experience &amp; Skills</button>
+            <button class="qbank-cat-pill" data-cat="compensation" onclick="setQuestionBankCategory('compensation', this)">Compensation / CTC</button>
+            <button class="qbank-cat-pill" data-cat="notice" onclick="setQuestionBankCategory('notice', this)">Notice Period</button>
+            <button class="qbank-cat-pill" data-cat="unanswered" onclick="setQuestionBankCategory('unanswered', this)">Unanswered</button>
+          </div>
+        </div>
+
+        <!-- Question Cards List -->
+        <div class="qbank-list" id="qbankQuestionsList">
+          <div class="qbank-loading">
+            <span class="spinner-sm"></span> Loading Question Bank...
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-bottom qbank-modal-foot">
+        <div class="qbank-foot-stats">
+          <span id="qbankAnsweredProgress">0 / 0 answered</span>
+        </div>
+        <div class="qbank-foot-actions">
+          <button class="btn btn-outline btn-sm" onclick="closeQuestionBankModal()">Close</button>
+          <button class="btn btn-primary btn-sm" id="btnSaveQuestionBank" onclick="saveQuestionBankAnswers()">
+            <span>Save Answers</span>
           </button>
         </div>
       </div>

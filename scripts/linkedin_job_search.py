@@ -43,15 +43,18 @@ def parse_args():
     parser.add_argument("--location", "-l", default=None, help="Target location")
     parser.add_argument("--time-filter", "-t", default=None, help="Time filter: 24h, week, month, all")
     parser.add_argument("--max-jobs", "-m", type=int, default=None, help="Max jobs to process")
+    parser.add_argument("--cycles", "-c", type=int, default=None, help="Number of scroll discovery cycles (default: 8)")
+    parser.add_argument("--pacing", "-p", default="safe", choices=["safe", "slow", "standard"], help="Delay between job submissions")
     parser.add_argument("--headless", action="store_true", default=None, help="Run headless")
     parser.add_argument("--headed", dest="headless", action="store_false", help="Run headed")
     parser.add_argument("--dry-run", action="store_true", help="Scrape without submitting applications")
     return parser.parse_args()
 
 
-def scroll_job_list(page, target_count: int = 25):
-    """Scroll the job list container to load occluded job cards."""
-    for _ in range(8):
+def scroll_job_list(page, cycles: int = 8):
+    """Scroll the job list container to load occluded job cards based on discovery cycles."""
+    for c in range(cycles):
+        print(f"  [Cycle {c+1}/{cycles}] Scrolling job listings container...")
         page.evaluate("""() => {
             const el = document.querySelector('.scaffold-layout__list-container') ||
                        document.querySelector('.jobs-search-results-list');
@@ -92,6 +95,14 @@ def main():
     except Exception:
         max_jobs = 20
 
+    cycles_env = os.environ.get("SCRAPER_CYCLES")
+    try:
+        cycles = args.cycles if args.cycles is not None else (int(cycles_env) if cycles_env else 8)
+    except Exception:
+        cycles = 8
+
+    pacing = (args.pacing or os.environ.get("SCRAPER_PACING") or "safe").lower()
+
     is_headless = args.headless if args.headless is not None else config.get("headless", True)
     resume_path = config.get("resume_path", "")
 
@@ -104,6 +115,8 @@ def main():
     print(f"  Location:    {location}")
     print(f"  Filter:      {time_filter}")
     print(f"  Max Jobs:    {max_jobs}")
+    print(f"  Cycles:      {cycles}")
+    print(f"  Pacing:      {pacing}")
     print(f"  Headless:    {is_headless}")
     print(f"  Search URL:  {search_url}")
     print("=" * 66)
@@ -134,7 +147,7 @@ def main():
             sys.exit(1)
         print("  ✓ Logged in to LinkedIn")
 
-        print("[3/4] Scrolling and extracting Easy Apply job cards...")
+        print(f"[3/4] Scrolling and extracting Easy Apply job cards ({cycles} cycles)...")
         card_selectors = [
             "[data-occludable-job-id]",
             "li.jobs-search-results__list-item",
@@ -149,7 +162,7 @@ def main():
         except Exception:
             pass
 
-        scroll_job_list(page, target_count=max_jobs)
+        scroll_job_list(page, cycles=cycles)
         page.wait_for_timeout(2000)
 
         cards = page.locator(combined_selector)
@@ -245,6 +258,13 @@ def main():
                 update_post_status(post_id, "APPLIED")
                 applied_count += 1
                 print("  🎉 Status: APPLIED")
+            elif status == "RATE_LIMITED":
+                from src.db.settings import set_setting
+                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
+                set_setting("easy_apply_safeguard_reason", detail)
+                print(f"  🚨 {detail}")
+                print("  🛑 LinkedIn safeguard pause detected. Halting crawl immediately to protect your account.")
+                break
             elif status == "REQUIRES_QUESTIONNAIRE":
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
                 questionnaire_count += 1
@@ -255,7 +275,15 @@ def main():
                 print(f"  ℹ️ Ready in queue (DISCOVERED): {detail}")
 
             if idx < len(extracted_jobs):
-                human_sleep(3.5, 7.0)
+                if pacing == "slow":
+                    print("  ⏳ Extra slow pacing safeguard: Pausing 75–120s...")
+                    human_sleep(75.0, 120.0)
+                elif pacing == "standard":
+                    print("  ⏳ Moderate pacing: Pausing 30–45s...")
+                    human_sleep(30.0, 45.0)
+                else:  # safe (default)
+                    print("  ⏳ Safe human pacing safeguard: Pausing 45–75s...")
+                    human_sleep(45.0, 75.0)
 
         # Print summary
         print("\n" + "=" * 66)

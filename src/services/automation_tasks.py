@@ -1206,10 +1206,15 @@ def run_infopark_scraper():
     )
 
 
-def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+def run_linkedin_scraper(
+    query: Optional[str] = None,
+    location: Optional[str] = None,
+    time_filter: Optional[str] = None,
+    cycles: Optional[int] = None,
+):
     """
     Run the LinkedIn Posts Scraper in headed Firefox (headless=False) via subprocess
-    with 90-second inactivity timeout, with optional query, location, and time_filter parameters.
+    with 90-second inactivity timeout, with optional query, location, time_filter, and cycles parameters.
     """
     script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_posts_search.py")
     task_label = "LinkedIn Posts Scraper"
@@ -1225,6 +1230,8 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
         extra_env["SCRAPER_LOCATION"] = location.strip()
     if time_filter:
         extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
+    if cycles:
+        extra_env["SCRAPER_CYCLES"] = str(cycles)
 
     run_scraper_subprocess_with_timeout(
         task_name=task_label,
@@ -1235,11 +1242,17 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
     )
 
 
-def run_linkedin_easy_apply_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+def run_linkedin_easy_apply_scraper(
+    query: Optional[str] = None,
+    location: Optional[str] = None,
+    time_filter: Optional[str] = None,
+    cycles: Optional[int] = None,
+    pacing: Optional[str] = None,
+):
     """
     Run the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox context.
     Executes scripts/linkedin_job_search.py via run_scraper_subprocess_with_timeout
-    with 90-second inactivity watchdog and real-time terminal streaming.
+    with 180-second inactivity watchdog and real-time terminal streaming.
     """
     script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_job_search.py")
     task_label = "LinkedIn Easy Apply Crawler"
@@ -1256,11 +1269,15 @@ def run_linkedin_easy_apply_scraper(query: Optional[str] = None, location: Optio
         extra_env["SCRAPER_LOCATION"] = location.strip()
     if time_filter:
         extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
+    if cycles:
+        extra_env["SCRAPER_CYCLES"] = str(cycles)
+    if pacing:
+        extra_env["SCRAPER_PACING"] = str(pacing)
 
     run_scraper_subprocess_with_timeout(
         task_name=task_label,
         script_path=script_path,
-        inactivity_timeout_seconds=90.0,
+        inactivity_timeout_seconds=180.0,
         finish_message="LinkedIn Easy Apply crawling finished successfully.",
         extra_env=extra_env,
     )

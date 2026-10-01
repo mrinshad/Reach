@@ -45,9 +45,19 @@ def build_easy_apply_search_url(keywords: str, location: str = "India", time_fil
     return url
 
 
-def human_sleep(min_s: float = 1.5, max_s: float = 3.0):
-    """Sleep for random human-like pacing."""
-    time.sleep(random.uniform(min_s, max_s))
+def human_sleep(min_s: float = 1.5, max_s: float = 3.0, cancel_check=None):
+    """Sleep for random human-like pacing with optional cancellation check."""
+    target = random.uniform(min_s, max_s)
+    if cancel_check is None:
+        time.sleep(target)
+    else:
+        elapsed = 0.0
+        while elapsed < target:
+            if cancel_check():
+                break
+            step = min(1.0, target - elapsed)
+            time.sleep(step)
+            elapsed += step
 
 
 def extract_job_card_metadata(card) -> Dict[str, Any]:
@@ -104,60 +114,106 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
     """
     Inspect the Easy Apply modal dialog for multi-step questions and determine
     if it can be auto-submitted or if it requires custom questionnaire answers.
+    Collects all questions including basic profile questions (phone, email, etc.).
     """
     questions = []
+    custom_questions = []
+
+    # Filter out pure UI chrome / non-questions
     standard_skip = [
-        "phone", "mobile", "email", "first name", "last name", "resume",
-        "select language", "search", "location", "city", "country code",
-        "contact info", "work experience", "additional", "photo",
-        "cover letter", "headline", "summary", "website", "terms"
+        "select language", "search", "photo", "terms", "agree", "privacy", "drag and drop", "upload resume"
+    ]
+    
+    # Common standard profile items that LinkedIn usually auto-fills from user account
+    basic_profile_terms = [
+        "first name", "last name", "phone", "mobile", "email", "resume",
+        "country code", "contact info", "headline", "summary"
     ]
 
+    def add_question(raw_label: str):
+        cleaned = raw_label.strip()
+        if not cleaned or len(cleaned) < 2:
+            return
+        cleaned_low = cleaned.lower()
+        if any(skip in cleaned_low for skip in standard_skip):
+            return
+        if cleaned not in questions:
+            questions.append(cleaned)
+        # Check if it is a custom question (not auto-filled standard basic info)
+        is_basic = any(b in cleaned_low for b in basic_profile_terms)
+        if not is_basic and cleaned not in custom_questions:
+            custom_questions.append(cleaned)
+
     # Check visible form labels
-    labels = page.locator("label:visible").all()
-    for l in labels:
-        try:
-            txt = l.inner_text().strip()
-            txt_low = txt.lower()
-            if not txt or any(skip in txt_low for skip in standard_skip):
-                continue
-            if txt not in questions:
-                questions.append(txt)
-        except Exception:
-            pass
+    try:
+        labels = page.locator("label:visible").all()
+        for l in labels:
+            try:
+                txt = l.inner_text().strip()
+                add_question(txt)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # Check visible inputs, selects, and textareas with custom aria labels
-    inputs = page.locator("input:visible, select:visible, textarea:visible").all()
-    for inp in inputs:
-        try:
-            aria = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
-            aria_low = aria.lower()
-            if not aria or any(skip in aria_low for skip in standard_skip):
-                continue
-            if aria not in questions:
-                questions.append(aria)
-        except Exception:
-            pass
+    try:
+        inputs = page.locator("input:visible, select:visible, textarea:visible").all()
+        for inp in inputs:
+            try:
+                aria = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
+                add_question(aria)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
-    # Check fieldsets
-    radio_groups = page.locator("fieldset:visible").all()
-    for rg in radio_groups:
-        try:
-            legend = rg.locator("legend")
-            if legend.count() > 0:
-                ltxt = legend.first.inner_text().strip()
-                if ltxt and not any(skip in ltxt.lower() for skip in standard_skip):
-                    if ltxt not in questions:
-                        questions.append(ltxt)
-        except Exception:
-            pass
+    # Check fieldsets / radio groups
+    try:
+        radio_groups = page.locator("fieldset:visible").all()
+        for rg in radio_groups:
+            try:
+                legend = rg.locator("legend")
+                if legend.count() > 0:
+                    ltxt = legend.first.inner_text().strip()
+                    add_question(ltxt)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
-    requires_questionnaire = len(questions) > 0
+    requires_questionnaire = len(custom_questions) > 0
     return {
         "has_modal": True,
         "requires_questionnaire": requires_questionnaire,
         "questions": questions,
+        "custom_questions": custom_questions,
     }
+
+
+def check_linkedin_rate_limit(page: Page) -> Optional[str]:
+    """
+    Check if LinkedIn has displayed an automated activity or fast pace rate limit warning.
+    Returns a safeguard message if detected, or None.
+    """
+    rate_limit_keywords = [
+        "applying at a fast pace",
+        "briefly paused easy apply",
+        "safeguard against automated",
+        "automated inauthentic activities",
+        "risk of restriction",
+        "paused easy apply",
+        "unusual activity from your account",
+    ]
+    try:
+        body_text = page.locator("body").inner_text(timeout=2000)
+        body_lower = body_text.lower()
+        for kw in rate_limit_keywords:
+            if kw in body_lower:
+                return "LinkedIn Safeguard: Easy Apply briefly paused due to fast pace. Automation halted to protect account."
+    except Exception:
+        pass
+    return None
 
 
 def dismiss_easy_apply_modal(page: Page):
@@ -240,9 +296,16 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
       - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
       - 'FAILED': Modal failed to open or encountered an unhandled issue
       - 'ALREADY_APPLIED': LinkedIn indicates you've already applied
+      - 'RATE_LIMITED': LinkedIn displayed fast pace safeguard pause notice
     """
     try:
         page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+
+        # Check for LinkedIn fast pace safeguard notice
+        rate_limit_msg = check_linkedin_rate_limit(page)
+        if rate_limit_msg:
+            logger(f"  🚨 {rate_limit_msg}")
+            return "RATE_LIMITED", rate_limit_msg
         
         # Check if already applied
         applied_badge = page.locator(
@@ -287,6 +350,13 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
         except Exception:
             page.wait_for_timeout(3000)
 
+        # Check rate limit right after opening dialog
+        rate_limit_msg = check_linkedin_rate_limit(page)
+        if rate_limit_msg:
+            logger(f"  🚨 {rate_limit_msg}")
+            dismiss_easy_apply_modal(page)
+            return "RATE_LIMITED", rate_limit_msg
+
         dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
         if dismiss_btn.count() == 0:
             logger("  ⚠️ Easy Apply dialog did not open.")
@@ -294,6 +364,13 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
 
         # Multi-step wizard loop (up to 7 steps max)
         for step in range(1, 8):
+            # Check rate limit on each step
+            rate_limit_msg = check_linkedin_rate_limit(page)
+            if rate_limit_msg:
+                logger(f"  🚨 {rate_limit_msg}")
+                dismiss_easy_apply_modal(page)
+                return "RATE_LIMITED", rate_limit_msg
+
             # Wait for content or step transition to stabilize
             try:
                 page.wait_for_selector(
@@ -307,13 +384,17 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
 
             # If custom questionnaire questions detected:
             if inspection["requires_questionnaire"]:
-                q_summary = "; ".join(inspection["questions"][:3])
+                all_q = inspection["questions"] or inspection["custom_questions"]
+                q_summary = "; ".join(all_q)
                 logger(f"  📋 Custom questionnaire detected ({q_summary}). Saving link for screening...")
                 dismiss_easy_apply_modal(page)
                 return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
             fill_contact_info(page)
             upload_or_select_resume(page, resume_path)
+
+            # Natural human pause before action
+            page.wait_for_timeout(random.randint(1200, 2200))
 
             # Check for Submit application button
             submit_btn = page.locator(
@@ -360,7 +441,7 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                         review_btn.click(timeout=5000)
                     except Exception:
                         review_btn.click(force=True, timeout=5000)
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
             # Check for Next step button
@@ -380,16 +461,22 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                         next_btn.click(timeout=5000)
                     except Exception:
                         next_btn.click(force=True, timeout=5000)
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
             # If neither Next, Review, nor Submit is visible, inspect if stuck
-            logger(f"  Step {step}: Unhandled form state, saving for screening.")
+            inspection = inspect_easy_apply_modal(page)
+            all_q = inspection["questions"] or inspection["custom_questions"]
+            q_summary = "; ".join(all_q) if all_q else "Multi-step form required manual input"
+            logger(f"  Step {step}: Unhandled form state, saving for screening ({q_summary}).")
             dismiss_easy_apply_modal(page)
-            return "REQUIRES_QUESTIONNAIRE", "Multi-step form required manual input"
+            return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
+        inspection = inspect_easy_apply_modal(page)
+        all_q = inspection["questions"] or inspection["custom_questions"]
+        q_summary = "; ".join(all_q) if all_q else "Exceeded step limit, saved for screening"
         dismiss_easy_apply_modal(page)
-        return "REQUIRES_QUESTIONNAIRE", "Exceeded step limit, saved for screening"
+        return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
     except Exception as e:
         logger(f"  ✗ Easy Apply execution error: {e}")
@@ -402,23 +489,30 @@ def run_easy_apply_crawler(
     location: str = "India",
     time_filter: str = "24h",
     max_jobs: int = 20,
+    cycles: Optional[int] = 8,
+    pacing: Optional[str] = "safe",
     task_manager=None,
 ) -> Dict[str, Any]:
     """
     Main background crawler entrypoint:
     1. Searches LinkedIn jobs with Easy Apply filter (f_AL=true).
-    2. Extracts job cards and full specifications.
+    2. Extracts job cards and full specifications with dynamic scroll cycles.
     3. Saves jobs to database with category='EASY_APPLY'.
-    4. Submits Easy Apply or saves for screening when questionnaires are detected.
+    4. Submits Easy Apply with human safe pacing or saves for screening when questionnaires are detected.
+    5. Aborts immediately if LinkedIn displays fast pace safeguard warnings.
     """
     logger = task_manager.log if task_manager else print
     config = load_config()
     resume_path = config.get("resume_path", "")
 
+    scroll_cycles = int(cycles) if cycles and int(cycles) > 0 else 8
+    pacing_mode = (pacing or "safe").lower()
+
     search_url = build_easy_apply_search_url(keywords, location, time_filter)
     logger("=" * 60)
     logger(f"🚀 Starting LinkedIn Easy Apply Autonomous Crawler")
     logger(f"  Keywords: '{keywords}' | Location: '{location}' | Filter: {time_filter}")
+    logger(f"  Discovery Cycles: {scroll_cycles} | Pacing Mode: {pacing_mode}")
     logger(f"  URL: {search_url}")
     logger("=" * 60)
 
@@ -449,20 +543,21 @@ def run_easy_apply_crawler(
             context.close()
             return {"success": False, "error": msg}
 
-        # Scroll to load job cards
-        logger("[3/4] Scanning job listings...")
-        for _ in range(8):
+        # Scroll to load job cards based on manual/dynamic cycles
+        logger(f"[3/4] Scanning job listings ({scroll_cycles} discovery cycles)...")
+        for cycle_idx in range(scroll_cycles):
+            logger(f"  [Cycle {cycle_idx + 1}/{scroll_cycles}] Scrolling job listings container...")
             page.evaluate("""() => {
                 const el = document.querySelector('.scaffold-layout__list-container') ||
                            document.querySelector('.jobs-search-results-list');
                 if (el) el.scrollTop += 700;
                 else window.scrollBy(0, 700);
             }""")
-            page.wait_for_timeout(900)
+            page.wait_for_timeout(950)
 
         job_cards = page.locator("[data-occludable-job-id], li.jobs-search-results__list-item")
         total_cards = min(job_cards.count(), max_jobs)
-        logger(f"  Found {job_cards.count()} job cards. Processing up to {total_cards}...")
+        logger(f"  Found {job_cards.count()} job cards across {scroll_cycles} cycles. Processing up to {total_cards}...")
 
         if task_manager and hasattr(task_manager, "set_total_posts"):
             task_manager.set_total_posts(total_cards)
@@ -543,6 +638,16 @@ def run_easy_apply_crawler(
                 update_post_status(post_id, "APPLIED")
                 applied_count += 1
                 logger(f"  🎉 Status updated to APPLIED")
+            elif status == "RATE_LIMITED":
+                from src.db.settings import set_setting
+                # Pause Easy Apply and alert
+                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
+                set_setting("easy_apply_safeguard_reason", detail)
+                logger(f"  🚨 {detail}")
+                logger("  🛑 LinkedIn safeguard pause detected. Halting crawl immediately to protect your account.")
+                if task_manager:
+                    task_manager.fail_task(detail)
+                break
             elif status == "REQUIRES_QUESTIONNAIRE":
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
                 questionnaire_count += 1
@@ -555,9 +660,18 @@ def run_easy_apply_crawler(
             if task_manager:
                 task_manager.update_progress(idx)
 
-            # Human delay pause between jobs
+            # Safe human delay pause between jobs to protect against rate limits
             if idx < len(extracted_jobs):
-                human_sleep(4.0, 8.0)
+                cancel_fn = task_manager.is_cancel_requested if task_manager else None
+                if pacing_mode == "slow":
+                    logger(f"  ⏳ Extra slow pacing safeguard: Pausing 75–120 seconds before next job...")
+                    human_sleep(75.0, 120.0, cancel_check=cancel_fn)
+                elif pacing_mode == "standard":
+                    logger(f"  ⏳ Moderate pacing: Pausing 30–45 seconds before next job...")
+                    human_sleep(30.0, 45.0, cancel_check=cancel_fn)
+                else:  # safe (default)
+                    logger(f"  ⏳ Safe human pacing safeguard: Pausing 45–75 seconds before next job...")
+                    human_sleep(45.0, 75.0, cancel_check=cancel_fn)
 
         context.close()
         logger("\n" + "=" * 60)
@@ -613,6 +727,12 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
             update_post_status(post_id, "APPLIED")
             logger(f"✓ Application successfully submitted for {title} @ {company}")
             return {"success": True, "status": "APPLIED", "detail": detail}
+        elif status == "RATE_LIMITED":
+            from src.db.settings import set_setting
+            set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
+            set_setting("easy_apply_safeguard_reason", detail)
+            logger(f"🚨 {detail}")
+            return {"success": False, "status": "RATE_LIMITED", "detail": detail}
         elif status == "REQUIRES_QUESTIONNAIRE":
             update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
             logger(f"📌 Custom questionnaire detected. Direct link saved for screening: {detail}")
