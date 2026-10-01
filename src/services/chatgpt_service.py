@@ -125,100 +125,287 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
     return subject, body
 
 
-def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8) -> str:
+def is_direct_hiring_post(text: str) -> bool:
     """
-    Strip boilerplate prefixes and truncate to a concise label.
-    e.g. "Classification: BUSINESS DEVELOPMENT / SALES → Skip." -> "Business Development / Sales"
-    e.g. "This is a Business Development / Sales role, not a software engineering role." -> "Business Development / Sales role"
+    Check if the text contains clear markers of a direct recruiter/employer hiring post.
+    Direct hiring posts should NEVER be labeled as 'Not a Direct Job Opening' or
+    'Candidate Seeking Job (Not a Hiring Post)'.
     """
     if not text:
-        return "Not suitable"
-    t = text.strip()
+        return False
+    t = text.lower()
 
-    # Check for Classification: XYZ → Skip
-    class_match = re.search(r"Classification:\s*([^→\-\n\.]+?)(?:\s*[→\-]+\s*Skip|\.|$)", t, flags=re.IGNORECASE)
-    if class_match:
-        label = class_match.group(1).strip()
-        if label:
-            if label.isupper():
-                label = " / ".join("QA" if part.strip().upper() == "QA" else part.strip().title() for part in label.split("/"))
-            return label[:max_chars].strip()
+    # Negative checks: explicit job seeker self-promotion
+    if any(k in t for k in [
+        "#opentowork",
+        "open to work",
+        "actively looking for a job",
+        "actively looking for new opportunit",
+        "actively looking for my next",
+        "actively exploring",
+        "exploring new opportunities",
+        "exploring opportunities",
+        "open to opportunities",
+        "open to new opportunities",
+        "open to remote",
+        "open to roles",
+        "looking for a job",
+        "looking for job",
+        "seeking a job",
+        "seeking an opportunity",
+        "seeking opportunities",
+        "seeking a new role",
+        "seeking my next opportunity",
+        "looking for my next role",
+        "hire me",
+        "job wanted",
+        "seeking referrals",
+        "looking for referral",
+        "sharing his resume",
+        "sharing her resume",
+        "sharing my resume",
+        "sharing the cv",
+        "sharing his cv",
+        "sharing my cv",
+        "recommend my son",
+        "looking for an opportunity for my",
+        "looking for a job opportunity for my",
+    ]):
+        return False
 
-    # Check for "This is a <Role>, not a software..."
-    role_match = re.search(r"This is an?\s+([^,\n\.]+?)(?:,\s*not a software|\.\s*The core)?", t, flags=re.IGNORECASE)
-    if role_match:
-        return role_match.group(1).strip()[:max_chars]
+    # Positive hiring markers
+    has_hiring_marker = bool(re.search(
+        r"\b(?:hiring|we are hiring|we're hiring|job opening|urgently hiring|immediate requirement|"
+        r"we are looking for|looking for an? experienced|join our team|apply now|to apply|"
+        r"send your (?:cv|resume)|share your (?:cv|resume)|submit your (?:cv|resume)|"
+        r"salary\s*:\s*[₹\$\d]|compensation\s*:\s*[₹\$\d]|work from office|hybrid|on-site|onsite)\b",
+        t
+    ))
 
-    # Strip UNSUITABLE_JD / ❌ prefix
-    t = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", t, flags=re.IGNORECASE).strip()
-    # Strip "Not suitable — " / "Not suitable - " prefix variants
-    t = re.sub(r"^(?:Not suitable|Unsuitable(?:\s*JD)?)\s*[-—:]+\s*", "", t, flags=re.IGNORECASE).strip()
-    if not t:
-        return "Not suitable"
+    # Contact / apply channels
+    has_apply_channel = bool(
+        "@" in t or "whatsapp" in t or "email:" in t or "cv" in t or "resume" in t
+    )
 
-    words = t.split()
-    t_lower = t.lower()
-    # For scam/potential scam/spam reasons, preserve context up to 100 characters
-    if "scam" in t_lower or "spam" in t_lower:
-        if len(t) > 100:
-            return t[:97].rstrip() + "..."
-        return t
+    # Developer / technical role titles
+    has_job_role = bool(re.search(
+        r"\b(?:developer|engineer|full\s*stack|software|frontend|backend|programmer|consultant)\b",
+        t
+    ))
 
-    if len(words) > max_words or len(t) > max_chars:
-        # Take up to max_words and also respect max_chars
-        truncated = " ".join(words[:max_words])
-        if len(truncated) > max_chars - 3:
-            truncated = truncated[: max_chars - 3].rstrip()
-            if " " in truncated:
-                truncated = truncated.rsplit(" ", 1)[0]
-        return truncated.rstrip(".,;:-—") + "..."
-    return t
+    return has_hiring_marker and (has_apply_channel or has_job_role)
 
 
-def extract_unsuitable_reason(raw_text: str) -> str:
+def normalize_rejection_reason(reason: str, gen_body: str = "", full_text: str = "") -> str:
     """
-    Extract clean, concise reason string from an unsuitable JD response.
-    First checks for an explicit Classification tag anywhere in the text,
-    then evaluates the role description or first line.
+    Standardize raw or buggy rejection reasons into clean, uniform taxonomy labels.
+    Guards against false negatives on authentic recruiter hiring posts.
+    """
+    if not reason and not gen_body:
+        return "Unspecified"
+
+    r_raw = (reason or "").strip()
+    # Strip common boilerplate prefixes like UNSUITABLE_JD - or ❌
+    r_raw = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", r_raw, flags=re.IGNORECASE).strip()
+    r_raw = re.sub(r"^(?:Not suitable|Unsuitable(?:\s*JD)?)\s*[-—:]+\s*", "", r_raw, flags=re.IGNORECASE).strip()
+    r = r_raw.lower()
+    body = (gen_body or "").strip()
+
+    # 0. Check if it is a single-letter or very short corrupted reason (e.g. 'C', 'b', 's', 'h')
+    if len(r_raw) <= 3 and body:
+        # Strip prefixes from body
+        body_clean = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", body, flags=re.IGNORECASE).strip()
+        body_clean = re.sub(r"^(?:Not suitable|Unsuitable(?:\s*JD)?)\s*[-—:]+\s*", "", body_clean, flags=re.IGNORECASE).strip()
+        return normalize_rejection_reason(body_clean, "", full_text)
+
+    # Check if the source post text indicates an undeniable direct hiring post
+    is_direct = is_direct_hiring_post(full_text)
+
+    # 1. Easy Apply Technical / Automation Constraints
+    if "exceeded step limit" in r:
+        return "Multi-step Questionnaire (Saved for Screening)"
+    if "no easy apply button" in r:
+        return "No Easy Apply Button"
+    if "multi-step form" in r:
+        return "Multi-step Form Required Manual Input"
+    if r.startswith("questions:"):
+        return "Requires Screening Questions"
+    if "timeout" in r or "locator." in r or "page." in r:
+        return "Browser Automation Timeout"
+
+    # 2. Potential Scam / Spam
+    if "scam" in r or "spam" in r:
+        return "Potential Scam / Spam"
+
+    # 3. Already Contacted / Unverified Posts
+    if any(k in r for k in ["already send", "already sent", "already applied", "already contacted"]):
+        return "Already Contacted / Sent"
+    if "not reliable post" in r:
+        return "Unverified / Low Reliability Post"
+
+    # 4. Solicitations / Hotlists / Walk-ins / Not a Job
+    if any(k in r for k in ["bench-sales", "bench sales", "hotlist", "hot-list", "c2c", "vendor solicitation", "partner"]):
+        return "Vendor / Consultant Hotlist"
+    # Strict candidate patterns: DO NOT match bare "candidate", which appears in almost every hiring post
+    if any(k in r for k in [
+        "candidate post",
+        "candidate pos",
+        "candidate seeking",
+        "candidate looking for",
+        "candidate's",
+        "candidate’s",
+        "seeking job",
+        "seeking an opp",
+        "open to opportunit",
+        "#opentowork",
+        "job wanted",
+        "looking for a role",
+        "looking for a job",
+        "hire me",
+        "actively looking for",
+        "job-seeking",
+        "job seeking",
+        "cv-sharing",
+        "referral post",
+    ]):
+        if not is_direct:
+            return "Candidate Seeking Job (Not a Hiring Post)"
+    if "freelance" in r:
+        return "Freelance / Contract Offer"
+    if "referral request" in r:
+        return "Referral Request (Not a Job)"
+    if "walk-in" in r or "walk in" in r:
+        return "Walk-in Hiring Event"
+    if "paid" in r and ("workshop" in r or "career" in r or "training" in r or "course" in r):
+        return "Paid Training / Workshop (Not a Job)"
+    if any(k in r for k in ["not a job", "not a direct job", "not an opening"]):
+        if not is_direct:
+            return "Not a Direct Job Opening"
+    if any(k in r for k in ["recruiter post", "recruitment post", "staffing", "outsourcing", "consultan"]):
+        return "Staffing / Recruiter Solicitation"
+
+    # 5. Experience & Seniority Requirements (High priority to allow experience override)
+    if is_experience_rejection(r) or is_experience_rejection(body):
+        return "Experience Requirement Mismatch"
+
+    # 6. Diversity / Gender / Eligibility Requirements
+    if "female" in r or "women" in r:
+        return "Diversity Requirement (Female Only)"
+    if "certification" in r:
+        return "Mandatory Certification Required"
+
+    # 7. Non-Engineering Functional Roles
+    if "qa" in r or "quality assurance" in r or "testing" in r or "sdet" in r:
+        return "QA / Automation Testing Role"
+    if any(k in r for k in ["content", "writing", "copywriting"]):
+        return "Content & Technical Writing Role"
+    if any(k in r for k in ["seo", "marketing", "ads"]):
+        return "Marketing & Growth Role"
+    if any(k in r for k in ["sales", "business development"]):
+        return "Sales & Business Development Role"
+    if any(k in r for k in ["hr", "human resources"]):
+        return "HR & Operations Role"
+    if any(k in r for k in ["design", "ui/ux", "ux", "visual design"]):
+        return "UI/UX & Product Design Role"
+    if any(k in r for k in ["law", "legal", "llb"]):
+        return "Legal & Compliance Role"
+    if any(k in r for k in ["film", "entertainment", "non-software", "non-engineering"]):
+        return "Non-Engineering Role"
+    if any(k in r for k in ["support", "helpdesk", "desktop"]):
+        return "IT Support & Helpdesk Role"
+
+    # 8. Work Authorization & Visa Constraints
+    if any(k in r for k in [
+        "w2", "work authorization", "visa", "green card", "usc-only", "usc or", "clearance",
+        "ksa visa", "canada work", "us contractor", "us candidates", "us only", "usa only", "usa candidates"
+    ]):
+        return "Work Authorization / Visa Restriction"
+
+    # 9. Onsite & Location Restrictions
+    if any(k in r for k in [
+        "onsite", "hybrid", "local", "location", "georgia", "charlotte", "plano", "dallas",
+        "seattle", "tampa", "atlanta", "chicago", "new york", "jersey city", "irving",
+        "columbus", "bengaluru", "chile", "dubai", "winnipeg", "ethiopia", "mohali",
+        "us resident", "us roles", "usa-based", "google office", "connecticut", "texas",
+        "toronto", "canada", "illinois", "schaumburg", "san francisco", "sf"
+    ]):
+        return "Location / Onsite Requirement Mismatch"
+
+    # 10. Tech Stack Mismatch
+    if "tech stack" in r or "stack" in r or any(k in r for k in [
+        "sap", "uipath", "tibco", "avaloq", "kafka", "golang", "power apps", "ai/data",
+        "embedded", "telecom", "transmit", "data engineering", "specialized", "salesforce"
+    ]):
+        return "Irrelevant Tech Stack / Skill Mismatch"
+
+    # 11. Default Fallback
+    if "not suitable" in r or "unspecified" in r or len(r_raw) <= 3:
+        return "Not Suitable (General)"
+
+    return r_raw[:48]
+
+
+def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8) -> str:
+    """
+    Strip boilerplate prefixes and return a clean, uniform taxonomy label.
+    """
+    if not text:
+        return "Not Suitable (General)"
+    return normalize_rejection_reason(text)
+
+
+def extract_unsuitable_reason(raw_text: str, full_text: str = "") -> str:
+    """
+    Extract clean, concise uniform reason string from an unsuitable JD response.
     """
     if not raw_text:
-        return "Not suitable"
-
-    # 1. Search full text for explicit Classification: ... -> Skip tag
-    class_match = re.search(r"Classification:\s*([^→\-\n\.]+?)(?:\s*[→\-]+\s*Skip|\.|$)", raw_text, flags=re.IGNORECASE)
-    if class_match:
-        label = class_match.group(1).strip()
-        if label:
-            if label.isupper():
-                label = " / ".join("QA" if part.strip().upper() == "QA" else part.strip().title() for part in label.split("/"))
-            return label[:48].strip()
-
-    # 2. Check for "This is a <Role>, not a software..."
-    role_match = re.search(r"This is an?\s+([^,\n\.]+?)(?:,\s*not a software|\.\s*The core)?", raw_text, flags=re.IGNORECASE)
-    if role_match:
-        return role_match.group(1).strip()[:48]
-
-    # 3. Fallback to clean_and_truncate_reason on first non-empty line
-    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-    first_line = lines[0] if lines else ""
-    return clean_and_truncate_reason(first_line)
+        return "Not Suitable (General)"
+    return normalize_rejection_reason(raw_text, gen_body=raw_text, full_text=full_text)
 
 
-def send_jd_and_get_email(
+def is_experience_rejection(reason_text: str) -> bool:
+    """
+    Check if an unsuitable classification or rejection reason is based on
+    experience requirements, years of experience, seniority, or experience mismatch.
+    """
+    if not reason_text:
+        return False
+    t = reason_text.lower()
+    if any(k in t for k in [
+        "experience",
+        "yoe",
+        "exp mismatch",
+        "experience mismatch",
+        "excessive experience",
+        "years of exp",
+        "years exp",
+        "seniority",
+    ]):
+        return True
+    if re.search(r"\b\d+\s*[-–—+]?\s*(?:\d+\s*)?(?:years?|yrs?)\b", t):
+        return True
+    if re.search(r"\b(?:too senior|too junior|seniority mismatch|years required)\b", t):
+        return True
+    return False
+
+
+EXPERIENCE_OVERRIDE_DIRECTIVE = (
+    "\n\n[System Directive: Do NOT disqualify, skip, or classify as UNSUITABLE_JD based on years of experience, "
+    "seniority level, or experience mismatch (even for 5+, 8+, 10+, 15+ years). Always generate a tailored "
+    "application email focusing on relevant technical skills, frameworks, and projects. Only classify as "
+    "UNSUITABLE_JD if this is a completely non-engineering role (e.g. Sales, HR, Marketing) or a vendor marketing hotlist/referral.]"
+)
+
+
+def _send_prompt_and_wait_response(
     page: Page,
-    jd_text: str,
+    prompt_text: str,
     max_wait: int = 120,
-    poll_interval: int = 2
+    poll_interval: int = 2,
 ) -> Tuple[str, str]:
     """
-    Send the raw JD to ChatGPT and wait for the response.
-
-    Returns:
-        (subject, body)
+    Internal helper to submit a prompt to the active ChatGPT conversation and wait for completion.
     """
-    if not jd_text or not jd_text.strip():
-        raise ValueError("Cannot send empty JD text to ChatGPT.")
-
     # 1. Record existing last assistant message ID and text
     existing_msgs = page.locator("[data-message-author-role='assistant']")
     initial_count = existing_msgs.count()
@@ -252,7 +439,7 @@ def send_jd_and_get_email(
             const ok = document.execCommand('insertText', false, text);
             el.dispatchEvent(new Event('input', { bubbles: true }));
             return ok;
-        }""", jd_text.strip())
+        }""", prompt_text.strip())
     except Exception as eval_err:
         print(f"    execCommand insert notice: {eval_err}")
         inserted = False
@@ -267,14 +454,14 @@ def send_jd_and_get_email(
     if not inserted or not current_prompt_text:
         # Fallback 1: fill locator
         try:
-            prompt_box.fill(jd_text.strip())
+            prompt_box.fill(prompt_text.strip())
             current_prompt_text = prompt_box.inner_text().strip()
         except Exception:
             pass
 
     if not current_prompt_text:
         # Fallback 2: type line-by-line
-        lines = jd_text.strip().split("\n")
+        lines = prompt_text.strip().split("\n")
         for i, line in enumerate(lines):
             if i > 0:
                 page.keyboard.press("Shift+Enter")
@@ -389,3 +576,42 @@ def send_jd_and_get_email(
 
     subject, body = parse_email_response(response_text)
     return subject, body
+
+
+def send_jd_and_get_email(
+    page: Page,
+    jd_text: str,
+    max_wait: int = 120,
+    poll_interval: int = 2
+) -> Tuple[str, str]:
+    """
+    Send the raw JD to ChatGPT along with the experience-override directive,
+    and wait for the response.
+
+    Returns:
+        (subject, body)
+    """
+    if not jd_text or not jd_text.strip():
+        raise ValueError("Cannot send empty JD text to ChatGPT.")
+
+    full_prompt = jd_text.strip() + EXPERIENCE_OVERRIDE_DIRECTIVE
+    return _send_prompt_and_wait_response(page, full_prompt, max_wait=max_wait, poll_interval=poll_interval)
+
+
+def send_followup_and_get_email(
+    page: Page,
+    followup_text: str,
+    max_wait: int = 120,
+    poll_interval: int = 2
+) -> Tuple[str, str]:
+    """
+    Send a follow-up directive/prompt to the same ChatGPT conversation
+    and wait for the resulting response.
+
+    Returns:
+        (subject, body)
+    """
+    if not followup_text or not followup_text.strip():
+        raise ValueError("Cannot send empty follow-up text to ChatGPT.")
+
+    return _send_prompt_and_wait_response(page, followup_text.strip(), max_wait=max_wait, poll_interval=poll_interval)

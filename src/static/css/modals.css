@@ -375,6 +375,20 @@
     background: rgba(244, 63, 94, 0.14);
   }
 
+  .snackbar-copy-btn:hover {
+    color: var(--accent-cyan);
+    background: rgba(14, 165, 233, 0.15);
+  }
+
+  .snackbar-item.snackbar-error .snackbar-copy-btn {
+    color: rgba(248, 113, 113, 0.85);
+  }
+
+  .snackbar-item.snackbar-error .snackbar-copy-btn:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.18);
+  }
+
   .snackbar-detail-actions {
     display: flex;
     align-items: center;

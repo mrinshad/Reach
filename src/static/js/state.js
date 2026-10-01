@@ -42,6 +42,12 @@ window.state = {
   othersReason: 'ALL',
   locationFilter: 'ALL',
   discoveredReason: 'ALL',
+  fromSentDate: '',
+  toSentDate: '',
+  fromDiscoveredDate: '',
+  toDiscoveredDate: '',
+  fromEasyDate: '',
+  toEasyDate: '',
 };
 
 Object.defineProperty(window, 'currentTab', {

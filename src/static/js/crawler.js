@@ -368,6 +368,201 @@ async function generateBatchChatGPT() {
   }
 }
 
+// ============================================================================
+// Bulk Crawler Search & CSV Keyword Import
+// ============================================================================
+
+let bulkCrawlerParsedKeywords = [];
+
+function parseKeywordsString(text) {
+  if (!text) return [];
+  const ignoredHeaders = ['role', 'roles', 'keyword', 'keywords', 'title', 'titles', 'job title', 'job_title', 'search', 'query'];
+  const rawList = text.split(/[\r\n,;|\t]+/);
+  const seen = new Set();
+  const result = [];
+
+  for (let item of rawList) {
+    let clean = item.trim().replace(/^["']|["']$/g, '');
+    if (!clean || clean.length < 2) continue;
+    if (ignoredHeaders.includes(clean.toLowerCase())) continue;
+    const lower = clean.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(clean);
+    }
+  }
+  return result;
+}
+
+function openBulkCrawlerSearchModal() {
+  const modal = document.getElementById('modalBulkCrawlerSearch');
+  if (!modal) return;
+
+  // Pre-fill location, source & time filter from active crawler controls
+  const activeSource = document.getElementById('crawlerSourceSelect')?.value || 'linkedin';
+  const activeLoc = document.getElementById('crawlerLocationSelect')?.value || '';
+  const activeTime = document.getElementById('crawlerTimeSelect')?.value || '24h';
+
+  const sourceSelect = document.getElementById('bulkCrawlerSource');
+  const locInput = document.getElementById('bulkCrawlerLocation');
+  const timeSelect = document.getElementById('bulkCrawlerTimeFilter');
+
+  if (sourceSelect) {
+    if (activeSource === 'linkedin_jobs') {
+      sourceSelect.value = 'linkedin_jobs';
+    } else {
+      sourceSelect.value = 'linkedin';
+    }
+  }
+  if (locInput) locInput.value = (activeLoc === 'ALL' || activeLoc === 'Anywhere') ? '' : activeLoc;
+  if (timeSelect) {
+    if (['24h', 'today', '2d', '3d', 'week'].includes(activeTime)) {
+      timeSelect.value = activeTime;
+    } else {
+      timeSelect.value = '24h';
+    }
+  }
+
+  modal.classList.remove('hidden');
+}
+
+function closeBulkCrawlerSearchModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x')) {
+    return;
+  }
+  const modal = document.getElementById('modalBulkCrawlerSearch');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderBulkCrawlerKeywordsChips() {
+  const container = document.getElementById('bulkCrawlerKeywordsPreview');
+  const countBadge = document.getElementById('bulkCrawlerKeywordsCount');
+  const submitBtn = document.getElementById('btnLaunchBulkCrawlerCrawl');
+  const submitText = document.getElementById('btnLaunchBulkCrawlerCrawlText');
+
+  if (!container || !countBadge) return;
+
+  const count = bulkCrawlerParsedKeywords.length;
+  countBadge.textContent = `${count} keyword${count === 1 ? '' : 's'}`;
+
+  if (count > 0) {
+    container.classList.remove('hidden');
+    container.innerHTML = bulkCrawlerParsedKeywords.map((kw, i) => `
+      <span class="bulk-keyword-chip">
+        <span>${escapeHtml(kw)}</span>
+        <span class="chip-del" onclick="removeBulkCrawlerKeyword(${i})" title="Remove keyword">&times;</span>
+      </span>
+    `).join('');
+
+    if (submitBtn) submitBtn.disabled = false;
+    if (submitText) submitText.textContent = `Queue ${count} Search${count === 1 ? '' : 'es'}`;
+  } else {
+    container.classList.add('hidden');
+    container.innerHTML = '';
+    if (submitBtn) submitBtn.disabled = true;
+    if (submitText) submitText.textContent = 'Queue Searches';
+  }
+}
+
+function handleBulkCrawlerKeywordsInput(text) {
+  bulkCrawlerParsedKeywords = parseKeywordsString(text);
+  renderBulkCrawlerKeywordsChips();
+}
+
+function handleBulkCrawlerCsvUpload(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const content = e.target.result || '';
+    const keywords = parseKeywordsString(content);
+    if (keywords.length === 0) {
+      showAlert('No Keywords Found', 'Could not detect any role names in the uploaded file. Please ensure it contains comma-separated or line-separated text.');
+      return;
+    }
+    bulkCrawlerParsedKeywords = keywords;
+    const textarea = document.getElementById('bulkCrawlerKeywordsInput');
+    if (textarea) textarea.value = bulkCrawlerParsedKeywords.join(', ');
+    renderBulkCrawlerKeywordsChips();
+    showToast(`✓ Imported ${keywords.length} keywords from ${file.name}`, 'success');
+  };
+  reader.onerror = function() {
+    showAlert('Upload Error', 'Failed to read the selected file.');
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function removeBulkCrawlerKeyword(index) {
+  if (index >= 0 && index < bulkCrawlerParsedKeywords.length) {
+    bulkCrawlerParsedKeywords.splice(index, 1);
+    const textarea = document.getElementById('bulkCrawlerKeywordsInput');
+    if (textarea) textarea.value = bulkCrawlerParsedKeywords.join(', ');
+    renderBulkCrawlerKeywordsChips();
+  }
+}
+
+function clearBulkCrawlerKeywords() {
+  bulkCrawlerParsedKeywords = [];
+  const textarea = document.getElementById('bulkCrawlerKeywordsInput');
+  if (textarea) textarea.value = '';
+  renderBulkCrawlerKeywordsChips();
+}
+
+async function submitBulkCrawlerSearch() {
+  if (!bulkCrawlerParsedKeywords || bulkCrawlerParsedKeywords.length === 0) {
+    showAlert('No Keywords', 'Please enter or import at least one keyword to search.');
+    return;
+  }
+
+  const source = document.getElementById('bulkCrawlerSource')?.value || 'linkedin';
+  const location = (document.getElementById('bulkCrawlerLocation')?.value || '').trim();
+  const timeFilter = document.getElementById('bulkCrawlerTimeFilter')?.value || '24h';
+  const count = bulkCrawlerParsedKeywords.length;
+
+  const sourceLabel = source === 'linkedin_jobs' ? 'LinkedIn Job Portal (Easy Apply)' : 'LinkedIn Hiring Posts';
+  const locLabel = location ? `for "${location}"` : '(No location filter)';
+
+  const confirmed = await showConfirm(
+    `Launch Bulk ${sourceLabel} Searches`,
+    `Enqueue ${count} searches sequentially in background ${locLabel}?\n\nEach search will run one after another in persistent Firefox with auto-deduplication.`,
+    { confirmText: `Queue ${count} Searches` }
+  );
+  if (!confirmed) return;
+
+  const submitBtn = document.getElementById('btnLaunchBulkCrawlerCrawl');
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/scrape/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: source,
+        keywords: bulkCrawlerParsedKeywords,
+        location: location || null,
+        time_filter: timeFilter,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(`🚀 Enqueued ${data.count || count} bulk search tasks!`, 'success');
+      closeBulkCrawlerSearchModal();
+      clearBulkCrawlerKeywords();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+    } else {
+      const err = await res.json();
+      showAlert('Bulk Search Error', err.detail || 'Could not enqueue bulk search tasks.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
 // Global Bindings
 window.triggerInfoparkScrape = triggerInfoparkScrape;
 window.handleCrawlerSourceChange = handleCrawlerSourceChange;
@@ -384,3 +579,10 @@ window.markActivePostSpam = markActivePostSpam;
 window.markPostModalSpam = markPostModalSpam;
 window.generateSingleChatGPT = generateSingleChatGPT;
 window.generateBatchChatGPT = generateBatchChatGPT;
+window.openBulkCrawlerSearchModal = openBulkCrawlerSearchModal;
+window.closeBulkCrawlerSearchModal = closeBulkCrawlerSearchModal;
+window.handleBulkCrawlerCsvUpload = handleBulkCrawlerCsvUpload;
+window.handleBulkCrawlerKeywordsInput = handleBulkCrawlerKeywordsInput;
+window.removeBulkCrawlerKeyword = removeBulkCrawlerKeyword;
+window.clearBulkCrawlerKeywords = clearBulkCrawlerKeywords;
+window.submitBulkCrawlerSearch = submitBulkCrawlerSearch;

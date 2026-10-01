@@ -27,6 +27,17 @@ class BatchPostActionPayload(BaseModel):
     reason: Optional[str] = None
 
 
+class UpdateStatusPayload(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class BatchStatusPayload(BaseModel):
+    post_ids: List[str]
+    status: str
+    reason: Optional[str] = None
+
+
 class RejectPostPayload(BaseModel):
     reason: Optional[str] = None
 
@@ -71,6 +82,27 @@ class ScrapePayload(BaseModel):
     time_filter: Optional[str] = "24h"
 
 
+class EasyApplyBatchScrapePayload(BaseModel):
+    keywords: List[str]
+    location: Optional[str] = "India"
+    time_filter: Optional[str] = "24h"
+    max_jobs: Optional[int] = 20
+
+
+class LinkedInBatchScrapePayload(BaseModel):
+    keywords: List[str]
+    location: Optional[str] = None
+    time_filter: Optional[str] = "24h"
+
+
+class BatchScrapePayload(BaseModel):
+    source: Optional[str] = "linkedin"
+    keywords: List[str]
+    location: Optional[str] = None
+    time_filter: Optional[str] = "24h"
+
+
+
 MAJOR_JOB_HUBS = [
     "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",
     "Toronto", "Vancouver", "Montreal",
@@ -109,3 +141,12 @@ class DirectOutreachPayload(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
     mode: Optional[str] = "send"
+
+
+class ReexecuteBatchPayload(BaseModel):
+    log_ids: Optional[List[str]] = None
+
+
+class DeleteBatchActivityLogsPayload(BaseModel):
+    log_ids: List[str]
+

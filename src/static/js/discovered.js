@@ -36,6 +36,14 @@ async function fetchDiscoveredPosts() {
       params.append('date_filter', state.dateFilter);
     }
 
+    if (state.fromDiscoveredDate) {
+      params.append('from_date', state.fromDiscoveredDate);
+    }
+
+    if (state.toDiscoveredDate) {
+      params.append('to_date', state.toDiscoveredDate);
+    }
+
     if (state.locationFilter && state.locationFilter !== 'ALL') {
       params.append('location', state.locationFilter);
     }
@@ -60,7 +68,7 @@ async function fetchDiscoveredPosts() {
     state.total = data.total || 0;
 
     const discBadge = document.getElementById('discoveredResultsBadge');
-    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default') || (state.locationFilter && state.locationFilter !== 'ALL') || (state.discoveredReason && state.discoveredReason !== 'ALL');
+    const isFiltered = state.expFilter !== 'ALL' || (state.searchQuery && state.searchQuery.trim() !== '') || state.sourceFilter !== 'ALL' || (state.genStatusFilter && state.genStatusFilter !== 'ALL') || state.categoryFilter !== 'ALL' || (state.dateFilter && state.dateFilter !== 'ALL') || (state.sortBy && state.sortBy !== 'default') || (state.locationFilter && state.locationFilter !== 'ALL') || (state.discoveredReason && state.discoveredReason !== 'ALL') || Boolean(state.fromDiscoveredDate) || Boolean(state.toDiscoveredDate);
     if (discBadge) {
       if (isFiltered) {
         discBadge.textContent = `${state.total} result${state.total === 1 ? '' : 's'}`;
@@ -430,6 +438,15 @@ function handleSearchKeyUp(e) {
   }
 }
 
+function applyDiscoveredDateFilter() {
+  const fromEl = document.getElementById('discoveredDateFrom');
+  const toEl = document.getElementById('discoveredDateTo');
+  state.fromDiscoveredDate = fromEl ? fromEl.value.trim() : '';
+  state.toDiscoveredDate = toEl ? toEl.value.trim() : '';
+  state.page = 1;
+  fetchDiscoveredPosts();
+}
+
 function clearDiscoveredFilters() {
   state.expFilter = 'ALL';
   document.querySelectorAll('#expPills .pill').forEach((pill) => {
@@ -453,6 +470,13 @@ function clearDiscoveredFilters() {
   if (dateSel) dateSel.value = 'ALL';
   const customGroup = document.getElementById('customDateFilterGroup');
   if (customGroup) customGroup.classList.add('hidden');
+
+  state.fromDiscoveredDate = '';
+  state.toDiscoveredDate = '';
+  const fromEl = document.getElementById('discoveredDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('discoveredDateTo');
+  if (toEl) toEl.value = '';
 
   state.locationFilter = 'ALL';
   const locSel = document.getElementById('selectLocationFilter');
@@ -573,6 +597,7 @@ window.toggleSort = toggleSort;
 window.updateSortIndicators = updateSortIndicators;
 window.handleSearchKeyUp = handleSearchKeyUp;
 window.clearDiscoveredFilters = clearDiscoveredFilters;
+window.applyDiscoveredDateFilter = applyDiscoveredDateFilter;
 window.filterPendingGeneration = filterPendingGeneration;
 window.movePostToReview = movePostToReview;
 window.toggleSelectPost = toggleSelectPost;

@@ -875,13 +875,17 @@
 
     /* Modals Mobile Sizing */
     .modal-box,
-    .outreach-modal-content,
-    .modal-md {
+    .modal-md,
+    .modal-lg {
       width: 95% !important;
       max-width: 95% !important;
       max-height: 90vh !important;
-      padding: 1.1rem !important;
       margin: 1rem auto !important;
+      padding: 0 !important;
+    }
+
+    .outreach-modal-content {
+      padding: 1.1rem !important;
     }
 
     /* Notification Dropdown Mobile Alignment */

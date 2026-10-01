@@ -137,6 +137,26 @@
     text-overflow: ellipsis;
   }
 
+  .task-eta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(14, 165, 233, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 165, 233, 0.3);
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .task-eta-pill svg {
+    color: #38bdf8;
+    flex-shrink: 0;
+  }
+
   .task-counter-pill {
     background: rgba(99, 102, 241, 0.2);
     color: #c7d2fe;
@@ -189,6 +209,30 @@
   .btn-cancel-active-task.sm {
     padding: 0.15rem 0.45rem;
     font-size: 0.68rem;
+  }
+
+  .btn-retry-active-task {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #fde68a;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .btn-retry-active-task:hover {
+    background: rgba(245, 158, 11, 0.35);
+    border-color: #fbbf24;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.35);
+    transform: translateY(-1px);
   }
 
   .task-logs-drawer {
@@ -351,6 +395,30 @@
   .queue-card-meta {
     font-size: 0.68rem;
     color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .task-queue-card-right {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+  }
+
+  .queue-eta-badge {
+    background: rgba(14, 165, 233, 0.12);
+    color: #7dd3fc;
+    border: 1px solid rgba(14, 165, 233, 0.25);
+    padding: 0.12rem 0.42rem;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .queue-starts-in {
+    color: var(--text-muted);
+    font-size: 0.65rem;
     white-space: nowrap;
   }
 

@@ -49,6 +49,20 @@ from src.db.analytics import (
     get_analytics_summary,
 )
 
+from src.db.activity_logs import (
+    create_activity_log,
+    update_activity_log_progress,
+    finish_activity_log,
+    get_activity_logs,
+    get_activity_log_by_id,
+    clear_activity_logs,
+    delete_activity_log,
+    delete_activity_logs_batch,
+    reset_activity_log_for_retry,
+    cleanup_orphaned_running_logs,
+    get_activity_log_counts,
+)
+
 __all__ = [
     "DEFAULT_DB_URL",
     "get_connection",
@@ -82,4 +96,15 @@ __all__ = [
     "get_distinct_locations",
     "get_stats",
     "get_analytics_summary",
+    "create_activity_log",
+    "update_activity_log_progress",
+    "finish_activity_log",
+    "get_activity_logs",
+    "get_activity_log_by_id",
+    "clear_activity_logs",
+    "delete_activity_log",
+    "delete_activity_logs_batch",
+    "reset_activity_log_for_retry",
+    "cleanup_orphaned_running_logs",
+    "get_activity_log_counts",
 ]

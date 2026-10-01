@@ -73,6 +73,14 @@ def startup_event():
     except Exception as e:
         print(f"Notice: startup post cleanup check: {e}")
 
+    try:
+        from src.db.activity_logs import cleanup_orphaned_running_logs
+        cleaned_logs = cleanup_orphaned_running_logs(older_than_minutes=5)
+        if cleaned_logs > 0:
+            print(f"✓ Cleaned up {cleaned_logs} orphaned running activity log(s) on startup.")
+    except Exception as e:
+        print(f"Notice: startup activity log cleanup: {e}")
+
 
 
 def get_rendered_index_html() -> str:

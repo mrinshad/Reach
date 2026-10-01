@@ -9,6 +9,7 @@ while providing real-time status and logs to the FastAPI dashboard.
 from src.db import update_post_email
 import os
 import sys
+import re
 import time
 import random
 import threading
@@ -22,24 +23,65 @@ from src.db import (
     update_post_status,
     get_recently_sent_recipients,
     SEND_COOLDOWN_DAYS,
+    create_activity_log,
+    update_activity_log_progress,
+    finish_activity_log,
 )
 from .firefox_connector import launch_firefox_context
 from .chatgpt_service import (
     navigate_to_conversation,
     send_jd_and_get_email,
+    send_followup_and_get_email,
     extract_unsuitable_reason,
     is_unsuitable_response,
+    is_experience_rejection,
     get_default_chatgpt_url,
 )
 from .gmail_service import (
     navigate_to_gmail,
     populate_email_draft,
     send_email_directly,
+    discard_open_compose_dialogs,
 )
 from .health_service import check_firefox_session_cookies
 from src.config import load_config, is_headless
+from .timing_service import (
+    compute_task_timing_estimate,
+    estimate_queued_task,
+    format_duration_short,
+)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def is_valid_email(email: str) -> bool:
+    """
+    Validate that an email address has a standard structure and does not contain
+    illegal patterns like trailing/leading periods before the @, multiple @ symbols, etc.
+    """
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    if " " in email:
+        return False
+    parts = email.split("@")
+    if len(parts) != 2:
+        return False
+    local, domain = parts
+    if not local or not domain:
+        return False
+    # Reject trailing/leading dots in local or domain, e.g. yeri.@domain.com or .yeri@domain.com
+    if local.startswith(".") or local.endswith("."):
+        return False
+    if ".." in local or ".." in domain:
+        return False
+    if domain.startswith(".") or domain.endswith("."):
+        return False
+    if "." not in domain:
+        return False
+    return bool(_EMAIL_REGEX.match(email))
 
 
 class TaskManager:
@@ -53,6 +95,9 @@ class TaskManager:
         self._active_proc: Optional[Any] = None
         self._active_context: Optional[Any] = None
         self._current_task: Optional[Dict[str, Any]] = None
+        self._current_run_id: Optional[str] = None
+        self._current_task_type: Optional[str] = None
+        self._current_task_params: Optional[Dict[str, Any]] = None
         self.state: Dict[str, Any] = {
             "status": "idle",       # idle | running | completed | error
             "task_name": "",
@@ -120,6 +165,19 @@ class TaskManager:
             self.state["current_step"] = "Stopped by user"
             self.state["finished_at"] = time.time()
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] 🛑 {task_name} was stopped by user.")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="stopped",
+                    result_summary="Stopped by user",
+                    crawl_stats=self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                    completed_items=self.state.get("completed_items", 0),
+                    total_items=self.state.get("total_items", 1),
+                )
             return True
 
     def enqueue_task(
@@ -132,15 +190,16 @@ class TaskManager:
         metadata: dict = None,
         short_name: str = "",
         snippet: str = "",
+        task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Thread-safe addition to FIFO queue.
         If worker is idle, starts background sequential processor immediately.
         If another task is active, enqueues item and returns its queue position.
         """
-        task_id = f"task_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+        tid = task_id or f"task_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
         item = {
-            "id": task_id,
+            "id": tid,
             "type": task_type,
             "name": task_name,
             "short_name": short_name or task_name,
@@ -163,7 +222,7 @@ class TaskManager:
                 self.log(f"Enqueued task #{pos}: {disp_desc}")
                 return {
                     "queued": True,
-                    "task_id": task_id,
+                    "task_id": tid,
                     "position": pos,
                     "queue_length": len(self.queue),
                     "task_name": task_name,
@@ -177,7 +236,7 @@ class TaskManager:
                     self._worker_thread.start()
                 return {
                     "queued": False,
-                    "task_id": task_id,
+                    "task_id": tid,
                     "position": 0,
                     "queue_length": len(self.queue),
                     "task_name": task_name,
@@ -199,9 +258,22 @@ class TaskManager:
 
             self._cancel_requested.clear()
             self._current_task = current_item
+            self._current_run_id = current_item.get("id")
+            self._current_task_type = current_item.get("type") or "task"
+            self._current_task_params = current_item.get("metadata") or {}
             runner = current_item["runner"]
             args = current_item.get("args", ())
             kwargs = current_item.get("kwargs", {})
+
+            # Persist initial activity run in DB
+            create_activity_log(
+                log_id=self._current_run_id,
+                task_type=self._current_task_type,
+                task_name=current_item.get("name", "Task"),
+                short_name=current_item.get("short_name", ""),
+                parameters=self._current_task_params,
+                total_items=1,
+            )
 
             try:
                 runner(*args, **kwargs)
@@ -239,21 +311,31 @@ class TaskManager:
                 self.log(f"Cleared {count} queued task(s)")
             return count
 
-    def get_queue_summary(self) -> List[Dict[str, Any]]:
-        """Return a lightweight, JSON-serializable list of queued tasks with snippet descriptors."""
+    def get_queue_summary(self, running_remaining: float = 0.0) -> List[Dict[str, Any]]:
+        """Return a lightweight, JSON-serializable list of queued tasks with snippet descriptors and ETAs."""
+        summary = []
+        cumulative_offset = max(0.0, float(running_remaining))
         with self._queue_lock:
-            return [
-                {
-                    "id": item["id"],
-                    "name": item["name"],
-                    "short_name": item.get("short_name") or item["name"],
-                    "snippet": item.get("snippet") or "",
-                    "type": item["type"],
-                    "metadata": item.get("metadata", {}),
-                    "enqueued_at": item.get("enqueued_at"),
-                }
-                for item in self.queue
-            ]
+            for item in self.queue:
+                est = estimate_queued_task(item)
+                item_duration = est.get("estimated_duration_seconds", 60.0)
+                summary.append(
+                    {
+                        "id": item["id"],
+                        "name": item["name"],
+                        "short_name": item.get("short_name") or item["name"],
+                        "snippet": item.get("snippet") or "",
+                        "type": item["type"],
+                        "metadata": item.get("metadata", {}),
+                        "enqueued_at": item.get("enqueued_at"),
+                        "estimated_duration_seconds": item_duration,
+                        "eta_display": est.get("eta_display", ""),
+                        "starts_in_seconds": round(cumulative_offset, 1),
+                        "starts_in_display": f"Starts in {format_duration_short(cumulative_offset)}" if cumulative_offset > 5 else "Starts shortly",
+                    }
+                )
+                cumulative_offset += item_duration
+        return summary
 
     def start_task(self, task_name: str, total_items: int = 1, short_name: str = "", snippet: str = ""):
         with self._lock:
@@ -271,6 +353,24 @@ class TaskManager:
                 "finished_at": None,
                 "crawl_stats": None,
             }
+            if not self._current_run_id:
+                self._current_run_id = f"task_{int(time.time() * 1000)}_{random.randint(1000, 9999)}"
+                self._current_task_type = "task"
+                self._current_task_params = {}
+                create_activity_log(
+                    log_id=self._current_run_id,
+                    task_type=self._current_task_type,
+                    task_name=task_name,
+                    short_name=short_name or task_name,
+                    parameters=self._current_task_params,
+                    total_items=total_items,
+                )
+            else:
+                update_activity_log_progress(
+                    self._current_run_id,
+                    completed_items=0,
+                    logs=self.state["logs"],
+                )
 
     def log(self, message: str):
         with self._lock:
@@ -284,6 +384,14 @@ class TaskManager:
     def set_current_step(self, step: str):
         with self._lock:
             self.state["current_step"] = step
+
+    def set_total_posts(self, total: int):
+        with self._lock:
+            self.state["total_items"] = max(1, total)
+
+    def set_total_items(self, total: int):
+        with self._lock:
+            self.state["total_items"] = max(1, total)
 
     def update_progress(self, completed: int, current_step: str = ""):
         with self._lock:
@@ -299,6 +407,19 @@ class TaskManager:
             if crawl_stats:
                 self.state["crawl_stats"] = crawl_stats
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✓ {success_message}")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="completed",
+                    result_summary=success_message,
+                    crawl_stats=crawl_stats or self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                    completed_items=self.state.get("completed_items", 0),
+                    total_items=self.state.get("total_items", 1),
+                )
 
     def fail_task(self, error_message: str):
         with self._lock:
@@ -307,6 +428,19 @@ class TaskManager:
             self.state["current_step"] = f"Failed: {error_message}"
             self.state["finished_at"] = time.time()
             self.state["logs"].append(f"[{time.strftime('%H:%M:%S')}] ✗ Error: {error_message}")
+            if self._current_run_id:
+                started = self.state.get("started_at")
+                duration = max(0.0, time.time() - started) if started else 0.0
+                finish_activity_log(
+                    log_id=self._current_run_id,
+                    status="error",
+                    result_summary=f"Failed: {error_message}",
+                    crawl_stats=self.state.get("crawl_stats"),
+                    logs=list(self.state["logs"]),
+                    duration_seconds=duration,
+                    completed_items=self.state.get("completed_items", 0),
+                    total_items=self.state.get("total_items", 1),
+                )
 
     def clear_task(self):
         with self._lock:
@@ -321,7 +455,35 @@ class TaskManager:
     def get_state(self) -> Dict[str, Any]:
         with self._lock:
             st = dict(self.state)
-        st["queue"] = self.get_queue_summary()
+            st["log_id"] = self._current_run_id
+            curr_type = self._current_task_type or "task"
+            curr_params = self._current_task_params or {}
+
+        # Real-time dynamic duration and ETA estimation
+        if st.get("status") == "running":
+            timing = compute_task_timing_estimate(
+                task_type=curr_type,
+                task_name=st.get("task_name", ""),
+                total_items=st.get("total_items", 1),
+                completed_items=st.get("completed_items", 0),
+                started_at=st.get("started_at"),
+                metadata=curr_params,
+            )
+            st["elapsed_seconds"] = timing["elapsed_seconds"]
+            st["estimated_remaining_seconds"] = timing["estimated_remaining_seconds"]
+            st["estimated_total_seconds"] = timing["estimated_total_seconds"]
+            st["eta_display"] = timing["eta_display"]
+            st["eta_short"] = timing["eta_short"]
+            st["eta_confidence"] = timing["confidence"]
+        else:
+            st["elapsed_seconds"] = 0.0
+            st["estimated_remaining_seconds"] = 0.0
+            st["estimated_total_seconds"] = 0.0
+            st["eta_display"] = ""
+            st["eta_short"] = ""
+            st["eta_confidence"] = "idle"
+
+        st["queue"] = self.get_queue_summary(running_remaining=st.get("estimated_remaining_seconds", 0.0))
         st["queue_length"] = len(st["queue"])
         return st
 
@@ -382,14 +544,32 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                         jd_text = (post.get("full_text") or "").strip()
                         subject, body = send_jd_and_get_email(page, jd_text)
 
-                        # If ChatGPT classifies the JD as unsuitable, auto-cancel immediately
+                        # If ChatGPT classifies the JD as unsuitable, auto-cancel immediately (unless due to experience)
                         is_unsuitable = (subject == "UNSUITABLE_JD" or is_unsuitable_response(body))
                         if is_unsuitable:
-                            reason = extract_unsuitable_reason(body)
-                            update_post_status(post_id, "REJECTED", rejection_reason=reason)
-                            update_post_email(post_id, "UNSUITABLE_JD", body)
-                            rejected_count += 1
-                            task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
+                            reason = extract_unsuitable_reason(body, full_text=jd_text)
+                            if is_experience_rejection(reason) or is_experience_rejection(body):
+                                task_manager.log(f"  ℹ️ [Experience Override] Role mentions '{reason}', but experience-based cancellation is disabled.")
+                                task_manager.log(f"  Prompting ChatGPT to generate outreach email anyway...")
+                                followup_prompt = (
+                                    "Write the tailored cold outreach application email for this role anyway. "
+                                    "Focus on the candidate's relevant hands-on skills, frameworks, and project strengths "
+                                    "regardless of the years of experience requirement. Never invent experience, but bridge "
+                                    "skill requirements confidently."
+                                )
+                                retry_subject, retry_body = send_followup_and_get_email(page, followup_prompt)
+                                if retry_subject != "UNSUITABLE_JD" and not is_unsuitable_response(retry_body):
+                                    save_chatgpt_response(post_id, retry_subject, retry_body)
+                                    success_count += 1
+                                    task_manager.log(f"  ✓ Email generated (experience override): '{retry_subject[:60]}...'")
+                                else:
+                                    update_post_status(post_id, "DISCOVERED")
+                                    task_manager.log(f"  ℹ️ Kept in Discovered queue (experience-based cancellation disabled).")
+                            else:
+                                update_post_status(post_id, "REJECTED", rejection_reason=reason)
+                                update_post_email(post_id, "UNSUITABLE_JD", body)
+                                rejected_count += 1
+                                task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                         else:
                             save_chatgpt_response(post_id, subject, body)
                             success_count += 1
@@ -470,9 +650,13 @@ def run_open_gmail_draft(post_id: str):
         task_manager.fail_task(f"No contact email found for this post.")
         return
 
-    recipient = emails[0]
+    recipient = emails[0].strip()
     subject = post.get("generated_subject") or "Application for Full Stack Developer"
     body = post.get("generated_body") or ""
+
+    if not is_valid_email(recipient):
+        task_manager.fail_task(f"Invalid email address format: '{recipient}'.")
+        return
 
     if not body:
         task_manager.fail_task(f"No generated email body found. Generate email first.")
@@ -499,6 +683,7 @@ def run_open_gmail_draft(post_id: str):
             else:
                 task_manager.log(f"  Note: No resume found at '{resume_path}'")
 
+            discard_open_compose_dialogs(page)
             populate_email_draft(
                 page=page,
                 recipient=recipient,
@@ -654,10 +839,14 @@ def run_send_single_draft(post_id: str):
         task_manager.fail_task(f"No contact email found for {post.get('author_name')}.")
         return
 
-    recipient = emails[0]
+    recipient = emails[0].strip()
     subject = post.get("generated_subject") or "Application for Full Stack Developer"
     body = post.get("generated_body") or ""
     author = post.get("author_name", "Recruiter")
+
+    if not is_valid_email(recipient):
+        task_manager.fail_task(f"Invalid email address format: '{recipient}' for {author}.")
+        return
 
     if not body:
         task_manager.fail_task("Email draft is empty. Generate draft before sending.")
@@ -684,32 +873,37 @@ def run_send_single_draft(post_id: str):
                 headless=hl,
                 sync_cookies_domains=["google.com", "gmail.com"],
             )
-            page = context.pages[0] if context.pages else context.new_page()
+            task_manager.set_active_context(context)
+            try:
+                page = context.pages[0] if context.pages else context.new_page()
 
-            task_manager.log("Navigating to Gmail...")
-            navigate_to_gmail(page)
+                task_manager.log("Navigating to Gmail...")
+                navigate_to_gmail(page)
 
-            attachment = resume_path if os.path.exists(resume_path) else None
-            task_manager.log(f"Composing email to {recipient}...")
-            populate_email_draft(
-                page=page,
-                recipient=recipient,
-                subject=subject,
-                body=body,
-                attachment_path=attachment,
-            )
+                attachment = resume_path if os.path.exists(resume_path) else None
+                task_manager.log(f"Composing email to {recipient}...")
+                discard_open_compose_dialogs(page)
+                populate_email_draft(
+                    page=page,
+                    recipient=recipient,
+                    subject=subject,
+                    body=body,
+                    attachment_path=attachment,
+                )
 
-            task_manager.log("Clicking Send directly...")
-            send_email_directly(page)
+                task_manager.log("Clicking Send directly...")
+                send_email_directly(page)
 
-            # Update database
-            mark_post_sent(post_id)
-            task_manager.log(f"✓ Application to {author} ({recipient}) sent successfully!")
-            task_manager.update_progress(1)
-            time.sleep(1)
+                # Update database
+                mark_post_sent(post_id)
+                task_manager.log(f"✓ Application to {author} ({recipient}) sent successfully!")
+                task_manager.update_progress(1)
+                time.sleep(1)
 
-            context.close()
-            task_manager.finish_task(f"Successfully sent application to {author} ({recipient})!")
+                context.close()
+                task_manager.finish_task(f"Successfully sent application to {author} ({recipient})!")
+            finally:
+                task_manager.clear_active_context()
     except Exception as e:
         task_manager.fail_task(f"Send Error: {str(e)}")
 
@@ -796,19 +990,27 @@ def run_send_batch_drafts(post_ids: List[str]):
                         failed.append((post.get("author_name", post_id), "No email found"))
                         continue
 
-                    recipient = emails[0]
+                    recipient = emails[0].strip()
                     author = post.get("author_name", "Recruiter")
                     subject = post.get("generated_subject") or "Application for Full Stack Developer"
                     body = post.get("generated_body") or ""
 
+                    if not is_valid_email(recipient):
+                        task_manager.log(f"  ✗ Skipping {author}: invalid email address format '{recipient}'.")
+                        failed.append((author, f"Invalid email format: '{recipient}'"))
+                        task_manager.update_progress(idx)
+                        continue
+
                     if not body:
                         failed.append((author, "Empty email body"))
+                        task_manager.update_progress(idx)
                         continue
 
                     task_manager.log(f"[{idx}/{len(post_ids)}] Composing to {author} ({recipient})...")
                     task_manager.set_current_step(f"Sending {idx}/{len(post_ids)}: {author}")
 
                     try:
+                        discard_open_compose_dialogs(page)
                         populate_email_draft(
                             page=page,
                             recipient=recipient,
@@ -826,6 +1028,10 @@ def run_send_batch_drafts(post_ids: List[str]):
                             return
                         task_manager.log(f"  ✗ Failed to send to {author}: {send_err}")
                         failed.append((author, str(send_err)))
+                        try:
+                            discard_open_compose_dialogs(page)
+                        except Exception:
+                            pass
 
                     task_manager.update_progress(idx)
 
@@ -961,11 +1167,19 @@ def run_scraper_subprocess_with_timeout(
             )
         elif proc.returncode == 0:
             if parsed_stats:
-                custom_msg = (
-                    f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
-                    f"{parsed_stats.get('newly_added', 0)} newly added, "
-                    f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
-                )
+                if "applied" in parsed_stats:
+                    custom_msg = (
+                        f"Finished: {parsed_stats.get('total_crawled', 0)} jobs found — "
+                        f"{parsed_stats.get('applied', 0)} applied, "
+                        f"{parsed_stats.get('requires_questionnaire', 0)} screening questions, "
+                        f"{parsed_stats.get('ready_in_queue', 0)} ready in queue."
+                    )
+                else:
+                    custom_msg = (
+                        f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
+                        f"{parsed_stats.get('newly_added', 0)} newly added, "
+                        f"{parsed_stats.get('skipped_already_added', 0)} skipped (already in DB)."
+                    )
                 task_manager.finish_task(custom_msg, crawl_stats=parsed_stats)
             else:
                 task_manager.finish_task(finish_message)
@@ -1021,6 +1235,43 @@ def run_linkedin_scraper(query: Optional[str] = None, location: Optional[str] = 
     )
 
 
+def run_linkedin_easy_apply_scraper(query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
+    """
+    Run the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox context.
+    Executes scripts/linkedin_job_search.py via run_scraper_subprocess_with_timeout
+    with 90-second inactivity watchdog and real-time terminal streaming.
+    """
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_job_search.py")
+    task_label = "LinkedIn Easy Apply Crawler"
+    if location and location.strip():
+        task_label = f"LinkedIn Easy Apply Crawler ({location.strip()})"
+
+    extra_env = {
+        "SCRAPER_SOURCE": "dashboard",
+        "SCRAPER_LIMIT": "20",
+    }
+    if query:
+        extra_env["SCRAPER_SEARCH_QUERY"] = query.strip()
+    if location:
+        extra_env["SCRAPER_LOCATION"] = location.strip()
+    if time_filter:
+        extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
+
+    run_scraper_subprocess_with_timeout(
+        task_name=task_label,
+        script_path=script_path,
+        inactivity_timeout_seconds=90.0,
+        finish_message="LinkedIn Easy Apply crawling finished successfully.",
+        extra_env=extra_env,
+    )
+
+
+def run_single_easy_apply(post_id: str):
+    """Run Easy Apply submission for a single job post in Firefox."""
+    from src.services.easy_apply_service import apply_to_single_easy_apply_post
+    apply_to_single_easy_apply_post(post_id, task_manager=task_manager)
+
+
 SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
     "linkedin": {
         "id": "linkedin",
@@ -1028,6 +1279,13 @@ SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
         "icon": "💼",
         "description": "Scrapes hiring posts via search query in headed Firefox",
         "runner": run_linkedin_scraper,
+    },
+    "linkedin_jobs": {
+        "id": "linkedin_jobs",
+        "name": "LinkedIn Easy Apply",
+        "icon": "⚡",
+        "description": "Scrapes linkedin.com/jobs with Easy Apply (f_AL=true) and submits applications",
+        "runner": run_linkedin_easy_apply_scraper,
     },
     "infopark": {
         "id": "infopark",
@@ -1062,5 +1320,8 @@ def run_scraper_by_source(source_id: str, query: Optional[str] = None, location:
     
     if source_lower == "linkedin":
         run_linkedin_scraper(query=query, location=location, time_filter=time_filter)
+    elif source_lower in ("linkedin_jobs", "easy_apply"):
+        run_linkedin_easy_apply_scraper(query=query, location=location, time_filter=time_filter)
     else:
         scraper["runner"]()
+

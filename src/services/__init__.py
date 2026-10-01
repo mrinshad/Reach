@@ -22,16 +22,21 @@ from .automation_tasks import (
 from .chatgpt_service import (
     navigate_to_conversation,
     send_jd_and_get_email,
+    send_followup_and_get_email,
     parse_email_response,
     extract_unsuitable_reason,
     clean_and_truncate_reason,
+    normalize_rejection_reason,
     get_default_chatgpt_url,
+    is_experience_rejection,
+    is_direct_hiring_post,
 )
 
 from .gmail_service import (
     navigate_to_gmail,
     populate_email_draft,
     send_email_directly,
+    discard_open_compose_dialogs,
     GMAIL_INBOX_URL,
 )
 
@@ -67,6 +72,14 @@ from .experience_extractor import (
     extract_experience,
 )
 
+from .timing_service import (
+    compute_task_timing_estimate,
+    estimate_queued_task,
+    format_time_estimate,
+    format_duration_short,
+    get_cached_benchmarks,
+)
+
 __all__ = [
     "task_manager",
     "TaskManager",
@@ -82,13 +95,18 @@ __all__ = [
     "run_scraper_by_source",
     "navigate_to_conversation",
     "send_jd_and_get_email",
+    "send_followup_and_get_email",
     "parse_email_response",
     "extract_unsuitable_reason",
     "clean_and_truncate_reason",
+    "normalize_rejection_reason",
     "get_default_chatgpt_url",
+    "is_experience_rejection",
+    "is_direct_hiring_post",
     "navigate_to_gmail",
     "populate_email_draft",
     "send_email_directly",
+    "discard_open_compose_dialogs",
     "GMAIL_INBOX_URL",
     "DEFAULT_PROFILE_DIR",
     "DESKTOP_FIREFOX_PROFILES_DIR",
@@ -110,4 +128,9 @@ __all__ = [
     "check_firefox_session_cookies",
     "get_system_health",
     "extract_experience",
+    "compute_task_timing_estimate",
+    "estimate_queued_task",
+    "format_time_estimate",
+    "format_duration_short",
+    "get_cached_benchmarks",
 ]

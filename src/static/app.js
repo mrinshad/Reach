@@ -20,18 +20,31 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initSidebarCollapse === 'function') initSidebarCollapse();
 
-  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabReview', 'tabSent'];
+  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabEasyApply', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
     '#crawlers': 'tabCrawlers',
     '#discovered': 'tabDiscovered',
+    '#easy-apply': 'tabEasyApply',
     '#review': 'tabReview',
     '#sent': 'tabSent',
     '#others': 'tabSent',
+    '#logs': 'tabSent',
+    '#activity': 'tabSent',
   };
 
   let startTab = 'tabAnalytics';
   const hash = (window.location.hash || '').toLowerCase();
+  if (hash === '#logs' || hash === '#activity') {
+    try {
+      localStorage.setItem('reach_history_view', 'logs');
+    } catch (_) {}
+  } else if (hash === '#sent' || hash === '#others') {
+    try {
+      localStorage.setItem('reach_history_view', 'applications');
+    } catch (_) {}
+  }
+
   if (hash && hashToTab[hash]) {
     startTab = hashToTab[hash];
   } else {
@@ -53,6 +66,20 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof fetchScrapers === 'function') fetchScrapers();
   if (typeof pollTaskStatus === 'function') pollTaskStatus();
   if (typeof startRealtimeSync === 'function') startRealtimeSync();
+  if (typeof fetchActivityLogCounts === 'function') fetchActivityLogCounts();
+
+  window.addEventListener('hashchange', () => {
+    const newHash = (window.location.hash || '').toLowerCase();
+    if (newHash === '#logs' || newHash === '#activity') {
+      try {
+        localStorage.setItem('reach_history_view', 'logs');
+      } catch (_) {}
+      if (typeof switchTab === 'function') switchTab('tabSent');
+      if (typeof switchHistoryView === 'function') switchHistoryView('logs');
+    } else if (newHash && hashToTab[newHash]) {
+      if (typeof switchTab === 'function') switchTab(hashToTab[newHash]);
+    }
+  });
 
   if (window.state) {
     window.state.healthTimer = setInterval(() => {

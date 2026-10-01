@@ -4,10 +4,22 @@ FastAPI router for sequential FIFO task queue management and automation job trig
 
 import uuid
 from datetime import datetime
-from typing import Optional
-from fastapi import APIRouter, HTTPException
+from typing import Optional, List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
 
-from src.db import upsert_post, get_post_by_id, get_recently_sent_recipients, SEND_COOLDOWN_DAYS
+from src.db import (
+    upsert_post,
+    get_post_by_id,
+    get_recently_sent_recipients,
+    SEND_COOLDOWN_DAYS,
+    get_activity_logs,
+    get_activity_log_by_id,
+    clear_activity_logs,
+    delete_activity_log,
+    delete_activity_logs_batch,
+    reset_activity_log_for_retry,
+    get_activity_log_counts,
+)
 from src.services.automation_tasks import (
     task_manager,
     run_chatgpt_batch,
@@ -16,6 +28,8 @@ from src.services.automation_tasks import (
     run_send_batch_drafts,
     run_infopark_scraper,
     run_linkedin_scraper,
+    run_linkedin_easy_apply_scraper,
+    run_single_easy_apply,
     get_registered_scrapers,
     run_scraper_by_source,
     run_interactive_login,
@@ -25,6 +39,11 @@ from .models import (
     SendBatchPayload,
     DirectOutreachPayload,
     ScrapePayload,
+    EasyApplyBatchScrapePayload,
+    LinkedInBatchScrapePayload,
+    BatchScrapePayload,
+    ReexecuteBatchPayload,
+    DeleteBatchActivityLogsPayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -90,8 +109,17 @@ def format_wait_time(wait_seconds: int) -> str:
 
 def build_crawler_labels(source: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
     """Generate clean full_name, short_name, and descriptive snippet for crawler tasks."""
-    src_title = "LinkedIn" if (source or "").lower() == "linkedin" else (source or "Web").capitalize()
-    short_name = f"{src_title} Scraper"
+    s_lower = (source or "").lower()
+    if s_lower in ("linkedin_jobs", "easy_apply"):
+        src_title = "LinkedIn Easy Apply"
+        short_name = "Easy Apply Crawler"
+    elif s_lower == "linkedin":
+        src_title = "LinkedIn"
+        short_name = "LinkedIn Scraper"
+    else:
+        src_title = (source or "Web").capitalize()
+        short_name = f"{src_title} Scraper"
+
     snippet_parts = []
     if query and query.strip():
         clean_q = query.strip().strip("'\"")
@@ -360,6 +388,158 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
     return {"success": True, "message": msg, **res}
 
 
+@router.post("/scrape/linkedin/batch")
+def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
+    """Enqueue multiple LinkedIn hiring post crawler tasks sequentially for a list of keywords."""
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    queued = []
+    loc = (payload.location or "").strip() or None
+    time_filter = payload.time_filter or "24h"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels("linkedin", query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=run_linkedin_scraper,
+            args=(kw, loc, time_filter),
+            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} LinkedIn searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
+
+
+@router.post("/scrape/batch")
+def api_trigger_scrape_batch(payload: BatchScrapePayload):
+    """Enqueue multiple crawler tasks sequentially for a list of keywords based on source."""
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    source = (payload.source or "linkedin").lower().strip()
+    loc = (payload.location or "").strip() or None
+    time_filter = payload.time_filter or "24h"
+    queued = []
+
+    if source in ("linkedin_jobs", "easy_apply"):
+        from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+        runner = run_linkedin_easy_apply_scraper
+        source_key = "linkedin_jobs"
+    else:
+        runner = run_linkedin_scraper
+        source_key = "linkedin"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels(source_key, query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=runner,
+            args=(kw, loc, time_filter),
+            metadata={"source": source_key, "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} {source_key} searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
+
+
+@router.post("/scrape/easy-apply")
+def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
+    """Enqueue the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox."""
+    from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+    query = payload.search_query if payload else None
+    loc = payload.location if payload else None
+    time_filter = (payload.time_filter or "24h") if payload else "24h"
+
+    full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
+    res = task_manager.enqueue_task(
+        task_type="crawler",
+        task_name=full_name,
+        short_name=short_name,
+        snippet=snippet,
+        runner_func=run_linkedin_easy_apply_scraper,
+        args=(query, loc, time_filter),
+        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter},
+    )
+    msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
+    return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/easy-apply/batch")
+def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
+    """Enqueue multiple LinkedIn Easy Apply crawler tasks sequentially for a list of keywords."""
+    from src.services.automation_tasks import run_linkedin_easy_apply_scraper
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    queued = []
+    loc = payload.location or "India"
+    time_filter = payload.time_filter or "24h"
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=run_linkedin_easy_apply_scraper,
+            args=(kw, loc, time_filter),
+            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} Easy Apply searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
+
+
+@router.post("/easy-apply/{post_id}")
+def api_trigger_single_easy_apply(post_id: str):
+    """Enqueue Easy Apply submission for a specific job post."""
+    from src.services.automation_tasks import run_single_easy_apply
+    post = get_post_by_id(post_id)
+    title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
+    company = (post.get("author_name") if post else None) or "Company"
+
+    res = task_manager.enqueue_task(
+        task_type="easy_apply",
+        task_name=f"Easy Apply — {title} @ {company}",
+        short_name="Easy Apply",
+        snippet=f"{company}",
+        runner_func=run_single_easy_apply,
+        args=(post_id,),
+        metadata={"post_id": post_id, "title": title, "company": company},
+    )
+    msg = f"Queued Easy Apply for {title} (Position #{res['position']})" if res["queued"] else f"Easy Apply started for {title}."
+    return {"success": True, "message": msg, **res}
+
+
 @router.get("/scrapers")
 def api_get_scrapers():
     """Return list of registered website scrapers for the crawler source selector."""
@@ -482,5 +662,351 @@ def api_launch_service_login(service: str):
         "success": True,
         "message": f"Opening headed Firefox for {label} login...",
         **res,
+    }
+
+
+# =====================================================================
+# ACTIVITY RUN LOGS & AUTOMATION HISTORY ENDPOINTS
+# =====================================================================
+
+@router.get("/activity-logs")
+def api_get_activity_logs(
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    type: Optional[str] = Query(None, description="Filter by task type, e.g. scraper, easy_apply"),
+    status: Optional[str] = Query(None, description="Filter by status, e.g. completed, error, stopped"),
+    from_date: Optional[str] = Query(None, description="Start date filter YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="End date filter YYYY-MM-DD"),
+):
+    """Retrieve paginated activity run logs for automated background operations with date filtering."""
+    limit_val = getattr(limit, "default", limit)
+    offset_val = getattr(offset, "default", offset)
+    safe_limit = int(limit_val) if limit_val is not None else 25
+    safe_offset = int(offset_val) if offset_val is not None else 0
+
+    t_val = getattr(type, "default", type)
+    s_val = getattr(status, "default", status)
+    fd_val = getattr(from_date, "default", from_date)
+    td_val = getattr(to_date, "default", to_date)
+
+    safe_type = str(t_val).strip() if isinstance(t_val, str) and str(t_val).strip() else None
+    safe_status = str(s_val).strip() if isinstance(s_val, str) and str(s_val).strip() else None
+    safe_from_date = str(fd_val).strip() if isinstance(fd_val, str) and str(fd_val).strip() else None
+    safe_to_date = str(td_val).strip() if isinstance(td_val, str) and str(td_val).strip() else None
+
+    return get_activity_logs(
+        limit=safe_limit,
+        offset=safe_offset,
+        task_type=safe_type,
+        status=safe_status,
+        from_date=safe_from_date,
+        to_date=safe_to_date,
+    )
+
+
+@router.get("/activity-logs/counts")
+def api_get_activity_log_counts():
+    """Return aggregated status counts across all activity logs for UI filter badges."""
+    return get_activity_log_counts()
+
+
+@router.get("/activity-logs/{log_id}")
+def api_get_activity_log_detail(log_id: str):
+    """Retrieve full activity log record including all console terminal logs."""
+    run = get_activity_log_by_id(log_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Activity log with ID '{log_id}' not found.")
+    return run
+
+
+@router.delete("/activity-logs")
+def api_clear_activity_logs():
+    """Clear all stored activity logs history."""
+    count = clear_activity_logs()
+    return {"success": True, "message": f"Cleared {count} activity log(s).", "count": count}
+
+
+@router.delete("/activity-logs/{log_id}")
+def api_delete_activity_log(log_id: str):
+    """Delete a single activity run from history."""
+    if task_manager.state.get("status") == "running" and task_manager._current_run_id == log_id:
+        raise HTTPException(status_code=400, detail="Cannot delete an actively running automation task. Stop it first.")
+
+    task_manager.cancel_queued_task(log_id)
+    deleted = delete_activity_log(log_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Activity log with ID '{log_id}' not found.")
+    return {"success": True, "message": "Activity log deleted successfully.", "id": log_id}
+
+
+@router.post("/activity-logs/delete-batch")
+def api_delete_activity_logs_batch(payload: DeleteBatchActivityLogsPayload):
+    """Delete multiple activity runs from history."""
+    log_ids = [lid.strip() for lid in payload.log_ids if lid and lid.strip()]
+    if not log_ids:
+        raise HTTPException(status_code=400, detail="No activity log IDs provided to delete.")
+
+    if task_manager.state.get("status") == "running" and task_manager._current_run_id in log_ids:
+        raise HTTPException(status_code=400, detail="Cannot delete an actively running automation task. Stop it first.")
+
+    for lid in log_ids:
+        task_manager.cancel_queued_task(lid)
+
+    deleted_count = delete_activity_logs_batch(log_ids)
+    return {
+        "success": True,
+        "message": f"Successfully deleted {deleted_count} activity run(s).",
+        "deleted_count": deleted_count,
+        "count": deleted_count,
+    }
+
+
+def reconstruct_and_enqueue_task(run: Dict[str, Any]) -> Dict[str, Any]:
+    """Reconstruct task runner and enqueue into FIFO TaskManager from an activity_log record reusing existing ID."""
+    t_type = (run.get("task_type") or "").strip().lower()
+    t_name = run.get("task_name") or "Re-executed Task"
+    s_name = run.get("short_name") or t_name
+    params = run.get("parameters") or {}
+    run_id = run.get("id")
+
+    res = None
+
+    # 1. Crawler / Scraper tasks
+    if t_type in ("crawler", "scraper", "easy_apply_scraper"):
+        source = str(params.get("source") or "").lower()
+        if not source:
+            if "easy" in t_name.lower():
+                source = "linkedin_jobs"
+            elif "infopark" in t_name.lower():
+                source = "infopark"
+            else:
+                source = "linkedin"
+
+        query = params.get("query")
+        location = params.get("location")
+        time_filter = params.get("time_filter") or "24h"
+
+        full_name, short_name, snippet = build_crawler_labels(source, query=query, location=location, time_filter=time_filter)
+
+        if source == "infopark":
+            res = task_manager.enqueue_task(
+                task_type="crawler",
+                task_name=full_name,
+                short_name=short_name,
+                snippet=snippet,
+                runner_func=run_infopark_scraper,
+                metadata={"source": "infopark", "query": query, "location": location, "time_filter": time_filter, "reexecuted_from": run_id},
+                task_id=run_id,
+            )
+        elif source in ("linkedin_jobs", "easy_apply"):
+            res = task_manager.enqueue_task(
+                task_type="crawler",
+                task_name=full_name,
+                short_name=short_name,
+                snippet=snippet,
+                runner_func=run_linkedin_easy_apply_scraper,
+                args=(query, location, time_filter),
+                metadata={"source": "linkedin_jobs", "query": query, "location": location, "time_filter": time_filter, "reexecuted_from": run_id},
+                task_id=run_id,
+            )
+        else:
+            res = task_manager.enqueue_task(
+                task_type="crawler",
+                task_name=full_name,
+                short_name=short_name,
+                snippet=snippet,
+                runner_func=run_linkedin_scraper,
+                args=(query, location, time_filter),
+                metadata={"source": "linkedin", "query": query, "location": location, "time_filter": time_filter, "reexecuted_from": run_id},
+                task_id=run_id,
+            )
+
+    # 2. ChatGPT draft generation
+    elif t_type in ("chatgpt", "chatgpt_batch"):
+        post_ids = params.get("post_ids") or ([params.get("post_id")] if params.get("post_id") else [])
+        if not post_ids:
+            raise ValueError(f"No post IDs found in task parameters for {run_id}")
+
+        force = bool(params.get("force", False))
+        valid_post_ids = []
+        for pid in post_ids:
+            p = get_post_by_id(pid)
+            if p:
+                if force or p.get("status") not in ("EMAIL_GENERATED", "APPROVED", "SENT"):
+                    valid_post_ids.append(pid)
+
+        target_ids = valid_post_ids if valid_post_ids else post_ids
+        count = len(target_ids)
+        snippet = f"{count} posts" if count > 1 else (params.get("author") or f"Post #{target_ids[0][:8]}")
+
+        res = task_manager.enqueue_task(
+            task_type="chatgpt",
+            task_name=f"Re-run: {t_name}",
+            short_name=s_name,
+            snippet=snippet,
+            runner_func=run_chatgpt_batch,
+            args=(target_ids, True),
+            metadata={"count": count, "post_ids": target_ids, "force": True, "reexecuted_from": run_id},
+            task_id=run_id,
+        )
+
+    # 3. Gmail Send (Single or Batch)
+    elif t_type in ("gmail_send", "gmail_send_batch"):
+        post_ids = params.get("post_ids") or ([params.get("post_id")] if params.get("post_id") else [])
+        if not post_ids:
+            raise ValueError(f"No post IDs found in task parameters for {run_id}")
+
+        unsent_ids = []
+        for pid in post_ids:
+            p = get_post_by_id(pid)
+            if p and p.get("status") != "SENT":
+                unsent_ids.append(pid)
+
+        target_ids = unsent_ids if unsent_ids else post_ids
+        count = len(target_ids)
+
+        if count == 1:
+            p = get_post_by_id(target_ids[0])
+            author = (p.get("author_name") if p else None) or "Recruiter"
+            res = task_manager.enqueue_task(
+                task_type="gmail_send",
+                task_name=f"Send Email — {author}",
+                short_name="Send Email",
+                snippet=author,
+                runner_func=run_send_single_draft,
+                args=(target_ids[0],),
+                metadata={"post_id": target_ids[0], "author": author, "reexecuted_from": run_id},
+                task_id=run_id,
+            )
+        else:
+            res = task_manager.enqueue_task(
+                task_type="gmail_send_batch",
+                task_name=f"Batch Email Sending ({count} applications)",
+                short_name="Batch Send",
+                snippet=f"{count} applications",
+                runner_func=run_send_batch_drafts,
+                args=(target_ids,),
+                metadata={"count": count, "post_ids": target_ids, "reexecuted_from": run_id},
+                task_id=run_id,
+            )
+
+    # 4. Gmail draft opening
+    elif t_type == "gmail_draft":
+        post_id = params.get("post_id")
+        if not post_id:
+            raise ValueError(f"No post_id found in task parameters for {run_id}")
+        p = get_post_by_id(post_id)
+        author = (p.get("author_name") if p else None) or f"Post #{post_id[:8]}"
+        res = task_manager.enqueue_task(
+            task_type="gmail_draft",
+            task_name=f"Gmail Draft — {author}",
+            short_name="Gmail Draft",
+            snippet=author,
+            runner_func=run_open_gmail_draft,
+            args=(post_id,),
+            metadata={"post_id": post_id, "author": author, "reexecuted_from": run_id},
+            task_id=run_id,
+        )
+
+    # 5. Easy Apply (single)
+    elif t_type == "easy_apply":
+        post_id = params.get("post_id")
+        if not post_id:
+            raise ValueError(f"No post_id found in task parameters for {run_id}")
+        p = get_post_by_id(post_id)
+        title = (p.get("author_headline") if p else None) or params.get("title") or f"Job #{post_id[:8]}"
+        company = (p.get("author_name") if p else None) or params.get("company") or "Company"
+        res = task_manager.enqueue_task(
+            task_type="easy_apply",
+            task_name=f"Easy Apply — {title} @ {company}",
+            short_name="Easy Apply",
+            snippet=company,
+            runner_func=run_single_easy_apply,
+            args=(post_id,),
+            metadata={"post_id": post_id, "title": title, "company": company, "reexecuted_from": run_id},
+            task_id=run_id,
+        )
+
+    # 6. Service login
+    elif t_type == "service_login":
+        svc = params.get("service") or "linkedin"
+        label = params.get("service_name") or svc.capitalize()
+        res = task_manager.enqueue_task(
+            task_type="service_login",
+            task_name=f"Interactive Login — {label}",
+            short_name=f"{svc.capitalize()} Login",
+            snippet="Browser Authentication",
+            runner_func=run_interactive_login,
+            args=(svc,),
+            metadata={"service": svc, "service_name": label, "reexecuted_from": run_id},
+            task_id=run_id,
+        )
+
+    else:
+        raise ValueError(f"Unknown or unsupported task type '{t_type}' for re-execution.")
+
+    if run_id and res:
+        reset_activity_log_for_retry(run_id, queue_pos=res.get("position", 0))
+
+    return res
+
+
+@router.post("/tasks/reexecute/{log_id}")
+def api_reexecute_task(log_id: str):
+    """Reconstruct and re-enqueue a previous background automation task by its activity log ID."""
+    run = get_activity_log_by_id(log_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Activity log with ID '{log_id}' not found.")
+    try:
+        res = reconstruct_and_enqueue_task(run)
+        msg = f"Task re-queued at position #{res.get('position', 1)}" if res.get("queued") else "Task re-execution started."
+        return {"success": True, "message": msg, "log_id": log_id, **res}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to re-execute task: {str(e)}")
+
+
+@router.post("/tasks/reexecute-batch")
+def api_reexecute_batch(payload: Optional[ReexecuteBatchPayload] = None):
+    """Reconstruct and re-enqueue multiple uncompleted tasks into FIFO sequential queue."""
+    raw_ids = payload.log_ids if payload else None
+
+    # If payload is provided with empty list, nothing to re-execute
+    if raw_ids is not None and len(raw_ids) == 0:
+        return {"success": True, "reexecuted_count": 0, "message": "No tasks selected to re-execute.", "tasks": []}
+
+    # If no IDs specified (None), fetch all uncompleted tasks
+    if raw_ids is None:
+        uncompleted_data = get_activity_logs(limit=100, offset=0, status="uncompleted")
+        log_ids = [r["id"] for r in (uncompleted_data.get("runs") or [])]
+    else:
+        log_ids = raw_ids
+
+    if not log_ids:
+        return {"success": True, "reexecuted_count": 0, "message": "No uncompleted tasks to re-execute.", "tasks": []}
+
+    queued = []
+    failed = []
+
+    for lid in log_ids:
+        run = get_activity_log_by_id(lid)
+        if not run:
+            failed.append({"id": lid, "error": "Not found"})
+            continue
+        try:
+            res = reconstruct_and_enqueue_task(run)
+            queued.append({"id": lid, "name": run.get("task_name"), **res})
+        except Exception as e:
+            failed.append({"id": lid, "name": run.get("task_name"), "error": str(e)})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "reexecuted_count": len(queued),
+        "failed_count": len(failed),
+        "message": f"Queued {len(queued)} task(s) for re-execution in FIFO queue (starting at Position #{first_pos}).",
+        "tasks": queued,
+        "errors": failed,
     }
 

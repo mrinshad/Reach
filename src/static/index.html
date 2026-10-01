@@ -64,6 +64,13 @@
             <span class="nav-label">Discovered Jobs</span>
             <span class="badge-count" id="countDiscovered">0</span>
           </button>
+          <button class="nav-item" id="btnTabEasyApply" onclick="switchTab('tabEasyApply')" title="LinkedIn Job Portal & Easy Apply">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z"/></svg>
+            </span>
+            <span class="nav-label">Easy Apply</span>
+            <span class="badge-count" id="countEasyApply">0</span>
+          </button>
           <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')" title="Review & Drafts">
             <span class="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
@@ -186,10 +193,18 @@
             </div>
           </div>
           <div class="task-card-right">
+            <span class="task-eta-pill hidden" id="taskEtaPill" title="Estimated time remaining">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span id="taskEtaText">--</span>
+            </span>
             <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
             <button class="btn-cancel-active-task" id="btnCancelActiveTask" onclick="cancelActiveTask()" title="Stop ongoing task">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
               <span>Stop</span>
+            </button>
+            <button class="btn-retry-active-task hidden" id="btnRetryActiveTask" onclick="retryLastFailedTask()" title="Re-execute this task immediately">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+              <span>Retry</span>
             </button>
             <button class="icon-btn sm" onclick="toggleTaskLogs()" title="Toggle Real-Time Terminal Logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -207,6 +222,10 @@
               <span class="logs-toolbar-title">Terminal Stream</span>
             </div>
             <div class="task-logs-toolbar-right">
+              <button class="logs-history-btn" onclick="openActivityLogsView()" title="Open Activity & Run Logs History">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                <span>Run History</span>
+              </button>
               <button class="logs-cancel-btn" onclick="cancelActiveTask()" title="Stop ongoing task">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 <span>Stop Task</span>
@@ -300,13 +319,20 @@
                 <select id="crawlerSourceSelect" class="crawler-source-select" title="Select Scraping Source"
                   onchange="handleCrawlerSourceChange()">
                   <option value="linkedin">LinkedIn Hiring Posts</option>
+                  <option value="linkedin_jobs">LinkedIn Job Portal (Easy Apply)</option>
                   <option value="infopark">Infopark Kochi Companies</option>
                 </select>
               </div>
             </div>
 
             <div class="crawler-field-group" id="crawlerSearchWrapper">
-              <label class="crawler-field-label">Search Keywords</label>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label class="crawler-field-label" style="margin-bottom: 0;">Search Keywords</label>
+                <button type="button" class="crawler-bulk-link-btn" onclick="openBulkCrawlerSearchModal()" title="Import CSV or batch keywords to search multiple roles sequentially">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  <span>Bulk Import (CSV)</span>
+                </button>
+              </div>
               <div class="crawler-select-wrapper">
                 <input type="text" id="crawlerSearchInput" class="crawler-source-select crawler-search-input"
                   placeholder="e.g. Full Stack Developer" autocomplete="off" spellcheck="false"
@@ -431,7 +457,7 @@
             <!-- <p class="crawler-action-desc">
               Executes headless or headed Playwright automation. Scraped posts are de-duplicated against existing records in PostgreSQL.
             </p> -->
-            <div class="crawler-btn-wrapper">
+            <div class="crawler-btn-wrapper" style="display: flex; flex-direction: column; gap: 0.6rem;">
               <button id="btnStartCrawl" class="btn btn-primary btn-crawl-start" onclick="triggerSelectedCrawl()"
                 title="Start Crawling Selected Source">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -439,6 +465,13 @@
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
                 </svg>
                 <span class="btn-crawl-label">Start Crawl Task</span>
+              </button>
+              <button id="btnOpenBulkCrawlerModal" class="btn btn-outline btn-crawl-bulk" onclick="openBulkCrawlerSearchModal()"
+                title="Import CSV or batch keywords to search multiple roles sequentially">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <span>Bulk Search (CSV)</span>
               </button>
             </div>
             <!-- <div class="crawler-hints">
@@ -467,23 +500,6 @@
       </p>
     </div>
 
-    <!-- Planning Notice Banner -->
-    <div class="portal-planning-notice">
-      <div class="notice-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="8" x2="12" y2="12"></line>
-          <line x1="12" y1="16" x2="12.01" y2="16"></line>
-        </svg>
-      </div>
-      <div class="notice-text">
-        <strong>Architectural Planning Phase:</strong> Scripts and automated form fillers for major job boards are
-        currently being designed. Below is the blueprint of the upcoming portal integrations and their planned execution
-        workflows.
-      </div>
-    </div>
-
     <!-- Major Portals Grid -->
     <div class="major-portals-grid">
       <!-- Portal 1: LinkedIn Job Portal & Easy Apply -->
@@ -501,7 +517,7 @@
               <div class="portal-category">Direct Job Search & Easy Apply</div>
             </div>
           </div>
-          <span class="portal-badge-planning">In Planning</span>
+          <span class="section-status-pill ok">Operational</span>
         </div>
 
         <div class="portal-body">
@@ -512,7 +528,7 @@
           <div class="portal-spec-list">
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean filters</span>
+              <span>Target: <code>linkedin.com/jobs/search</code> with Boolean & <code>f_AL=true</code> filters</span>
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
@@ -524,16 +540,19 @@
             </div>
             <div class="portal-spec-item">
               <span class="spec-bullet">✓</span>
-              <span>Safety: Persistent Firefox cookie session & stealth pacing</span>
+              <span>Screening: Saves direct link for custom questionnaires without blocking</span>
             </div>
           </div>
         </div>
 
         <div class="portal-footer">
-          <button class="btn btn-outline btn-sm btn-portal-disabled" disabled>
-            <span>🚧 Scripting in Planning</span>
+          <button class="btn btn-primary btn-sm" onclick="switchTab('tabEasyApply')" title="Open Easy Apply Workspace">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <span>Open Easy Apply Hub</span>
           </button>
-          <span class="portal-version-tag">v2.0 Target</span>
+          <span class="portal-version-tag">Active v2.0</span>
         </div>
       </div>
 
@@ -636,56 +655,6 @@
           <span class="portal-version-tag">v2.2 Target</span>
         </div>
       </div>
-
-      <!-- Portal 4: Wellfound / AngelList -->
-      <div class="portal-card">
-        <div class="portal-card-header">
-          <div class="portal-brand">
-            <span class="portal-logo-icon wellfound">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
-            </span>
-            <div>
-              <div class="portal-name">Wellfound (AngelList)</div>
-              <div class="portal-category">Startup Tech & Founder Outreach</div>
-            </div>
-          </div>
-          <span class="portal-badge-backlog">Backlog Concept</span>
-        </div>
-
-        <div class="portal-body">
-          <p class="portal-desc">
-            Direct startup hiring pipeline connecting with engineering founders and hiring managers with customized
-            pitch notes.
-          </p>
-          <div class="portal-spec-list">
-            <div class="portal-spec-item">
-              <span class="spec-bullet">✓</span>
-              <span>Target: Seed & Series A-C tech startups hiring remotely</span>
-            </div>
-            <div class="portal-spec-item">
-              <span class="spec-bullet">✓</span>
-              <span>Parser: Equity, compensation, and engineering stack tags</span>
-            </div>
-            <div class="portal-spec-item">
-              <span class="spec-bullet">✓</span>
-              <span>Automation: 1-click note dispatch pitching problem-solving ability</span>
-            </div>
-            <div class="portal-spec-item">
-              <span class="spec-bullet">✓</span>
-              <span>Safety: Authenticated session cookies & anti-captcha handling</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="portal-footer">
-          <button class="btn btn-outline btn-sm btn-portal-disabled" disabled>
-            <span>💡 Conceptual Architecture</span>
-          </button>
-          <span class="portal-version-tag">Future</span>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -779,6 +748,13 @@
               </select>
             </div>
 
+            <div class="date-filter-group" title="Filter discovered jobs by date range">
+              <span class="date-label">From</span>
+              <input type="date" id="discoveredDateFrom" class="input-date-clean" onchange="applyDiscoveredDateFilter()" title="Start date" />
+              <span class="date-label">To</span>
+              <input type="date" id="discoveredDateTo" class="input-date-clean" onchange="applyDiscoveredDateFilter()" title="End date" />
+            </div>
+
             <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
               <option value="default" selected>Sort: Default</option>
               <option value="exp_asc">Exp: Low to High</option>
@@ -858,6 +834,204 @@
         </div>
       </div>
     </div>
+
+      <!-- TAB: LinkedIn Easy Apply Workspace -->
+<div class="tab-panel hidden" id="tabEasyApply">
+  <!-- Top Header Toolbar -->
+  <div class="easy-apply-header">
+    <div class="header-left">
+      <div class="easy-apply-badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.55rem;">
+          <h2 class="easy-apply-title">LinkedIn Job Portal &amp; Easy Apply</h2>
+          <span class="tag-status live">Operational</span>
+        </div>
+        <p class="easy-apply-subtitle">
+          Autonomous direct job crawling, auto-apply submissions, and link screening for custom questionnaire roles.
+        </p>
+      </div>
+    </div>
+
+    <!-- Crawler Launch Form -->
+    <div class="easy-crawler-form">
+      <div class="crawler-inputs-row">
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="easySearchQuery" class="easy-input" placeholder="Job title or keywords..." value="Full Stack Developer" />
+        </div>
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+          <input type="text" id="easySearchLocation" class="easy-input" placeholder="Location..." value="India" />
+        </div>
+        <select id="easyTimeFilter" class="select-clean easy-select-time">
+          <option value="24h" selected>Past 24 Hours</option>
+          <option value="week">Past Week</option>
+          <option value="month">Past Month</option>
+          <option value="all">Anytime</option>
+        </select>
+        <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>Crawl &amp; Auto-Apply</span>
+        </button>
+        <button class="btn btn-outline btn-easy-import" id="btnOpenBulkSearchModal" onclick="openBulkSearchModal()" title="Import CSV or batch keywords to search multiple roles">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Bulk Search (CSV)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Ribbon (5 cards) -->
+  <div class="easy-kpi-ribbon" style="grid-template-columns: repeat(5, 1fr);">
+    <div class="easy-kpi-card accent-indigo" onclick="filterEasyApplyStatus('ALL')" title="View all Easy Apply opportunities">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiTotal">0</span>
+        <span class="kpi-icon-badge badge-indigo">💼</span>
+      </div>
+      <span class="kpi-lbl">Total Easy Apply Jobs</span>
+    </div>
+    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')" title="View successfully submitted applications">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiApplied">0</span>
+        <span class="kpi-icon-badge badge-green">✓</span>
+      </div>
+      <span class="kpi-lbl">Successfully Applied</span>
+    </div>
+    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')" title="View roles requiring custom questionnaires">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiQuestionnaire">0</span>
+        <span class="kpi-icon-badge badge-amber">📋</span>
+      </div>
+      <span class="kpi-lbl">Screening (Questionnaires)</span>
+    </div>
+    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')" title="View jobs ready in queue for auto-apply">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiReady">0</span>
+        <span class="kpi-icon-badge badge-blue">⚡</span>
+      </div>
+      <span class="kpi-lbl">Ready in Queue</span>
+    </div>
+    <div class="easy-kpi-card accent-slate" onclick="filterEasyApplyStatus('NOT_FOUND')" title="View jobs marked as not found / closed">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="easyKpiNotFound">0</span>
+        <span class="kpi-icon-badge badge-slate">🚫</span>
+      </div>
+      <span class="kpi-lbl">Not Found / Closed</span>
+    </div>
+  </div>
+
+  <!-- Filter & Actions Bar (Spacious 1-Row Toolbar) -->
+  <div class="easy-filter-bar">
+    <div class="status-pill-group">
+      <button class="filter-pill active" id="pillEasyAll" onclick="filterEasyApplyStatus('ALL')">
+        <span>All Jobs</span>
+        <span class="pill-badge-count" id="countPillAll">0</span>
+      </button>
+      <button class="filter-pill" id="pillEasyDiscovered" onclick="filterEasyApplyStatus('DISCOVERED')">
+        <span class="pill-dot cyan"></span>
+        <span>Ready to Apply</span>
+        <span class="pill-badge-count" id="countPillReady">0</span>
+      </button>
+      <button class="filter-pill" id="pillEasyQuestionnaire" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')">
+        <span class="pill-dot amber"></span>
+        <span>Requires Questionnaire</span>
+        <span class="pill-badge-count" id="countPillScreening">0</span>
+      </button>
+      <button class="filter-pill" id="pillEasyApplied" onclick="filterEasyApplyStatus('APPLIED')">
+        <span class="pill-dot green"></span>
+        <span>Applied</span>
+        <span class="pill-badge-count" id="countPillApplied">0</span>
+      </button>
+      <button class="filter-pill" id="pillEasyNotFound" onclick="filterEasyApplyStatus('NOT_FOUND')">
+        <span class="pill-dot slate"></span>
+        <span>Not Found</span>
+        <span class="pill-badge-count" id="countPillNotFound">0</span>
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.65rem;">
+      <!-- Date Range Filter -->
+      <div class="date-filter-group" title="Filter Easy Apply jobs by date range">
+        <span class="date-label">From</span>
+        <input type="date" id="easyDateFrom" class="input-date-clean" onchange="applyEasyDateFilter()" title="Start date" />
+        <span class="date-label">To</span>
+        <input type="date" id="easyDateTo" class="input-date-clean" onchange="applyEasyDateFilter()" title="End date" />
+      </div>
+
+      <!-- Live In-Table Search Input -->
+      <div class="easy-search-box">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..." oninput="handleEasyTableSearch(this.value)" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Floating Batch Action Banner (Unhidden when >= 1 selected) -->
+  <div class="easy-batch-banner hidden" id="easyBatchToolbar">
+    <div class="batch-banner-left">
+      <span class="selected-count-badge" id="easySelectedCount">0 selected</span>
+    </div>
+    <div class="batch-banner-center">
+      <span class="batch-action-lbl">Move Status:</span>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('DISCOVERED')" title="Move selected to Ready">
+        <span>⚡ Ready</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('REQUIRES_QUESTIONNAIRE')" title="Move selected to Questionnaire Screening">
+        <span>📋 Screening</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('APPLIED')" title="Move selected to Applied">
+        <span>✓ Applied</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('NOT_FOUND')" title="Mark selected as Not Found / Closed">
+        <span>🚫 Not Found</span>
+      </button>
+    </div>
+    <div class="batch-banner-right">
+      <button class="btn btn-primary btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Apply Selected</span>
+      </button>
+      <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy Links</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
+        <span>Dismiss</span>
+      </button>
+      <button class="btn-batch-close" onclick="clearEasySelection()" title="Clear selection">✕</button>
+    </div>
+  </div>
+
+  <!-- Main Table Section using Reach Table System -->
+  <div class="table-card">
+    <table class="reach-table" id="easyApplyTable">
+      <thead>
+        <tr>
+          <th class="col-check">
+            <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)" title="Select all" />
+          </th>
+          <th class="col-role">Role &amp; Company</th>
+          <th class="col-location">Location</th>
+          <th class="col-exp">Experience</th>
+          <th class="col-status">Status</th>
+          <th class="col-date">Crawled</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="easyApplyTableBody">
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">
+            Loading LinkedIn Easy Apply opportunities...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
       <!-- TAB 2: Review & Drafts (Side-by-Side) -->
     <div class="tab-panel hidden" id="tabReview">
@@ -1020,78 +1194,198 @@
       </div>
     </div>
 
-      <!-- TAB 3: Others (Sent & Cancelled Applications History) -->
+      <!-- TAB 3: Others (Sent & Cancelled Applications History + Activity & Run Logs) -->
     <div class="tab-panel hidden" id="tabSent">
-      <div class="toolbar" style="margin-bottom: 0.85rem;">
-        <div class="filter-pills" id="othersPills">
-          <button class="pill active" data-others="ALL" onclick="setOthersFilter('ALL')">
-            <span>All Others</span> <span class="badge-count" id="countOthersAll">0</span>
-          </button>
-          <button class="pill" data-others="SENT" onclick="setOthersFilter('SENT')">
-            <span>✉ Sent</span> <span class="badge-count" id="countOthersSent">0</span>
-          </button>
-          <button class="pill" data-others="REJECTED" onclick="setOthersFilter('REJECTED')">
-            <span>🚫 Cancelled</span> <span class="badge-count" id="countOthersCancelled">0</span>
-          </button>
-        </div>
-        <div class="toolbar-right">
-          <button class="btn btn-primary btn-sm hidden" id="btnBatchRestoreSent" onclick="restoreBatchSelectedSent()" title="Restore selected applications back to Review & Drafts">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-            <span>Restore (<span id="selectedSentCount">0</span>)</span>
-          </button>
-          <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
-            <option value="ALL" selected>All Reasons</option>
-          </select>
-          <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
-          <div class="search-box">
-            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
+      <!-- Top Level Workspace View Switcher -->
+      <div class="history-view-switcher">
+        <button class="view-switch-btn active" id="btnViewApplications" onclick="switchHistoryView('applications')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Application Outreach</span>
+          <span class="view-switch-badge" id="badgeApplicationsCount">0</span>
+        </button>
+        <button class="view-switch-btn" id="btnViewActivityLogs" onclick="switchHistoryView('logs')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          <span>Activity & Run Logs</span>
+          <span class="view-switch-badge" id="badgeActivityLogsCount">0</span>
+        </button>
+      </div>
+
+      <!-- SECTION 1: Applications Outreach (Sent & Cancelled History) -->
+      <div id="sectionApplicationsHistory">
+        <div class="toolbar" style="margin-bottom: 0.85rem;">
+          <div class="filter-pills" id="othersPills">
+            <button class="pill active" data-others="ALL" onclick="setOthersFilter('ALL')">
+              <span>All Others</span> <span class="badge-count" id="countOthersAll">0</span>
+            </button>
+            <button class="pill" data-others="SENT" onclick="setOthersFilter('SENT')">
+              <span>✉ Sent</span> <span class="badge-count" id="countOthersSent">0</span>
+            </button>
+            <button class="pill" data-others="REJECTED" onclick="setOthersFilter('REJECTED')">
+              <span>🚫 Cancelled</span> <span class="badge-count" id="countOthersCancelled">0</span>
+            </button>
+            <button class="pill" data-others="EXP_CANCELLED" id="pillExpCancelled" onclick="filterExperienceCancelled()" title="Show only posts cancelled due to experience requirements">
+              <span>⚡ Experience</span> <span class="badge-count" id="countExpCancelled">0</span>
+            </button>
           </div>
-          <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
-            <span>✕ Clear</span>
-          </button>
+          <div class="toolbar-right">
+            <button class="btn btn-primary btn-sm hidden" id="btnBatchRestoreSent" onclick="restoreBatchSelectedSent()" title="Restore selected applications back to Review & Drafts">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              <span>Restore (<span id="selectedSentCount">0</span>)</span>
+            </button>
+            <div class="date-filter-group" title="Filter applications by date range">
+              <span class="date-label">From</span>
+              <input type="date" id="sentDateFrom" class="input-date-clean" onchange="applySentDateFilter()" title="Start date" />
+              <span class="date-label">To</span>
+              <input type="date" id="sentDateTo" class="input-date-clean" onchange="applySentDateFilter()" title="End date" />
+            </div>
+            <select id="selectReasonFilter" class="select-clean" onchange="applySentReasonFilter()" title="Filter by cancellation / rejection reason">
+              <option value="ALL" selected>All Reasons</option>
+            </select>
+            <span class="filter-count-badge hidden" id="sentResultsBadge"></span>
+            <div class="search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearchSent" placeholder="Search author, email, reason..." onkeyup="handleSearchSentKeyUp(event)" />
+            </div>
+            <button class="btn-clear-filters hidden" id="btnClearSentFilters" onclick="clearSentFilters()" title="Reset search and filters back to All">
+              <span>✕ Clear</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <table class="reach-table">
+            <thead>
+              <tr>
+                <th width="35">
+                  <input type="checkbox" id="selectAllSentCheckbox" onchange="toggleSelectAllSent(this.checked)" title="Select all on this page" />
+                </th>
+                <th>Recruiter / Author</th>
+                <th>Recipient Email</th>
+                <th>Subject / Note</th>
+                <th>Status & Reason</th>
+                <th>Updated</th>
+                <th width="175" style="text-align: right;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="sentTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Sent Table Footer / Pagination Controls -->
+          <div class="table-footer" id="sentTableFooter">
+            <div class="pagination-info" id="sentPaginationInfo">
+              Showing 0–0 of 0 applications
+            </div>
+
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectSentLimit" onchange="changeSentRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+
+              <div class="page-buttons" id="sentPageButtons">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="table-card">
-        <table class="reach-table">
-          <thead>
-            <tr>
-              <th width="35">
-                <input type="checkbox" id="selectAllSentCheckbox" onchange="toggleSelectAllSent(this.checked)" title="Select all on this page" />
-              </th>
-              <th>Recruiter / Author</th>
-              <th>Recipient Email</th>
-              <th>Subject / Note</th>
-              <th>Status & Reason</th>
-              <th>Updated</th>
-              <th width="175" style="text-align: right;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="sentTableBody">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-
-        <!-- Sent Table Footer / Pagination Controls -->
-        <div class="table-footer" id="sentTableFooter">
-          <div class="pagination-info" id="sentPaginationInfo">
-            Showing 0–0 of 0 applications
+      <!-- SECTION 2: Activity & Run Logs (Automated Background Operations) -->
+      <div id="sectionActivityLogs" class="hidden">
+        <div class="toolbar" style="margin-bottom: 0.85rem;">
+          <div class="filter-pills" id="activityLogPills">
+            <button class="pill active" data-act-type="ALL" onclick="setActivityLogTypeFilter('ALL')">
+              <span>All Activities</span> <span class="badge-count" id="countLogsAll">0</span>
+            </button>
+            <button class="pill pill-uncompleted" id="pillUncompletedTasks" data-status="uncompleted" onclick="setActivityLogUncompletedFilter()">
+              <span>⚠️ Uncompleted</span> <span class="badge-count badge-warning" id="countLogsUncompleted">0</span>
+            </button>
+            <button class="pill" data-act-type="crawler" onclick="setActivityLogTypeFilter('crawler')">
+              <span>💼 LinkedIn Crawls</span>
+            </button>
+            <button class="pill" data-act-type="easy_apply_scraper" onclick="setActivityLogTypeFilter('easy_apply_scraper')">
+              <span>⚡ Easy Apply</span>
+            </button>
+            <button class="pill" data-act-type="chatgpt_batch" onclick="setActivityLogTypeFilter('chatgpt_batch')">
+              <span>🤖 AI Drafts</span>
+            </button>
           </div>
+          <div class="toolbar-right">
+            <button class="btn btn-danger btn-sm hidden" id="btnBatchDeleteSelected" onclick="deleteSelectedActivityLogs()" title="Delete selected activity runs permanently">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+              <span>Delete (<span id="selectedActivityLogsDeleteCount">0</span>)</span>
+            </button>
+            <button class="btn btn-warning btn-sm hidden" id="btnBatchReexecuteSelected" onclick="reexecuteSelectedTasks()" title="Re-execute selected tasks sequentially in FIFO queue">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+              <span>Re-execute Selected (<span id="selectedActivityLogsCount">0</span>)</span>
+            </button>
+            <div class="date-filter-group" title="Filter activity runs by date range">
+              <span class="date-label">From</span>
+              <input type="date" id="activityDateFrom" class="input-date-clean" onchange="applyActivityLogDateFilter()" title="Start date" />
+              <span class="date-label">To</span>
+              <input type="date" id="activityDateTo" class="input-date-clean" onchange="applyActivityLogDateFilter()" title="End date" />
+            </div>
+            <select id="selectActivityLogStatus" class="select-clean" onchange="applyActivityLogStatusFilter()" title="Filter by outcome status">
+              <option value="ALL" selected>All Statuses</option>
+              <option value="uncompleted">⚠️ Uncompleted (Failed & Stopped)</option>
+              <option value="completed">✓ Completed</option>
+              <option value="running">⚡ Running</option>
+              <option value="error">✗ Failed</option>
+              <option value="stopped">🛑 Stopped</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="fetchActivityLogs()" title="Refresh Activity Logs">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
 
-          <div class="pagination-controls">
-            <div class="rows-per-page">
-              <span>Rows:</span>
-              <select id="selectSentLimit" onchange="changeSentRowsPerPage(this.value)">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
+        <div class="table-card">
+          <table class="reach-table activity-logs-table">
+            <thead>
+              <tr>
+                <th width="35">
+                  <input type="checkbox" id="selectAllActivityLogsCheckbox" onchange="toggleSelectAllActivityLogs(this.checked)" title="Select all on this page" />
+                </th>
+                <th width="210">Activity</th>
+                <th>Involved (Parameters / Scope)</th>
+                <th>Result & Summary</th>
+                <th width="120">Duration</th>
+                <th width="140">When</th>
+                <th width="220" style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="activityLogsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+
+          <!-- Activity Logs Table Footer / Pagination Controls -->
+          <div class="table-footer" id="activityLogsTableFooter">
+            <div class="pagination-info" id="activityLogsPaginationInfo">
+              Showing 0–0 of 0 activity runs
             </div>
 
-            <div class="page-buttons" id="sentPageButtons">
-              <!-- Rendered dynamically -->
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectActivityLogsLimit" onchange="changeActivityLogsRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+
+              <div class="page-buttons" id="activityLogsPageButtons">
+                <!-- Rendered dynamically -->
+              </div>
             </div>
           </div>
         </div>
@@ -1904,6 +2198,382 @@
     </div>
   </div>
 
+  <!-- Activity Run Terminal Logs Viewer Modal -->
+  <div class="modal-overlay hidden" id="modalRunTerminalLogs" onclick="closeRunLogsModal(event)">
+    <div class="modal-box modal-lg run-logs-dialog" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <div class="run-logs-icon-badge" id="runLogsModalIcon">📋</div>
+          <div>
+            <h3 id="runLogsModalTitle" style="font-size: 1.05rem; font-weight: 700; color: #fff;">Activity Terminal Log</h3>
+            <div id="runLogsModalSubtitle" style="font-size: 0.78rem; color: var(--text-muted);">Execution console output</div>
+          </div>
+        </div>
+        <button class="close-x" onclick="closeRunLogsModal()">×</button>
+      </div>
+
+      <div class="modal-body" style="padding-top: 0.5rem;">
+        <div class="run-logs-meta-bar" id="runLogsMetaBar">
+          <span class="run-meta-pill" id="runLogsMetaStatus">Completed</span>
+          <span class="run-meta-pill text-muted" id="runLogsMetaDuration">Duration: 45s</span>
+          <span class="run-meta-pill text-muted" id="runLogsMetaDate">When: Today</span>
+        </div>
+        <div class="run-logs-terminal-wrap">
+          <div class="run-logs-terminal-toolbar">
+            <span class="terminal-title">Terminal Console Output</span>
+            <button class="btn-copy-logs" onclick="copyRunLogs()" id="btnCopyRunLogs">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copy Output</span>
+            </button>
+          </div>
+          <pre class="run-logs-terminal-body" id="runLogsTerminalBody"></pre>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="justify-content: flex-end;">
+        <button class="btn btn-secondary btn-sm" onclick="closeRunLogsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LinkedIn Easy Apply Job Details & Screening Dialog Modal -->
+  <div class="modal-overlay hidden" id="modalEasyDetails" onclick="closeEasyDetailsModal(event)">
+    <div class="modal-box modal-lg easy-details-dialog" onclick="event.stopPropagation()">
+      <div class="modal-top easy-dialog-top">
+        <div class="easy-dialog-header-left">
+          <span class="portal-logo-icon linkedin sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z"/></svg>
+          </span>
+          <div class="easy-dialog-header-text">
+            <h3 id="easyModalJobTitle" class="easy-dialog-title" title="Job Details">Job Details</h3>
+            <div class="easy-dialog-subtitle">
+              <span id="easyModalHeaderCompany">-</span> &bull; <span id="easyModalHeaderLocation">-</span>
+            </div>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeEasyDetailsModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body easy-dialog-body">
+        <!-- 3-Card Meta Highlights Grid -->
+        <div class="easy-dialog-meta-grid">
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">🏢 Company</span>
+            <strong id="easyModalCompany" class="meta-tile-val">-</strong>
+          </div>
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">📍 Location</span>
+            <span id="easyModalLocation" class="meta-tile-val">-</span>
+          </div>
+          <div class="meta-tile">
+            <span class="meta-tile-lbl">🎓 Experience</span>
+            <span id="easyModalExp" class="meta-tile-val">-</span>
+          </div>
+        </div>
+
+        <!-- Dedicated Status Switcher Card -->
+        <div class="easy-dialog-status-card">
+          <div class="status-card-header">
+            <span class="status-card-lbl">Current Application Status:</span>
+            <span id="easyModalStatus" class="status-card-badge">-</span>
+          </div>
+          <div class="modal-status-segmented">
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('DISCOVERED')" title="Move to Ready in Queue">
+              <span class="chip-dot cyan"></span>
+              <span>⚡ Ready</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('REQUIRES_QUESTIONNAIRE')" title="Move to Screening">
+              <span class="chip-dot amber"></span>
+              <span>📋 Screening</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('APPLIED')" title="Mark as Applied">
+              <span class="chip-dot green"></span>
+              <span>✓ Applied</span>
+            </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('NOT_FOUND')" title="Mark as Not Found / Closed">
+              <span class="chip-dot slate"></span>
+              <span>🚫 Not Found</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Questionnaire Alert Banner if applicable -->
+        <div class="questionnaire-screening-alert hidden" id="easyModalQuestionnaireBox">
+          <div style="display: flex; gap: 0.65rem; align-items: flex-start;">
+            <span style="font-size: 1.25rem; line-height: 1;">📋</span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <strong style="color: #fbbf24; font-size: 0.85rem;">Custom Questionnaire Detected:</strong>
+                <button class="btn btn-outline btn-xs" onclick="openScreeningFromDetails()" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); padding: 0.15rem 0.55rem;">
+                  <span>View Full Questions &rarr;</span>
+                </button>
+              </div>
+              <p id="easyModalQuestionnaireNotes" style="margin: 0.35rem 0 0; font-size: 0.77rem; color: #fde68a; line-height: 1.45;"></p>
+              <p style="margin: 0.25rem 0 0; font-size: 0.72rem; color: #94a3b8;">
+                This role requires questionnaire answers. Review questions before manual submission.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Job Description Container -->
+        <div class="easy-dialog-jd-section">
+          <div class="jd-section-header">
+            <span class="section-subtitle">Full Job Description</span>
+            <a id="easyModalLink" href="#" target="_blank" rel="noopener noreferrer" class="link-btn-text">
+              <span>Open on LinkedIn ↗</span>
+            </a>
+          </div>
+          <div class="easy-jd-box" id="easyModalFullText"></div>
+        </div>
+      </div>
+
+      <div class="modal-bottom easy-dialog-bottom">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="copyEasyModalLink()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy Link</span>
+          </button>
+          <button class="btn btn-outline btn-sm hidden" id="btnEasyModalViewQuestions" onclick="openScreeningFromDetails()" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);">
+            <span>📋 View Questions</span>
+          </button>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeEasyDetailsModal()">Close</button>
+          <button class="btn btn-primary btn-sm" id="btnEasyModalApply" onclick="triggerEasyModalApply()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Apply via Easy Apply</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Screening Questionnaire Modal -->
+  <div class="modal-overlay hidden" id="modalScreeningQuestions" onclick="closeScreeningModal(event)">
+    <div class="modal-box modal-md screening-modal" onclick="event.stopPropagation()">
+      <div class="modal-top screening-modal-top">
+        <div style="display: flex; align-items: center; gap: 0.55rem;">
+          <span class="screening-head-icon">📋</span>
+          <h3 class="modal-title">Screening Questions</h3>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeScreeningModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Job Info Header Card -->
+        <div class="screening-job-card">
+          <div class="screening-job-title" id="screeningJobTitle">-</div>
+          <div class="screening-job-meta">
+            <span id="screeningJobCompany">🏢 -</span>
+            <span id="screeningJobLocation">📍 -</span>
+            <span id="screeningJobDate">📅 -</span>
+          </div>
+        </div>
+
+        <!-- Warning Banner -->
+        <div class="screening-warning-banner">
+          <span class="screening-warning-icon">⚠️</span>
+          <div>
+            <strong>Custom questionnaire detected.</strong>
+            <span>Review the questions below before applying manually.</span>
+          </div>
+        </div>
+
+        <!-- Structured Question Cards -->
+        <div class="screening-questions-list" id="screeningQuestionsList">
+          <!-- Dynamically populated by JS -->
+        </div>
+
+        <!-- Empty State (no questions parsed) -->
+        <div class="screening-empty hidden" id="screeningEmptyState">
+          <span style="font-size: 1.5rem;">🔍</span>
+          <p>No structured questions were captured during the initial scan.</p>
+          <p style="font-size: 0.72rem; color: var(--text-muted);">Click "Re-Scan Questions" to re-crawl all form pages, or open the job on LinkedIn to review manually.</p>
+        </div>
+      </div>
+
+      <div class="modal-bottom screening-modal-foot">
+        <div class="screening-foot-left">
+          <button class="btn btn-outline btn-sm" onclick="copyScreeningLink()" title="Copy job link">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy Link</span>
+          </button>
+          <a class="btn btn-outline btn-sm" id="screeningOpenLink" href="#" target="_blank" rel="noopener noreferrer" title="Open on LinkedIn">
+            <span>↗ Open on LinkedIn</span>
+          </a>
+        </div>
+        <div class="screening-foot-right">
+          <button class="btn btn-outline btn-sm" onclick="markScreeningAsReady()" title="Mark as ready to apply manually">
+            <span>✓ Mark Screened</span>
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="triggerScreeningRescan()" title="Re-crawl all form pages for questions" id="btnScreeningRescan">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Re-Scan Questions</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Search & CSV Keyword Import Modal for LinkedIn Scraper & Crawlers -->
+  <div class="modal-overlay hidden" id="modalBulkCrawlerSearch" onclick="closeBulkCrawlerSearchModal(event)">
+    <div class="modal-box modal-md bulk-search-modal" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <span class="bulk-search-icon">📁</span>
+          <div>
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">Bulk Search &amp; Keyword Import</h3>
+            <span style="font-size: 0.74rem; color: var(--text-dim);">Queue multiple role searches sequentially in background (LinkedIn Scraper)</span>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeBulkCrawlerSearchModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body" style="gap: 1rem;">
+        <!-- File Upload Dropzone -->
+        <div class="bulk-dropzone" onclick="document.getElementById('bulkCrawlerCsvFileInput').click()">
+          <input type="file" id="bulkCrawlerCsvFileInput" accept=".csv,.txt" style="display: none;" onchange="handleBulkCrawlerCsvUpload(event)" />
+          <span class="dropzone-icon">📥</span>
+          <div class="dropzone-text">
+            <strong>Click to upload CSV or TXT file</strong>
+            <span>Supports comma-separated or line-by-line role names (e.g. 50+ roles)</span>
+          </div>
+        </div>
+
+        <!-- Direct Textarea Entry / Paste -->
+        <div class="form-block">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin: 0;">
+              Or Paste / Type Role Keywords:
+            </label>
+            <span id="bulkCrawlerKeywordsCount" class="badge-subtle">0 keywords</span>
+          </div>
+          <textarea id="bulkCrawlerKeywordsInput" class="input-clean bulk-keywords-textarea" rows="4" placeholder="e.g. Full Stack Developer, MEAN Stack Developer, Web Developer, DevOps Engineer, React Developer..." oninput="handleBulkCrawlerKeywordsInput(this.value)"></textarea>
+        </div>
+
+        <!-- Keywords Chips Preview -->
+        <div class="bulk-keywords-preview hidden" id="bulkCrawlerKeywordsPreview">
+          <!-- Rendered chips inserted here -->
+        </div>
+
+        <!-- Shared Configuration (Source, Location & Time Filter) -->
+        <div class="bulk-config-grid" style="grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Scraper Target:</label>
+            <select id="bulkCrawlerSource" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="linkedin" selected>LinkedIn Hiring Posts</option>
+              <option value="linkedin_jobs">LinkedIn Job Portal (Easy Apply)</option>
+            </select>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Time Window:</label>
+            <select id="bulkCrawlerTimeFilter" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="24h" selected>Last 24 Hours (Default)</option>
+              <option value="today">Today (Since Midnight)</option>
+              <option value="2d">Last 2 Days</option>
+              <option value="3d">Last 3 Days</option>
+              <option value="week">Past Week</option>
+            </select>
+          </div>
+          <div class="form-block" style="grid-column: 1 / -1;">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Location for all searches:</label>
+            <div class="easy-input-group" style="height: 36px;">
+              <svg class="easy-input-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+              <input type="text" id="bulkCrawlerLocation" class="easy-input" value="" placeholder="Anywhere (leave empty) or e.g. Dubai, Bengaluru, London, Remote..." />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="clearBulkCrawlerKeywords()">Clear List</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeBulkCrawlerSearchModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawlerCrawl" onclick="submitBulkCrawlerSearch()" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="btnLaunchBulkCrawlerCrawlText">Queue Searches</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Search & CSV Keyword Import Modal -->
+  <div class="modal-overlay hidden" id="modalBulkEasySearch" onclick="closeBulkSearchModal(event)">
+    <div class="modal-box modal-md bulk-search-modal" onclick="event.stopPropagation()">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 0.65rem;">
+          <span class="bulk-search-icon">📁</span>
+          <div>
+            <h3 class="modal-title" style="margin: 0; font-size: 1.05rem;">Bulk Search &amp; Keyword Import</h3>
+            <span style="font-size: 0.74rem; color: var(--text-dim);">Queue multiple role searches sequentially in background</span>
+          </div>
+        </div>
+        <button class="close-x close-dialog-btn" onclick="closeBulkSearchModal()" title="Close dialog">&times;</button>
+      </div>
+
+      <div class="modal-body" style="gap: 1rem;">
+        <!-- File Upload Dropzone -->
+        <div class="bulk-dropzone" onclick="document.getElementById('bulkCsvFileInput').click()">
+          <input type="file" id="bulkCsvFileInput" accept=".csv,.txt" style="display: none;" onchange="handleBulkCsvUpload(event)" />
+          <span class="dropzone-icon">📥</span>
+          <div class="dropzone-text">
+            <strong>Click to upload CSV or TXT file</strong>
+            <span>Supports comma-separated or line-by-line role names (e.g. up to 50 roles)</span>
+          </div>
+        </div>
+
+        <!-- Direct Textarea Entry / Paste -->
+        <div class="form-block">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+            <label style="font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin: 0;">
+              Or Paste / Type Role Keywords:
+            </label>
+            <span id="bulkKeywordsCount" class="badge-subtle">0 keywords</span>
+          </div>
+          <textarea id="bulkKeywordsInput" class="input-clean bulk-keywords-textarea" rows="4" placeholder="e.g. Full Stack Developer, Frontend Engineer, React Developer, Node.js Backend, Python Engineer..." oninput="handleBulkKeywordsInput(this.value)"></textarea>
+        </div>
+
+        <!-- Keywords Chips Preview -->
+        <div class="bulk-keywords-preview hidden" id="bulkKeywordsPreview">
+          <!-- Rendered chips inserted here -->
+        </div>
+
+        <!-- Shared Configuration (Location & Time Filter) -->
+        <div class="bulk-config-grid">
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Location for all searches:</label>
+            <div class="easy-input-group" style="height: 36px;">
+              <svg class="easy-input-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+              <input type="text" id="bulkSearchLocation" class="easy-input" value="India" placeholder="Location..." />
+            </div>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Time Posted Filter:</label>
+            <select id="bulkTimeFilter" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;">
+              <option value="24h" selected>Past 24 Hours</option>
+              <option value="week">Past Week</option>
+              <option value="month">Past Month</option>
+              <option value="all">Anytime</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" onclick="clearBulkKeywords()">Clear List</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="btn btn-outline btn-sm" onclick="closeBulkSearchModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawl" onclick="submitBulkEasySearch()" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span id="btnLaunchBulkCrawlText">Queue Searches</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Non-Native Custom Confirm / Alert Dialog Component -->
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">
@@ -1937,6 +2607,7 @@
   <script src="/static/js/sidebar.js?v=5.0"></script>
   <script src="/static/js/api.js?v=5.0"></script>
   <script src="/static/js/discovered.js?v=5.0"></script>
+  <script src="/static/js/easy_apply.js?v=5.0"></script>
   <script src="/static/js/review.js?v=5.0"></script>
   <script src="/static/js/history.js?v=5.0"></script>
   <script src="/static/js/crawler.js?v=5.0"></script>

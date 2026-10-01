@@ -26,6 +26,8 @@ from src.services.experience_extractor import extract_experience
 from .models import (
     ManualPostPayload,
     UpdateEmailPayload,
+    UpdateStatusPayload,
+    BatchStatusPayload,
     RejectPostPayload,
     SpamPostPayload,
     BatchPostActionPayload,
@@ -90,15 +92,24 @@ def api_get_posts(
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
     location: Optional[str] = None,
+    experience_only: bool = Query(False, description="Filter only posts cancelled due to experience requirements"),
+    from_date: Optional[str] = Query(None, description="Start date filter YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="End date filter YYYY-MM-DD"),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    """Retrieve posts with filtering, search, sorting, location, and pagination."""
+    """Retrieve posts with filtering, search, sorting, location, experience filter, custom date range, and pagination."""
     try:
         limit_val = getattr(limit, "default", limit)
         offset_val = getattr(offset, "default", offset)
         safe_limit = int(limit_val) if limit_val is not None else 25
         safe_offset = int(offset_val) if offset_val is not None else 0
+
+        fd_val = getattr(from_date, "default", from_date)
+        td_val = getattr(to_date, "default", to_date)
+        safe_from_date = str(fd_val).strip() if isinstance(fd_val, str) and str(fd_val).strip() else None
+        safe_to_date = str(td_val).strip() if isinstance(td_val, str) and str(td_val).strip() else None
+        safe_exp_only = bool(getattr(experience_only, "default", experience_only))
 
         result = get_posts_paginated(
             category=category,
@@ -112,6 +123,9 @@ def api_get_posts(
             reason=reason,
             date_filter=date_filter,
             location=location,
+            experience_only=safe_exp_only,
+            from_date=safe_from_date,
+            to_date=safe_to_date,
             limit=safe_limit,
             offset=safe_offset,
         )
@@ -136,7 +150,14 @@ def api_get_reasons():
     try:
         counts = get_rejection_reasons_with_counts()
         reasons = [c["reason"] for c in counts]
-        return {"reasons": reasons, "counts": counts}
+        total_exp = sum(c["count"] for c in counts if c.get("is_experience"))
+        exp_reasons = [c["reason"] for c in counts if c.get("is_experience")]
+        return {
+            "reasons": reasons,
+            "counts": counts,
+            "total_experience_cancelled": total_exp,
+            "experience_reasons": exp_reasons,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -261,3 +282,59 @@ def api_mark_post_spam(post_id: str, payload: Optional[SpamPostPayload] = None):
         return {"success": True, "message": f"Post marked as {reason} and moved to Others."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/posts/{post_id}/status")
+def api_update_post_status(post_id: str, payload: UpdateStatusPayload):
+    """
+    Update post workflow status directly (e.g., DISCOVERED, REQUIRES_QUESTIONNAIRE, APPLIED, REJECTED).
+    Allows bidirectional transitions between Ready, Screening, and Applied.
+    """
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "EMAIL_GENERATED", "SENT", "NOT_FOUND"}
+    new_status = (payload.status or "").strip().upper()
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}. Allowed: {allowed_statuses}")
+
+    try:
+        reason = payload.reason
+        if reason is None and new_status in ("DISCOVERED", "APPLIED"):
+            reason = ""  # Clear previous screening/rejection reason
+        update_post_status(post_id, new_status, rejection_reason=reason)
+        return {"success": True, "post_id": post_id, "status": new_status, "message": f"Status updated to {new_status}."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/posts/status-batch")
+def api_update_posts_status_batch(payload: BatchStatusPayload):
+    """Batch update status for multiple selected posts."""
+    if not payload.post_ids:
+        raise HTTPException(status_code=400, detail="No post IDs provided.")
+
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "NOT_FOUND"}
+    new_status = (payload.status or "").strip().upper()
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
+
+    reason = payload.reason
+    if reason is None and new_status in ("DISCOVERED", "APPLIED"):
+        reason = ""
+
+    updated_count = 0
+    for pid in payload.post_ids:
+        try:
+            update_post_status(pid, new_status, rejection_reason=reason)
+            updated_count += 1
+        except Exception:
+            pass
+
+    return {
+        "success": True,
+        "count": updated_count,
+        "status": new_status,
+        "message": f"Updated {updated_count} posts to {new_status}."
+    }

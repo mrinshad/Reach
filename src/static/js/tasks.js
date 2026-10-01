@@ -31,14 +31,27 @@ async function pollTaskStatus() {
 
     if (!card || !titleEl || !subEl || !countEl || !fillEl || !logsEl) return;
 
-    // Toggle visibility of stop/cancel buttons based on running status
+    // Toggle visibility of stop/cancel and retry buttons
     const cancelBtn = document.getElementById('btnCancelActiveTask');
+    const retryBtn = document.getElementById('btnRetryActiveTask');
     const logsCancelBtns = document.querySelectorAll('.logs-cancel-btn');
     const isRunning = task.status === 'running';
+
     if (cancelBtn) cancelBtn.style.display = isRunning ? 'inline-flex' : 'none';
     logsCancelBtns.forEach(btn => btn.style.display = isRunning ? 'inline-flex' : 'none');
 
-    // Render task queue drawer if queued tasks exist
+    if (task.log_id) {
+      state.lastTaskLogId = task.log_id;
+    }
+
+    if (retryBtn) {
+      if (!isRunning && (task.status === 'error' || task.status === 'stopped') && state.lastTaskLogId) {
+        retryBtn.classList.remove('hidden');
+      } else {
+        retryBtn.classList.add('hidden');
+      }
+    }
+
     const queueSection = document.getElementById('taskQueueSection');
     const queueBadge = document.getElementById('taskQueueCountBadge');
     const queueList = document.getElementById('taskQueueList');
@@ -57,9 +70,13 @@ async function pollTaskStatus() {
                 ${item.snippet ? `<span class="queue-card-snippet" title="${escapeHtml(item.snippet)}">${escapeHtml(item.snippet)}</span>` : ''}
               </div>
             </div>
-            <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+            <div class="task-queue-card-right">
+              ${item.eta_display ? `<span class="queue-eta-badge" title="Estimated duration: ${escapeHtml(item.eta_display)}">${escapeHtml(item.eta_display)}</span>` : ''}
+              ${item.starts_in_display ? `<span class="queue-starts-in" title="Estimated start">${escapeHtml(item.starts_in_display)}</span>` : ''}
+              <button class="btn-cancel-queue-item" onclick="cancelQueuedTask('${escapeHtml(item.id)}')" title="Cancel pending task">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
           </div>
         `).join('');
       } else {
@@ -68,6 +85,9 @@ async function pollTaskStatus() {
         queueList.innerHTML = '';
       }
     }
+
+    const etaPill = document.getElementById('taskEtaPill');
+    const etaText = document.getElementById('taskEtaText');
 
     if (task.status === 'running') {
       if (!state.pollingTimer) {
@@ -81,6 +101,15 @@ async function pollTaskStatus() {
       const done = task.completed_items || 0;
       countEl.textContent = `${done} / ${total}`;
 
+      if (etaPill && etaText) {
+        if (task.eta_display) {
+          etaText.textContent = task.eta_display;
+          etaPill.classList.remove('hidden');
+        } else {
+          etaPill.classList.add('hidden');
+        }
+      }
+
       const pct = Math.min(100, Math.round((done / total) * 100));
       fillEl.style.width = `${Math.max(5, pct)}%`;
 
@@ -91,6 +120,7 @@ async function pollTaskStatus() {
 
       state.lastHandledTaskKey = null;
     } else if (task.status === 'completed' || task.status === 'error') {
+      if (etaPill) etaPill.classList.add('hidden');
       if (task.logs && task.logs.length > 0) {
         renderTaskLogs(task.logs);
       }
@@ -161,14 +191,16 @@ async function pollTaskStatus() {
         }
       } else {
         stopTaskPolling();
+        const hideDelay = (task.status === 'error' || task.status === 'stopped') ? 7000 : (task.crawl_stats ? 3000 : 1500);
         setTimeout(() => {
           if (!state.pollingTimer) {
             card.classList.add('hidden');
             fetch('/api/tasks/clear', { method: 'POST' }).catch(() => {});
           }
-        }, task.crawl_stats ? 3000 : 1500);
+        }, hideDelay);
       }
     } else {
+      if (etaPill) etaPill.classList.add('hidden');
       const hasQueuedItems = (queue.length > 0);
       if (hasQueuedItems) {
         card.classList.remove('hidden');
@@ -334,11 +366,43 @@ function toggleTaskLogs() {
   }
 }
 
+async function retryLastFailedTask() {
+  if (!state.lastTaskLogId) {
+    if (typeof showToast === 'function') {
+      showToast('No recent task ID available to retry', 'warn');
+    }
+    return;
+  }
+  const retryBtn = document.getElementById('btnRetryActiveTask');
+  if (retryBtn) retryBtn.classList.add('hidden');
+
+  if (typeof reexecuteTask === 'function') {
+    await reexecuteTask(state.lastTaskLogId);
+  } else {
+    try {
+      if (typeof showToast === 'function') showToast('Retrying task...', 'info');
+      const res = await fetch(`/api/tasks/reexecute/${encodeURIComponent(state.lastTaskLogId)}`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (typeof showToast === 'function') showToast(`✓ ${data.message || 'Task re-queued'}`, 'success');
+        pollTaskStatus();
+      } else {
+        if (typeof showToast === 'function') showToast(data.detail || data.message || 'Failed to retry task', 'error');
+      }
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('Network error retrying task: ' + err.message, 'error');
+    }
+  }
+}
+
 // Global Bindings
 window.startTaskPolling = startTaskPolling;
 window.stopTaskPolling = stopTaskPolling;
 window.pollTaskStatus = pollTaskStatus;
 window.cancelActiveTask = cancelActiveTask;
+window.retryLastFailedTask = retryLastFailedTask;
 window.cancelQueuedTask = cancelQueuedTask;
 window.clearTaskQueue = clearTaskQueue;
 window.showCrawlSummaryModal = showCrawlSummaryModal;

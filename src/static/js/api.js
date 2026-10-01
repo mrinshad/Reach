@@ -150,10 +150,16 @@ async function loadDashboardData() {
 
   if (state.activeTab === 'tabDiscovered') {
     await fetchDiscoveredPosts();
+  } else if (state.activeTab === 'tabEasyApply') {
+    if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
   } else if (state.activeTab === 'tabReview') {
     await fetchReviewPosts();
   } else if (state.activeTab === 'tabSent') {
-    await fetchSentPosts();
+    if (typeof currentHistoryView !== 'undefined' && currentHistoryView === 'logs') {
+      if (typeof fetchActivityLogs === 'function') await fetchActivityLogs();
+    } else {
+      await fetchSentPosts();
+    }
   } else if (state.activeTab === 'tabAnalytics') {
     await loadAnalytics(state.analyticsDays || 30);
   }
@@ -216,6 +222,14 @@ async function fetchStats() {
       reviewQueueBadge.textContent = draftsReady;
     }
 
+    // 2b. LinkedIn Easy Apply badge
+    const countEasyApplyEl = document.getElementById('countEasyApply');
+    if (countEasyApplyEl) {
+      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : (stats.easy_apply_total || 0);
+      countEasyApplyEl.textContent = eaPending;
+      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready`;
+    }
+
     // 3. Sent & History: Others tab counters
     const elOthersAll = document.getElementById('countOthersAll');
     if (elOthersAll) elOthersAll.textContent = othersCount;
@@ -225,6 +239,11 @@ async function fetchStats() {
 
     const elOthersCancelled = document.getElementById('countOthersCancelled');
     if (elOthersCancelled) elOthersCancelled.textContent = cancelledCount;
+
+    const elExpCancelled = document.getElementById('countExpCancelled');
+    if (elExpCancelled && data.experience_cancelled_total !== undefined) {
+      elExpCancelled.textContent = data.experience_cancelled_total;
+    }
 
     // 4. Executive Overview KPI Performance Cards (Analytics Tab)
     const kpiAppliedEl = document.getElementById('kpiApplied');
@@ -276,6 +295,7 @@ async function fetchStats() {
     );
 
     state.lastStatsSnapshot = { ...stats };
+    if (typeof fetchActivityLogCounts === 'function') fetchActivityLogCounts();
   } catch (err) {
     console.error('Error fetching stats:', err);
   }
@@ -302,11 +322,16 @@ function refreshActiveTabRealtime(stats) {
       if (typeof fetchReviewPosts === 'function') fetchReviewPosts();
     }
   } else if (activeTab === 'tabSent') {
-    const searchSentInput = document.getElementById('inputSearchSent');
-    const isSearching = searchSentInput && document.activeElement === searchSentInput;
-    const hasSelection = state.selectedSentIds && state.selectedSentIds.size > 0;
-    if (!isSearching && !hasSelection) {
-      if (typeof fetchSentPosts === 'function') fetchSentPosts();
+    const isLogs = (localStorage.getItem('reach_history_view') === 'logs');
+    if (isLogs) {
+      if (typeof fetchActivityLogs === 'function') fetchActivityLogs();
+    } else {
+      const searchSentInput = document.getElementById('inputSearchSent');
+      const isSearching = searchSentInput && document.activeElement === searchSentInput;
+      const hasSelection = state.selectedSentIds && state.selectedSentIds.size > 0;
+      if (!isSearching && !hasSelection) {
+        if (typeof fetchSentPosts === 'function') fetchSentPosts();
+      }
     }
   } else if (activeTab === 'tabAnalytics') {
     if (typeof loadAnalytics === 'function') {

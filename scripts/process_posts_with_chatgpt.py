@@ -17,7 +17,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
 from src.services.firefox_connector import launch_firefox_context
-from src.services.chatgpt_service import navigate_to_conversation, send_jd_and_get_email, extract_unsuitable_reason
+from src.services.chatgpt_service import (
+    navigate_to_conversation,
+    send_jd_and_get_email,
+    send_followup_and_get_email,
+    extract_unsuitable_reason,
+    is_unsuitable_response,
+    is_experience_rejection,
+)
 from src.db import get_pending_email_posts, save_chatgpt_response, update_post_status, update_post_email
 
 
@@ -85,11 +92,31 @@ def main():
                 # Send raw JD only
                 subject, body = send_jd_and_get_email(page, post["full_text"], max_wait=120)
 
-                if subject == "UNSUITABLE_JD" or (body and ("UNSUITABLE_JD" in body or "❌ not suitable" in body.lower() or "not suitable —" in body.lower())):
-                    reason = extract_unsuitable_reason(body)
-                    update_post_status(post_id, "REJECTED", rejection_reason=reason)
-                    update_post_email(post_id, "UNSUITABLE_JD", body)
-                    print(f"  🚫 [Auto-Cancelled] Unsuitable JD for '{author}': {reason}")
+                is_unsuitable = (subject == "UNSUITABLE_JD" or (body and is_unsuitable_response(body)))
+                if is_unsuitable:
+                    reason = extract_unsuitable_reason(body, full_text=post.get("full_text", "")) if body else "Unsuitable JD"
+                    if is_experience_rejection(reason) or (body and is_experience_rejection(body)):
+                        print(f"  ℹ️ [Experience Override] Role mentions '{reason}', but experience-based cancellation is disabled.")
+                        print(f"  Prompting ChatGPT to generate outreach email anyway...")
+                        followup_prompt = (
+                            "Write the tailored cold outreach application email for this role anyway. "
+                            "Focus on the candidate's relevant hands-on skills, frameworks, and project strengths "
+                            "regardless of the years of experience requirement. Never invent experience, but bridge "
+                            "skill requirements confidently."
+                        )
+                        retry_subject, retry_body = send_followup_and_get_email(page, followup_prompt)
+                        if retry_subject != "UNSUITABLE_JD" and not is_unsuitable_response(retry_body):
+                            save_chatgpt_response(post_id, retry_subject, retry_body)
+                            successful += 1
+                            print(f"  ✓ Saved Email to DB for '{author}' (experience override)!")
+                            print(f"    Subject: {retry_subject}")
+                        else:
+                            update_post_status(post_id, "DISCOVERED")
+                            print(f"  ℹ️ Kept in Discovered queue (experience-based cancellation disabled).")
+                    else:
+                        update_post_status(post_id, "REJECTED", rejection_reason=reason)
+                        update_post_email(post_id, "UNSUITABLE_JD", body)
+                        print(f"  🚫 [Auto-Cancelled] Unsuitable JD for '{author}': {reason}")
                 elif body:
                     save_chatgpt_response(post_id, subject, body)
                     successful += 1

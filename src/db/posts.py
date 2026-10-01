@@ -242,30 +242,59 @@ def upsert_post(
             return (created_id, res is not None)
 
 
-def _apply_date_filter(date_filter: Optional[str], where_clauses: list, params: list):
-    """Safely append SQL where clauses for predefined and custom date/time filters."""
-    if not date_filter:
+def _apply_date_filter(
+    date_filter: Optional[str],
+    where_clauses: list,
+    params: list,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    status: Optional[str] = None,
+    gen_status: Optional[str] = None,
+):
+    """Safely append SQL where clauses for custom from/to date ranges and predefined filters."""
+    is_history = (
+        (status and status.upper() in ("SENT", "REJECTED", "OTHERS", "HISTORY", "ARCHIVE"))
+        or (gen_status and gen_status.upper() in ("SENT", "REJECTED", "OTHERS", "HISTORY", "ARCHIVE"))
+    )
+    ts_col = "COALESCE(sent_at, updated_at, created_at)" if is_history else "created_at"
+
+    # Custom from/to date boundaries (e.g. '2026-09-01')
+    has_custom = False
+    clean_from = from_date.strip() if isinstance(from_date, str) and from_date.strip() and not from_date.strip().lower().startswith("query") else None
+    clean_to = to_date.strip() if isinstance(to_date, str) and to_date.strip() and not to_date.strip().lower().startswith("query") else None
+
+    if clean_from:
+        where_clauses.append(f"DATE({ts_col}) >= %s::date")
+        params.append(clean_from)
+        has_custom = True
+    if clean_to:
+        where_clauses.append(f"DATE({ts_col}) <= %s::date")
+        params.append(clean_to)
+        has_custom = True
+
+    if has_custom or not date_filter:
         return
+
     df = date_filter.strip().upper()
     if df == "ALL":
         return
     if df in ("24H", "LAST_24H", "PAST_24H"):
-        where_clauses.append("created_at >= NOW() - INTERVAL '24 hours'")
+        where_clauses.append(f"{ts_col} >= NOW() - INTERVAL '24 hours'")
     elif df == "TODAY":
-        where_clauses.append("created_at >= CURRENT_DATE")
+        where_clauses.append(f"{ts_col} >= CURRENT_DATE")
     elif df == "YESTERDAY":
-        where_clauses.append("created_at >= CURRENT_DATE - INTERVAL '1 day' AND created_at < CURRENT_DATE")
+        where_clauses.append(f"{ts_col} >= CURRENT_DATE - INTERVAL '1 day' AND {ts_col} < CURRENT_DATE")
     elif df in ("2D", "LAST_2_DAYS", "2DAYS", "48H"):
-        where_clauses.append("created_at >= NOW() - INTERVAL '2 days'")
+        where_clauses.append(f"{ts_col} >= NOW() - INTERVAL '2 days'")
     elif df in ("3D", "LAST_3_DAYS", "3DAYS", "72H"):
-        where_clauses.append("created_at >= NOW() - INTERVAL '3 days'")
+        where_clauses.append(f"{ts_col} >= NOW() - INTERVAL '3 days'")
     elif df in ("WEEK", "PAST_WEEK", "7D"):
-        where_clauses.append("created_at >= NOW() - INTERVAL '7 days'")
+        where_clauses.append(f"{ts_col} >= NOW() - INTERVAL '7 days'")
     elif df.startswith("CUSTOM_HOURS:") or df.startswith("HOURS:"):
         try:
             hrs = int(df.split(":")[1])
             if hrs > 0:
-                where_clauses.append("created_at >= NOW() - make_interval(hours => %s)")
+                where_clauses.append(f"{ts_col} >= NOW() - make_interval(hours => %s)")
                 params.append(hrs)
         except (ValueError, IndexError):
             pass
@@ -273,7 +302,7 @@ def _apply_date_filter(date_filter: Optional[str], where_clauses: list, params: 
         try:
             dys = int(df.split(":")[1])
             if dys > 0:
-                where_clauses.append("created_at >= NOW() - make_interval(days => %s)")
+                where_clauses.append(f"{ts_col} >= NOW() - make_interval(days => %s)")
                 params.append(dys)
         except (ValueError, IndexError):
             pass
@@ -291,6 +320,9 @@ def get_posts(
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
     location: Optional[str] = None,
+    experience_only: bool = False,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -342,7 +374,10 @@ def get_posts(
     elif gen_status is None and status is None:
         where_clauses.append("status IN ('DISCOVERED', 'SELECTED')")
 
-    if reason and reason != "ALL":
+    if experience_only:
+        where_clauses.append("(rejection_reason = 'Experience Requirement Mismatch' OR rejection_reason ILIKE %s)")
+        params.append("%experience%")
+    elif reason and reason != "ALL":
         where_clauses.append("rejection_reason ILIKE %s")
         params.append(f"%{reason}%")
 
@@ -350,7 +385,7 @@ def get_posts(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    _apply_date_filter(date_filter, where_clauses, params)
+    _apply_date_filter(date_filter, where_clauses, params, from_date=from_date, to_date=to_date, status=status, gen_status=gen_status)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""
@@ -448,6 +483,9 @@ def get_posts_paginated(
     reason: Optional[str] = None,
     date_filter: Optional[str] = None,
     location: Optional[str] = None,
+    experience_only: bool = False,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     limit: int = 25,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -499,7 +537,10 @@ def get_posts_paginated(
     elif gen_status is None and status is None:
         where_clauses.append("status IN ('DISCOVERED', 'SELECTED')")
 
-    if reason and reason != "ALL":
+    if experience_only:
+        where_clauses.append("(rejection_reason = 'Experience Requirement Mismatch' OR rejection_reason ILIKE %s)")
+        params.append("%experience%")
+    elif reason and reason != "ALL":
         where_clauses.append("rejection_reason ILIKE %s")
         params.append(f"%{reason}%")
 
@@ -507,7 +548,7 @@ def get_posts_paginated(
         where_clauses.append("location ILIKE %s")
         params.append(f"%{location}%")
 
-    _apply_date_filter(date_filter, where_clauses, params)
+    _apply_date_filter(date_filter, where_clauses, params, from_date=from_date, to_date=to_date, status=status, gen_status=gen_status)
 
     if min_exp is not None and max_exp is not None:
         where_clauses.append("""

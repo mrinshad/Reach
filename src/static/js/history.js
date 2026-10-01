@@ -6,9 +6,26 @@
 function setOthersFilter(filter) {
   state.othersFilter = filter;
   state.sentPage = 1;
+  if (filter !== 'EXP_CANCELLED' && state.othersReason === 'Experience Requirement Mismatch') {
+    state.othersReason = 'ALL';
+    const reasonSel = document.getElementById('selectReasonFilter');
+    if (reasonSel) reasonSel.value = 'ALL';
+  }
   document.querySelectorAll('#othersPills .pill').forEach((pill) => {
     pill.classList.toggle('active', pill.dataset.others === filter);
   });
+  fetchSentPosts();
+}
+
+function filterExperienceCancelled() {
+  state.othersFilter = 'EXP_CANCELLED';
+  state.othersReason = 'Experience Requirement Mismatch';
+  state.sentPage = 1;
+  document.querySelectorAll('#othersPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.others === 'EXP_CANCELLED');
+  });
+  const reasonSel = document.getElementById('selectReasonFilter');
+  if (reasonSel) reasonSel.value = 'Experience Requirement Mismatch';
   fetchSentPosts();
 }
 
@@ -28,6 +45,15 @@ function handleSearchSentKeyUp(e) {
   }
 }
 
+function applySentDateFilter() {
+  const fromEl = document.getElementById('sentDateFrom');
+  const toEl = document.getElementById('sentDateTo');
+  state.fromSentDate = fromEl ? fromEl.value.trim() : '';
+  state.toSentDate = toEl ? toEl.value.trim() : '';
+  state.sentPage = 1;
+  fetchSentPosts();
+}
+
 function clearSentFilters() {
   state.othersFilter = 'ALL';
   document.querySelectorAll('#othersPills .pill').forEach((pill) => {
@@ -37,6 +63,13 @@ function clearSentFilters() {
   state.othersReason = 'ALL';
   const reasonSel = document.getElementById('selectReasonFilter');
   if (reasonSel) reasonSel.value = 'ALL';
+
+  state.fromSentDate = '';
+  state.toSentDate = '';
+  const fromEl = document.getElementById('sentDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('sentDateTo');
+  if (toEl) toEl.value = '';
 
   state.searchSent = '';
   const searchInput = document.getElementById('inputSearchSent');
@@ -52,6 +85,12 @@ async function loadRejectionReasonsFilter(selectedReason = null) {
     if (!res.ok) return;
     const data = await res.json();
     const items = data.counts || (data.reasons || []).map((r) => ({ reason: r, count: null }));
+
+    // Update experience cancelled badge if available
+    const expBadge = document.getElementById('countExpCancelled');
+    if (expBadge && data.total_experience_cancelled !== undefined) {
+      expBadge.textContent = data.total_experience_cancelled;
+    }
 
     // Update Sent / Cancelled tab reason filter
     const sentSelect = document.getElementById('selectReasonFilter');
@@ -93,6 +132,14 @@ function applySentReasonFilter() {
   const select = document.getElementById('selectReasonFilter');
   if (select) {
     state.othersReason = select.value;
+    if (state.othersReason === 'Experience Requirement Mismatch') {
+      state.othersFilter = 'EXP_CANCELLED';
+    } else if (state.othersFilter === 'EXP_CANCELLED') {
+      state.othersFilter = 'REJECTED';
+    }
+    document.querySelectorAll('#othersPills .pill').forEach((pill) => {
+      pill.classList.toggle('active', pill.dataset.others === state.othersFilter);
+    });
   }
   state.sentPage = 1;
   fetchSentPosts();
@@ -118,7 +165,10 @@ async function fetchSentPosts() {
   }
 
   try {
-    const statusVal = state.othersFilter === 'ALL' ? 'OTHERS' : state.othersFilter;
+    let statusVal = state.othersFilter === 'ALL' ? 'OTHERS' : state.othersFilter;
+    if (state.othersFilter === 'EXP_CANCELLED') {
+      statusVal = 'REJECTED';
+    }
     const params = new URLSearchParams({
       status: statusVal,
       order_by: 'updated_at',
@@ -128,8 +178,16 @@ async function fetchSentPosts() {
     if (state.searchSent) {
       params.append('search', state.searchSent);
     }
-    if (state.othersReason && state.othersReason !== 'ALL') {
+    if (state.othersFilter === 'EXP_CANCELLED') {
+      params.append('experience_only', 'true');
+    } else if (state.othersReason && state.othersReason !== 'ALL') {
       params.append('reason', state.othersReason);
+    }
+    if (state.fromSentDate) {
+      params.append('from_date', state.fromSentDate);
+    }
+    if (state.toSentDate) {
+      params.append('to_date', state.toSentDate);
     }
 
     const res = await fetch(`/api/posts?${params.toString()}`);
@@ -137,8 +195,11 @@ async function fetchSentPosts() {
     state.sentPosts = data.posts || [];
     state.sentTotal = data.total !== undefined ? data.total : (data.posts ? data.posts.length : 0);
 
+    const appBadge = document.getElementById('badgeApplicationsCount');
+    if (appBadge) appBadge.textContent = state.sentTotal;
+
     const sentBadge = document.getElementById('sentResultsBadge');
-    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '') || (state.othersReason && state.othersReason !== 'ALL');
+    const isSentFiltered = state.othersFilter !== 'ALL' || (state.searchSent && state.searchSent.trim() !== '') || (state.othersReason && state.othersReason !== 'ALL') || Boolean(state.fromSentDate) || Boolean(state.toSentDate);
     if (sentBadge) {
       if (isSentFiltered) {
         sentBadge.textContent = `${state.sentTotal} result${state.sentTotal === 1 ? '' : 's'}`;
@@ -421,3 +482,758 @@ window.toggleSelectSent = toggleSelectSent;
 window.toggleSelectAllSent = toggleSelectAllSent;
 window.updateSelectedSentUI = updateSelectedSentUI;
 window.restoreBatchSelectedSent = restoreBatchSelectedSent;
+
+// Activity Run Logs Global Bindings
+window.switchHistoryView = switchHistoryView;
+window.openActivityLogsView = openActivityLogsView;
+window.setActivityLogTypeFilter = setActivityLogTypeFilter;
+window.applyActivityLogStatusFilter = applyActivityLogStatusFilter;
+window.changeActivityLogsRowsPerPage = changeActivityLogsRowsPerPage;
+window.goToActivityLogsPage = goToActivityLogsPage;
+window.fetchActivityLogs = fetchActivityLogs;
+window.renderActivityLogs = renderActivityLogs;
+window.openRunLogsModal = openRunLogsModal;
+window.closeRunLogsModal = closeRunLogsModal;
+window.copyRunLogs = copyRunLogs;
+
+// =====================================================================
+// ACTIVITY & RUN LOGS WORKSPACE
+// =====================================================================
+
+let currentHistoryView = 'applications';
+let activityLogsPage = 1;
+let activityLogsLimit = 25;
+let activityLogsTotal = 0;
+let activityLogTypeFilter = 'ALL';
+let activityLogStatusFilter = 'ALL';
+let currentViewingRun = null;
+let selectedActivityLogIds = new Set();
+
+function switchHistoryView(view) {
+  currentHistoryView = view;
+  try {
+    localStorage.setItem('reach_history_view', view);
+  } catch (_) {}
+
+  const isApps = view === 'applications';
+
+  if (state.activeTab === 'tabSent') {
+    try {
+      history.replaceState(null, '', isApps ? '#sent' : '#logs');
+    } catch (_) {}
+  }
+
+  const btnApps = document.getElementById('btnViewApplications');
+  const btnLogs = document.getElementById('btnViewActivityLogs');
+  if (btnApps) btnApps.classList.toggle('active', isApps);
+  if (btnLogs) btnLogs.classList.toggle('active', !isApps);
+
+  const secApps = document.getElementById('sectionApplicationsHistory');
+  const secLogs = document.getElementById('sectionActivityLogs');
+  if (secApps) secApps.classList.toggle('hidden', !isApps);
+  if (secLogs) secLogs.classList.toggle('hidden', isApps);
+
+  if (isApps) {
+    fetchSentPosts();
+  } else {
+    fetchActivityLogs();
+  }
+}
+
+function openActivityLogsView() {
+  if (typeof switchTab === 'function') {
+    switchTab('tabSent');
+  }
+  switchHistoryView('logs');
+}
+
+function setActivityLogTypeFilter(type) {
+  activityLogTypeFilter = type;
+  activityLogsPage = 1;
+  document.querySelectorAll('#activityLogPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.actType === type);
+  });
+  if (activityLogStatusFilter === 'uncompleted') {
+    activityLogStatusFilter = 'ALL';
+    const select = document.getElementById('selectActivityLogStatus');
+    if (select) select.value = 'ALL';
+  }
+  fetchActivityLogs();
+}
+
+function setActivityLogUncompletedFilter() {
+  activityLogTypeFilter = 'ALL';
+  activityLogStatusFilter = 'uncompleted';
+  activityLogsPage = 1;
+  document.querySelectorAll('#activityLogPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.id === 'pillUncompletedTasks');
+  });
+  const select = document.getElementById('selectActivityLogStatus');
+  if (select) select.value = 'uncompleted';
+  fetchActivityLogs();
+}
+
+function applyActivityLogStatusFilter() {
+  const select = document.getElementById('selectActivityLogStatus');
+  if (select) {
+    activityLogStatusFilter = select.value;
+  }
+  activityLogsPage = 1;
+  document.querySelectorAll('#activityLogPills .pill').forEach((pill) => {
+    if (activityLogStatusFilter === 'uncompleted') {
+      pill.classList.toggle('active', pill.id === 'pillUncompletedTasks');
+    } else {
+      pill.classList.toggle('active', pill.dataset.actType === activityLogTypeFilter);
+    }
+  });
+  fetchActivityLogs();
+}
+
+let activityLogFromDate = '';
+let activityLogToDate = '';
+
+function applyActivityLogDateFilter() {
+  const fromEl = document.getElementById('activityDateFrom');
+  const toEl = document.getElementById('activityDateTo');
+  activityLogFromDate = fromEl ? fromEl.value.trim() : '';
+  activityLogToDate = toEl ? toEl.value.trim() : '';
+  activityLogsPage = 1;
+  fetchActivityLogs();
+}
+
+function changeActivityLogsRowsPerPage(limit) {
+  activityLogsLimit = parseInt(limit, 10) || 25;
+  activityLogsPage = 1;
+  fetchActivityLogs();
+}
+
+function goToActivityLogsPage(page) {
+  activityLogsPage = page;
+  fetchActivityLogs();
+}
+
+function formatDuration(seconds) {
+  if (!seconds || seconds <= 0) return '< 1s';
+  const sec = Math.round(seconds);
+  if (sec < 60) return `${sec}s`;
+  const mins = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  return `${mins}m ${remSec.toString().padStart(2, '0')}s`;
+}
+
+function getActivityIconAndLabel(taskType, taskName) {
+  const typeLower = (taskType || '').toLowerCase();
+  const nameLower = (taskName || '').toLowerCase();
+
+  if (typeLower.includes('easy_apply') || nameLower.includes('easy apply')) {
+    return { icon: '⚡', label: 'Easy Apply Crawler' };
+  }
+  if (typeLower.includes('chatgpt') || nameLower.includes('chatgpt') || nameLower.includes('draft')) {
+    return { icon: '🤖', label: 'AI Email Drafts' };
+  }
+  if (typeLower.includes('infopark') || nameLower.includes('infopark')) {
+    return { icon: '🏢', label: 'Infopark IT Crawler' };
+  }
+  if (typeLower.includes('gmail') || nameLower.includes('gmail') || nameLower.includes('send')) {
+    return { icon: '✉️', label: 'Gmail Dispatch' };
+  }
+  if (typeLower.includes('login') || nameLower.includes('login')) {
+    return { icon: '🔑', label: 'Interactive Login' };
+  }
+  if (typeLower.includes('crawler') || typeLower.includes('scraper') || nameLower.includes('linkedin')) {
+    return { icon: '💼', label: 'LinkedIn Posts Crawler' };
+  }
+  return { icon: '⚙️', label: 'Automation Run' };
+}
+
+async function fetchActivityLogs() {
+  const tbody = document.getElementById('activityLogsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2.5rem; color: #94a3b8;">Loading activity run logs...</td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      limit: String(activityLogsLimit),
+      offset: String((activityLogsPage - 1) * activityLogsLimit),
+    });
+    if (activityLogTypeFilter && activityLogTypeFilter !== 'ALL') {
+      params.append('type', activityLogTypeFilter);
+    }
+    if (activityLogStatusFilter && activityLogStatusFilter !== 'ALL') {
+      params.append('status', activityLogStatusFilter);
+    }
+    if (activityLogFromDate) {
+      params.append('from_date', activityLogFromDate);
+    }
+    if (activityLogToDate) {
+      params.append('to_date', activityLogToDate);
+    }
+
+    const res = await fetch(`/api/activity-logs?${params.toString()}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const runs = data.runs || [];
+    activityLogsTotal = data.total || 0;
+
+    const countAllEl = document.getElementById('countLogsAll');
+    if (countAllEl) countAllEl.textContent = activityLogsTotal;
+
+    const badgeLogsCount = document.getElementById('badgeActivityLogsCount');
+    if (badgeLogsCount) badgeLogsCount.textContent = activityLogsTotal;
+
+    renderActivityLogs(runs);
+    renderActivityLogsPagination();
+    fetchActivityLogCounts();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2.5rem; color: #fb7185;">Error loading activity logs: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderActivityLogs(runs) {
+  const tbody = document.getElementById('activityLogsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (runs.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">
+          <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📜</div>
+          <div style="font-weight: 600; color: #94a3b8; margin-bottom: 0.25rem;">No Activity Run Logs Found</div>
+          <div style="font-size: 0.8rem; color: #64748b;">Automated crawl and application tasks will appear here as they run.</div>
+        </td>
+      </tr>
+    `;
+    updateActivityLogSelectionUI();
+    return;
+  }
+
+  runs.forEach((run) => {
+    const isSelected = selectedActivityLogIds.has(run.id);
+    const tr = document.createElement('tr');
+    tr.className = `clickable-card activity-log-row${isSelected ? ' selected' : ''}`;
+    tr.onclick = (e) => {
+      if (e.target.closest('button, a, input, select, svg, .param-pill')) return;
+      const cb = tr.querySelector('.activity-log-checkbox');
+      if (cb) {
+        cb.checked = !cb.checked;
+        toggleActivityLogSelect(run.id, cb.checked);
+      }
+    };
+
+    const { icon, label } = getActivityIconAndLabel(run.task_type, run.task_name);
+
+    // Format parameters
+    const params = run.parameters || {};
+    let paramPillsHtml = '';
+    if (params.query || params.keywords) {
+      const q = params.query || params.keywords;
+      paramPillsHtml += `<span class="param-pill"><strong>Query:</strong> ${escapeHtml(q)}</span>`;
+    }
+    if (params.location) {
+      paramPillsHtml += `<span class="param-pill"><strong>Location:</strong> ${escapeHtml(params.location)}</span>`;
+    }
+    if (params.time_filter) {
+      paramPillsHtml += `<span class="param-pill"><strong>Time:</strong> ${escapeHtml(params.time_filter)}</span>`;
+    }
+    if (params.max_jobs) {
+      paramPillsHtml += `<span class="param-pill"><strong>Limit:</strong> ${escapeHtml(String(params.max_jobs))}</span>`;
+    }
+    if (params.count) {
+      paramPillsHtml += `<span class="param-pill"><strong>Batch:</strong> ${escapeHtml(String(params.count))} items</span>`;
+    }
+    if (params.author) {
+      paramPillsHtml += `<span class="param-pill"><strong>Candidate:</strong> ${escapeHtml(params.author)}</span>`;
+    }
+    if (!paramPillsHtml) {
+      paramPillsHtml = `<span class="param-pill text-muted">Standard config</span>`;
+    }
+
+    // Status Badge
+    const st = (run.status || 'completed').toLowerCase();
+    let statusClass = 'completed';
+    let statusText = '✓ Completed';
+    if (st === 'running') {
+      statusClass = 'running';
+      statusText = '⚡ Running';
+    } else if (st === 'error') {
+      statusClass = 'error';
+      statusText = '✗ Failed';
+    } else if (st === 'stopped') {
+      statusClass = 'stopped';
+      statusText = '🛑 Stopped';
+    }
+
+    const summaryText = run.result_summary || (st === 'running' ? 'Execution in progress...' : 'Execution finished.');
+    const durationText = formatDuration(run.duration_seconds);
+    const whenText = typeof formatDateTime === 'function' ? formatDateTime(run.created_at) : (run.created_at || '—');
+
+    tr.innerHTML = `
+      <td width="35" style="text-align: center;">
+        <input type="checkbox" 
+               class="activity-log-checkbox" 
+               data-id="${escapeHtml(run.id)}" 
+               ${isSelected ? 'checked' : ''} 
+               onchange="toggleActivityLogSelect('${escapeHtml(run.id)}', this.checked)"
+               title="Select task for batch re-execution" />
+      </td>
+      <td>
+        <div class="activity-name-cell">
+          <div class="activity-icon-box">${icon}</div>
+          <div>
+            <div class="activity-title-text">${escapeHtml(run.short_name || run.task_name)}</div>
+            <div class="activity-type-tag">${escapeHtml(label)}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div class="params-chip-wrap">
+          ${paramPillsHtml}
+        </div>
+      </td>
+      <td>
+        <div class="run-result-summary">
+          <span class="run-status-badge ${statusClass}">${statusText}</span>
+          <span class="run-result-text">${escapeHtml(summaryText)}</span>
+        </div>
+      </td>
+      <td>
+        <span style="font-family: var(--font-mono, monospace); font-size: 0.8rem; color: #cbd5e1;">${durationText}</span>
+      </td>
+      <td>
+        <span style="font-size: 0.78rem; color: #94a3b8;">${whenText}</span>
+      </td>
+      <td style="text-align: right;">
+        <div class="activity-actions-cell">
+          <button class="btn-reexecute-task ${st === 'error' || st === 'stopped' ? 'is-uncompleted' : 'completed-reexecute'}" 
+                  onclick="reexecuteTask('${escapeHtml(run.id)}')" 
+                  title="${st === 'error' || st === 'stopped' ? 'Re-execute uncompleted task' : 'Re-run task'}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span>${st === 'error' || st === 'stopped' ? 'Re-execute' : 'Re-run'}</span>
+          </button>
+          <button class="btn-view-run-logs" onclick="openRunLogsModal('${escapeHtml(run.id)}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>Logs</span>
+          </button>
+          <button class="btn-delete-task" onclick="deleteActivityLog('${escapeHtml(run.id)}')" title="Delete activity run">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  updateActivityLogSelectionUI();
+}
+
+function renderActivityLogsPagination() {
+  const footer = document.getElementById('activityLogsTableFooter');
+  const info = document.getElementById('activityLogsPaginationInfo');
+  const buttonsContainer = document.getElementById('activityLogsPageButtons');
+  if (!footer || !info || !buttonsContainer) return;
+
+  const total = activityLogsTotal;
+  const totalPages = Math.max(1, Math.ceil(total / activityLogsLimit));
+  const start = total === 0 ? 0 : (activityLogsPage - 1) * activityLogsLimit + 1;
+  const end = Math.min(total, activityLogsPage * activityLogsLimit);
+
+  info.textContent = `Showing ${start}–${end} of ${total} activity runs`;
+
+  let html = '';
+  html += `<button class="page-btn" ${activityLogsPage <= 1 ? 'disabled' : ''} onclick="goToActivityLogsPage(${activityLogsPage - 1})">‹ Prev</button>`;
+
+  const maxPagesToShow = 5;
+  let startP = Math.max(1, activityLogsPage - Math.floor(maxPagesToShow / 2));
+  let endP = Math.min(totalPages, startP + maxPagesToShow - 1);
+  if (endP - startP + 1 < maxPagesToShow) {
+    startP = Math.max(1, endP - maxPagesToShow + 1);
+  }
+
+  for (let i = startP; i <= endP; i++) {
+    html += `<button class="page-btn ${i === activityLogsPage ? 'active' : ''}" onclick="goToActivityLogsPage(${i})">${i}</button>`;
+  }
+
+  html += `<button class="page-btn" ${activityLogsPage >= totalPages ? 'disabled' : ''} onclick="goToActivityLogsPage(${activityLogsPage + 1})">Next ›</button>`;
+  buttonsContainer.innerHTML = html;
+}
+
+async function fetchActivityLogCounts() {
+  try {
+    const res = await fetch('/api/activity-logs/counts');
+    if (!res.ok) return;
+    const counts = await res.json();
+
+    const countAllEl = document.getElementById('countLogsAll');
+    if (countAllEl) countAllEl.textContent = counts.all || 0;
+
+    const countUncompletedEl = document.getElementById('countLogsUncompleted');
+    if (countUncompletedEl) countUncompletedEl.textContent = counts.uncompleted || 0;
+
+    const badgeLogsCount = document.getElementById('badgeActivityLogsCount');
+    if (badgeLogsCount) badgeLogsCount.textContent = counts.all || 0;
+
+    const btnBatchReexecute = document.getElementById('btnBatchReexecuteUncompleted');
+    const uncompletedActionCount = document.getElementById('uncompletedActionCount');
+    if (btnBatchReexecute && uncompletedActionCount) {
+      uncompletedActionCount.textContent = counts.uncompleted || 0;
+      if ((counts.uncompleted || 0) > 0 && activityLogStatusFilter === 'uncompleted') {
+        btnBatchReexecute.classList.remove('hidden');
+      } else {
+        btnBatchReexecute.classList.add('hidden');
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching activity log counts:', err);
+  }
+}
+
+async function reexecuteTask(logId) {
+  try {
+    if (typeof showToast === 'function') {
+      showToast('Enqueuing task for re-execution...', 'info');
+    }
+    const res = await fetch(`/api/tasks/reexecute/${encodeURIComponent(logId)}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (typeof showToast === 'function') {
+        showToast(`✓ ${data.message || 'Task re-queued successfully'}`, 'success');
+      }
+      if (selectedActivityLogIds.has(logId)) {
+        selectedActivityLogIds.delete(logId);
+        updateActivityLogSelectionUI();
+      }
+      if (typeof pollTaskStatus === 'function') pollTaskStatus();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      setTimeout(fetchActivityLogs, 800);
+      fetchActivityLogCounts();
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.detail || data.message || 'Failed to re-execute task', 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Network error re-executing task: ' + err.message, 'error');
+    }
+  }
+}
+
+async function reexecuteAllUncompleted() {
+  const confirmed = typeof showConfirm === 'function' ? await showConfirm(
+    'Re-execute All Uncompleted Tasks',
+    'Are you sure you want to re-execute all uncompleted (failed and stopped) automation tasks in sequential FIFO order?',
+    { confirmText: 'Re-execute All', danger: false }
+  ) : confirm('Are you sure you want to re-execute all uncompleted automation tasks in sequential FIFO order?');
+
+  if (!confirmed) return;
+
+  try {
+    if (typeof showToast === 'function') {
+      showToast('Enqueuing all uncompleted tasks...', 'info');
+    }
+    const res = await fetch('/api/tasks/reexecute-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log_ids: null })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (typeof showToast === 'function') {
+        showToast(`✓ ${data.message || `Re-queued ${data.reexecuted_count} task(s)`}`, 'success');
+      }
+      selectedActivityLogIds.clear();
+      updateActivityLogSelectionUI();
+      if (typeof pollTaskStatus === 'function') pollTaskStatus();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      setTimeout(fetchActivityLogs, 800);
+      fetchActivityLogCounts();
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.detail || data.message || 'Failed to re-execute tasks', 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Network error re-executing tasks: ' + err.message, 'error');
+    }
+  }
+}
+
+function toggleActivityLogSelect(id, checked) {
+  if (checked) {
+    selectedActivityLogIds.add(id);
+  } else {
+    selectedActivityLogIds.delete(id);
+  }
+  const cb = document.querySelector(`.activity-log-checkbox[data-id="${id}"]`);
+  if (cb) {
+    cb.checked = checked;
+    const tr = cb.closest('tr');
+    if (tr) tr.classList.toggle('selected', checked);
+  }
+  updateActivityLogSelectionUI();
+}
+
+function toggleSelectAllActivityLogs(checked) {
+  const pageCheckboxes = document.querySelectorAll('.activity-log-checkbox');
+  pageCheckboxes.forEach((cb) => {
+    cb.checked = checked;
+    const id = cb.dataset.id;
+    if (id) {
+      if (checked) {
+        selectedActivityLogIds.add(id);
+      } else {
+        selectedActivityLogIds.delete(id);
+      }
+    }
+    const tr = cb.closest('tr');
+    if (tr) tr.classList.toggle('selected', checked);
+  });
+  updateActivityLogSelectionUI();
+}
+
+function updateActivityLogSelectionUI() {
+  const btnBatch = document.getElementById('btnBatchReexecuteSelected');
+  const countSpan = document.getElementById('selectedActivityLogsCount');
+  const btnBatchDelete = document.getElementById('btnBatchDeleteSelected');
+  const deleteCountSpan = document.getElementById('selectedActivityLogsDeleteCount');
+  const count = selectedActivityLogIds.size;
+
+  if (countSpan) countSpan.textContent = count;
+  if (btnBatch) btnBatch.classList.toggle('hidden', count === 0);
+
+  if (deleteCountSpan) deleteCountSpan.textContent = count;
+  if (btnBatchDelete) btnBatchDelete.classList.toggle('hidden', count === 0);
+
+  const pageCheckboxes = document.querySelectorAll('.activity-log-checkbox');
+  const masterCb = document.getElementById('selectAllActivityLogsCheckbox');
+  if (masterCb && pageCheckboxes.length > 0) {
+    const allChecked = Array.from(pageCheckboxes).every(cb => cb.checked);
+    const someChecked = Array.from(pageCheckboxes).some(cb => cb.checked);
+    masterCb.checked = allChecked;
+    masterCb.indeterminate = !allChecked && someChecked;
+  } else if (masterCb) {
+    masterCb.checked = false;
+    masterCb.indeterminate = false;
+  }
+}
+
+async function reexecuteSelectedTasks() {
+  const count = selectedActivityLogIds.size;
+  if (count === 0) {
+    if (typeof showToast === 'function') {
+      showToast('Please select at least one task to re-execute', 'info');
+    }
+    return;
+  }
+
+  const confirmed = typeof showConfirm === 'function' ? await showConfirm(
+    `Re-execute ${count} Selected Task${count === 1 ? '' : 's'}`,
+    `Are you sure you want to enqueue the ${count} selected tasks for sequential re-execution in the FIFO queue?`,
+    { confirmText: 'Re-execute Selected', danger: false }
+  ) : confirm(`Are you sure you want to re-execute the ${count} selected tasks in sequential FIFO order?`);
+
+  if (!confirmed) return;
+
+  try {
+    if (typeof showToast === 'function') {
+      showToast(`Enqueuing ${count} selected task(s)...`, 'info');
+    }
+    const res = await fetch('/api/tasks/reexecute-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log_ids: Array.from(selectedActivityLogIds) })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (typeof showToast === 'function') {
+        showToast(`✓ ${data.message || `Re-queued ${data.reexecuted_count} task(s)`}`, 'success');
+      }
+      selectedActivityLogIds.clear();
+      updateActivityLogSelectionUI();
+      if (typeof pollTaskStatus === 'function') pollTaskStatus();
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      setTimeout(fetchActivityLogs, 800);
+      fetchActivityLogCounts();
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.detail || data.message || 'Failed to re-execute selected tasks', 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Network error re-executing tasks: ' + err.message, 'error');
+    }
+  }
+}
+
+async function deleteActivityLog(logId) {
+  const confirmed = typeof showConfirm === 'function' ? await showConfirm(
+    'Delete Activity Run',
+    'Are you sure you want to permanently delete this activity run and its terminal logs? This action cannot be undone.',
+    { confirmText: 'Delete Run', danger: true }
+  ) : confirm('Are you sure you want to permanently delete this activity run?');
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`/api/activity-logs/${encodeURIComponent(logId)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (typeof showToast === 'function') {
+        showToast('✓ Activity run deleted', 'success');
+      }
+      if (selectedActivityLogIds.has(logId)) {
+        selectedActivityLogIds.delete(logId);
+      }
+      updateActivityLogSelectionUI();
+      fetchActivityLogs();
+      fetchActivityLogCounts();
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.detail || 'Failed to delete activity log', 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Network error deleting activity run: ' + err.message, 'error');
+    }
+  }
+}
+
+async function deleteSelectedActivityLogs() {
+  const count = selectedActivityLogIds.size;
+  if (count === 0) {
+    if (typeof showToast === 'function') {
+      showToast('Please select at least one task to delete', 'info');
+    }
+    return;
+  }
+
+  const confirmed = typeof showConfirm === 'function' ? await showConfirm(
+    `Delete ${count} Selected Run${count === 1 ? '' : 's'}`,
+    `Are you sure you want to permanently delete the ${count} selected activity runs and their terminal logs? This action cannot be undone.`,
+    { confirmText: 'Delete Selected', danger: true }
+  ) : confirm(`Are you sure you want to permanently delete the ${count} selected activity runs?`);
+
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/activity-logs/delete-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ log_ids: Array.from(selectedActivityLogIds) })
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      if (typeof showToast === 'function') {
+        showToast(`✓ Deleted ${data.deleted_count} activity run(s)`, 'success');
+      }
+      selectedActivityLogIds.clear();
+      updateActivityLogSelectionUI();
+      fetchActivityLogs();
+      fetchActivityLogCounts();
+    } else {
+      if (typeof showToast === 'function') {
+        showToast(data.detail || 'Failed to delete selected activity logs', 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Network error deleting activity runs: ' + err.message, 'error');
+    }
+  }
+}
+
+async function openRunLogsModal(runId) {
+  const modal = document.getElementById('modalRunTerminalLogs');
+  if (!modal) return;
+
+  try {
+    const res = await fetch(`/api/activity-logs/${runId}`);
+    if (!res.ok) throw new Error('Could not fetch run log details.');
+    const data = await res.json();
+    currentViewingRun = data;
+
+    const { icon, label } = getActivityIconAndLabel(data.task_type, data.task_name);
+    document.getElementById('runLogsModalIcon').textContent = icon;
+    document.getElementById('runLogsModalTitle').textContent = data.task_name || 'Activity Console Log';
+    document.getElementById('runLogsModalSubtitle').textContent = `${label} · ${data.id}`;
+
+    const st = (data.status || 'completed').toLowerCase();
+    const statusEl = document.getElementById('runLogsMetaStatus');
+    if (statusEl) {
+      statusEl.className = `run-meta-pill run-status-badge ${st}`;
+      statusEl.textContent = st.toUpperCase();
+    }
+
+    const durationEl = document.getElementById('runLogsMetaDuration');
+    if (durationEl) durationEl.textContent = `Duration: ${formatDuration(data.duration_seconds)}`;
+
+    const dateEl = document.getElementById('runLogsMetaDate');
+    if (dateEl) {
+      dateEl.textContent = `Date: ${typeof formatDateTime === 'function' ? formatDateTime(data.created_at) : (data.created_at || '—')}`;
+    }
+
+    const terminalBody = document.getElementById('runLogsTerminalBody');
+    if (terminalBody) {
+      const logs = data.logs || [];
+      if (logs.length > 0) {
+        terminalBody.textContent = logs.join('\n');
+      } else {
+        terminalBody.textContent = `// No console log lines captured for this run.\n// Result: ${data.result_summary || 'Finished'}`;
+      }
+    }
+
+    modal.classList.remove('hidden');
+  } catch (err) {
+    if (typeof showAlert === 'function') {
+      showAlert('Error', err.message);
+    } else {
+      alert(err.message);
+    }
+  }
+}
+
+function closeRunLogsModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('btn-secondary')) {
+    return;
+  }
+  const modal = document.getElementById('modalRunTerminalLogs');
+  if (modal) modal.classList.add('hidden');
+}
+
+function copyRunLogs() {
+  if (!currentViewingRun || !currentViewingRun.logs) return;
+  const text = currentViewingRun.logs.join('\n');
+  navigator.clipboard.writeText(text).then(() => {
+    if (typeof showToast === 'function') {
+      showToast('✓ Console terminal logs copied to clipboard!', 'success');
+    }
+  }).catch(() => {
+    if (typeof showToast === 'function') {
+      showToast('Failed to copy to clipboard', 'error');
+    }
+  });
+}
+
+window.applySentDateFilter = applySentDateFilter;
+window.applyActivityLogDateFilter = applyActivityLogDateFilter;
+window.setActivityLogUncompletedFilter = setActivityLogUncompletedFilter;
+window.reexecuteTask = reexecuteTask;
+window.reexecuteAllUncompleted = reexecuteAllUncompleted;
+window.fetchActivityLogCounts = fetchActivityLogCounts;
+window.toggleActivityLogSelect = toggleActivityLogSelect;
+window.toggleSelectAllActivityLogs = toggleSelectAllActivityLogs;
+window.updateActivityLogSelectionUI = updateActivityLogSelectionUI;
+window.reexecuteSelectedTasks = reexecuteSelectedTasks;
+window.deleteActivityLog = deleteActivityLog;
+window.deleteSelectedActivityLogs = deleteSelectedActivityLogs;
+

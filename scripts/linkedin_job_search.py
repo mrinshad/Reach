@@ -1,178 +1,280 @@
 #!/usr/bin/env python3
 """
-LinkedIn Job Search — Extract job listings from search results.
+LinkedIn Job Search & Easy Apply Crawler
+(scripts/linkedin_job_search.py)
 
-Navigates to LinkedIn job search, scrolls to load all visible cards,
-and extracts title, company, location, and URL for each listing.
+Standalone CLI and subprocess runner for autonomous LinkedIn Job Search
+with Easy Apply (f_AL=true) filtering, database ingestion into category='EASY_APPLY',
+and questionnaire detection for screening.
 """
 
 import sys
 import os
+import re
 import time
 import json
+import random
+import argparse
+import hashlib
+from typing import Optional, Dict, Any, List
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
 from src.services.firefox_connector import launch_firefox_context
-
-ARTIFACT_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "artifacts"
+from src.services.experience_extractor import extract_experience
+from src.services.easy_apply_service import (
+    build_easy_apply_search_url,
+    extract_job_card_metadata,
+    execute_easy_apply,
+    human_sleep,
 )
+from src.db.posts import upsert_post, update_post_status
+from src.db.settings import get_setting
+from src.config import load_config
 
+ARTIFACT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
 LINKEDIN_BASE = "https://www.linkedin.com"
 
 
-def build_search_url(keywords: str, location: str = "India") -> str:
-    """Build a LinkedIn job search URL."""
-    from urllib.parse import quote
-    return (
-        f"{LINKEDIN_BASE}/jobs/search/"
-        f"?keywords={quote(keywords)}"
-        f"&location={quote(location)}"
-        f"&f_TPR=r604800"  # Past week
-    )
+def parse_args():
+    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Job Crawler")
+    parser.add_argument("--query", "-q", default=None, help="Job title or keywords")
+    parser.add_argument("--location", "-l", default=None, help="Target location")
+    parser.add_argument("--time-filter", "-t", default=None, help="Time filter: 24h, week, month, all")
+    parser.add_argument("--max-jobs", "-m", type=int, default=None, help="Max jobs to process")
+    parser.add_argument("--headless", action="store_true", default=None, help="Run headless")
+    parser.add_argument("--headed", dest="headless", action="store_false", help="Run headed")
+    parser.add_argument("--dry-run", action="store_true", help="Scrape without submitting applications")
+    return parser.parse_args()
 
 
-def extract_job_cards(page) -> list[dict]:
-    """Extract all visible job card data from the current page."""
-    cards = page.locator("[data-occludable-job-id]")
-    total = cards.count()
-    jobs = []
-
-    for i in range(total):
-        card = cards.nth(i)
-        job_id = card.evaluate("el => el.getAttribute('data-occludable-job-id') || ''")
-
-        # Title + URL
-        title_link = card.locator("a.job-card-container__link")
-        title = ""
-        href = ""
-        if title_link.count() > 0:
-            raw_text = title_link.first.inner_text().strip()
-            title = raw_text.split('\n')[0].strip()
-            href = title_link.first.get_attribute("href") or ""
-            if href.startswith("/"):
-                href = LINKEDIN_BASE + href
-
-        # Company
-        company_el = card.locator(".artdeco-entity-lockup__subtitle")
-        company = ""
-        if company_el.count() > 0:
-            company = company_el.first.inner_text().strip()
-
-        # Location
-        location_el = card.locator(".artdeco-entity-lockup__caption")
-        location = ""
-        if location_el.count() > 0:
-            location = location_el.first.inner_text().strip().split('\n')[0].strip()
-
-        if title:
-            jobs.append({
-                "index": i + 1,
-                "job_id": job_id,
-                "title": title,
-                "company": company,
-                "location": location,
-                "url": href,
-            })
-
-    return jobs
-
-
-def scroll_to_load_all(page, target_count: int = 25):
-    """Scroll the job list sidebar to lazy-load all cards."""
-    list_container = page.locator("ul.scaffold-layout__list-container, div.jobs-search-results-list")
-    if list_container.count() == 0:
-        # Fallback: scroll the whole page
-        for _ in range(10):
-            page.evaluate("window.scrollBy(0, 600)")
-            page.wait_for_timeout(800)
-        return
-
-    # Scroll inside the list container
-    for _ in range(15):
-        current = page.locator("[data-occludable-job-id]").count()
-        if current >= target_count:
-            break
+def scroll_job_list(page, target_count: int = 25):
+    """Scroll the job list container to load occluded job cards."""
+    for _ in range(8):
         page.evaluate("""() => {
-            const el = document.querySelector('.scaffold-layout__list-container') 
-                     || document.querySelector('.jobs-search-results-list');
-            if (el) el.scrollTop += 600;
+            const el = document.querySelector('.scaffold-layout__list-container') ||
+                       document.querySelector('.jobs-search-results-list');
+            if (el) el.scrollTop += 650;
+            else window.scrollBy(0, 650);
         }""")
         page.wait_for_timeout(800)
 
 
 def main():
-    keywords = "Full stack developer"
-    search_url = build_search_url(keywords)
+    args = parse_args()
+    config = load_config()
 
-    print("=" * 60)
-    print("  LinkedIn Job Search — Extract Listings")
-    print("=" * 60)
-    print(f"  Keywords: {keywords}")
-    print(f"  URL: {search_url}")
+    # Priority: CLI argument > Env Var > DB Setting > Default
+    query = (
+        args.query
+        or os.environ.get("SCRAPER_SEARCH_QUERY")
+        or get_setting("search_query", "Full Stack Developer")
+        or "Full Stack Developer"
+    ).strip()
+
+    location = (
+        args.location
+        or os.environ.get("SCRAPER_LOCATION")
+        or get_setting("search_location", "India")
+        or "India"
+    ).strip()
+
+    time_filter = (
+        args.time_filter
+        or os.environ.get("SCRAPER_TIME_FILTER")
+        or "24h"
+    ).strip()
+
+    limit_str = os.environ.get("SCRAPER_LIMIT") or "20"
+    try:
+        max_jobs = args.max_jobs or int(limit_str)
+    except Exception:
+        max_jobs = 20
+
+    is_headless = args.headless if args.headless is not None else config.get("headless", True)
+    resume_path = config.get("resume_path", "")
+
+    search_url = build_easy_apply_search_url(query, location, time_filter)
+
+    print("=" * 66)
+    print("  LinkedIn Job Portal — Easy Apply Autonomous Crawler")
+    print("=" * 66)
+    print(f"  Keywords:    {query}")
+    print(f"  Location:    {location}")
+    print(f"  Filter:      {time_filter}")
+    print(f"  Max Jobs:    {max_jobs}")
+    print(f"  Headless:    {is_headless}")
+    print(f"  Search URL:  {search_url}")
+    print("=" * 66)
     print()
 
+    discovered_count = 0
+    applied_count = 0
+    questionnaire_count = 0
+    skipped_count = 0
+
     with sync_playwright() as playwright:
-        print("[1/3] Launching Firefox (headed)...")
+        print("[1/4] Launching Firefox context with persistent cookies...")
         context = launch_firefox_context(
             playwright,
-            headless=False,
+            headless=is_headless,
             sync_cookies_domains=["linkedin.com"],
         )
-
         page = context.pages[0] if context.pages else context.new_page()
 
-        print("[2/3] Navigating to LinkedIn job search...")
-        page.goto(search_url, wait_until="commit", timeout=30000)
-        page.wait_for_timeout(6000)
+        print("[2/4] Navigating to LinkedIn Job Portal search...")
+        page.goto(search_url, wait_until="commit", timeout=35000)
+        page.wait_for_timeout(5000)
 
-        print(f"  Title: {page.title()}")
-
-        # Verify login
-        login_form = page.locator("form.login__form, input[name='session_key']")
-        if login_form.count() > 0:
-            print("✗ Not logged in to LinkedIn!")
+        # Login check
+        if page.locator("form.login__form, input[name='session_key']").count() > 0:
+            print("❌ Error: Not logged in to LinkedIn. Please log in via Connected Services.")
             context.close()
             sys.exit(1)
-        print("  ✓ Logged in")
+        print("  ✓ Logged in to LinkedIn")
 
-        # Scroll to load all cards
-        print("  Scrolling to load all job cards...")
-        scroll_to_load_all(page, target_count=25)
+        print("[3/4] Scrolling and extracting Easy Apply job cards...")
+        card_selectors = [
+            "[data-occludable-job-id]",
+            "li.jobs-search-results__list-item",
+            "div.job-card-container",
+            "div.base-card",
+            "div[data-job-id]",
+        ]
+        combined_selector = ", ".join(card_selectors)
+
+        try:
+            page.wait_for_selector(combined_selector, timeout=12000)
+        except Exception:
+            pass
+
+        scroll_job_list(page, target_count=max_jobs)
         page.wait_for_timeout(2000)
 
-        print("[3/3] Extracting job listings...")
-        jobs = extract_job_cards(page)
-        print(f"  ✓ Extracted {len(jobs)} job listings")
+        cards = page.locator(combined_selector)
+        total_found = cards.count()
+        print(f"  ✓ Found {total_found} visible job cards.")
 
-        # Save JSON
-        json_path = os.path.join(ARTIFACT_DIR, "scratch", "linkedin_jobs.json")
-        os.makedirs(os.path.dirname(json_path), exist_ok=True)
-        with open(json_path, "w") as f:
-            json.dump(jobs, f, indent=2)
-        print(f"  Saved JSON: {json_path}")
+        if total_found == 0:
+            diag_path = os.path.join(ARTIFACT_DIR, "scratch", "easy_apply_zero_cards.png")
+            os.makedirs(os.path.dirname(diag_path), exist_ok=True)
+            page.screenshot(path=diag_path)
+            print(f"  ⚠️ No job cards loaded on this search page. Diagnostic screenshot saved to: {diag_path}")
+            context.close()
+            sys.exit(0)
 
-        # Screenshot
-        screenshot_path = os.path.join(ARTIFACT_DIR, "linkedin_jobs_search.png")
-        page.screenshot(path=screenshot_path, full_page=False)
-        print(f"  Screenshot saved: {screenshot_path}")
+        seen_job_ids = set()
+        extracted_jobs = []
+        for i in range(total_found):
+            if len(extracted_jobs) >= max_jobs:
+                break
+            card = cards.nth(i)
+            meta = extract_job_card_metadata(card)
+            jid = meta.get("job_id") or meta.get("url")
+            if not jid or jid in seen_job_ids:
+                continue
+            if meta["title"] and meta["url"]:
+                seen_job_ids.add(jid)
+                extracted_jobs.append(meta)
+
+        print(f"\n[4/4] Processing {len(extracted_jobs)} unique Easy Apply listings...")
+
+        for idx, job in enumerate(extracted_jobs, start=1):
+            title = job["title"]
+            company = job["company"]
+            loc = job["location"] or location
+            job_url = job["url"]
+            job_id = job.get("job_id") or hashlib.sha256(job_url.encode()).hexdigest()[:12]
+
+            print(f"\n[{idx}/{len(extracted_jobs)}] {title} @ {company}")
+            print(f"  Location: {loc} | URL: {job_url}")
+
+            # Click card or navigate to load full details
+            full_text = ""
+            try:
+                card_link = page.locator(f"a[href*='{job_id}']").first if job_id else None
+                if card_link and card_link.count() > 0:
+                    card_link.click()
+                    page.wait_for_timeout(1800)
+
+                desc_el = page.locator(".jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container").first
+                if desc_el.count() > 0:
+                    full_text = desc_el.inner_text().strip()
+            except Exception:
+                pass
+
+            if not full_text:
+                full_text = f"Role: {title}\nCompany: {company}\nLocation: {loc}\nDirect Application Link: {job_url}"
+
+            # Extract experience
+            exp_info = extract_experience(full_text)
+            min_exp = exp_info.get("min_experience")
+            max_exp = exp_info.get("max_experience")
+            raw_exp = exp_info.get("raw_experience")
+            is_fresher = exp_info.get("is_fresher", False)
+
+            post_id = f"easy_apply_{job_id}"
+            post_record = {
+                "id": post_id,
+                "post_url": job_url,
+                "author_name": company,
+                "author_headline": title,
+                "location": loc,
+                "full_text": full_text,
+                "min_experience": min_exp,
+                "max_experience": max_exp,
+                "raw_experience": raw_exp,
+                "is_fresher": is_fresher,
+                "category": "EASY_APPLY",
+                "status": "DISCOVERED",
+            }
+            db_post_id, was_created = upsert_post(post_record)
+            if db_post_id:
+                post_id = db_post_id
+            discovered_count += 1
+
+            if args.dry_run:
+                print("  ℹ️ [Dry Run] Ingested job as DISCOVERED without applying.")
+                continue
+
+            # Attempt Easy Apply submission
+            status, detail = execute_easy_apply(page, job_url, resume_path, logger=print)
+
+            if status == "APPLIED":
+                update_post_status(post_id, "APPLIED")
+                applied_count += 1
+                print("  🎉 Status: APPLIED")
+            elif status == "REQUIRES_QUESTIONNAIRE":
+                update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
+                questionnaire_count += 1
+                print(f"  📌 Saved for Screening (REQUIRES_QUESTIONNAIRE): {detail}")
+            else:
+                update_post_status(post_id, "DISCOVERED", rejection_reason=detail)
+                skipped_count += 1
+                print(f"  ℹ️ Ready in queue (DISCOVERED): {detail}")
+
+            if idx < len(extracted_jobs):
+                human_sleep(3.5, 7.0)
 
         # Print summary
-        print()
-        print("=" * 60)
-        print(f"  EXTRACTED {len(jobs)} JOB LISTINGS:")
-        print("=" * 60)
-        for job in jobs:
-            print(f"  {job['index']:2d}. {job['title']}")
-            print(f"      {job['company']} — {job['location']}")
-            print()
-        print("=" * 60)
+        print("\n" + "=" * 66)
+        print("  CRAWLER SUMMARY:")
+        print("=" * 66)
+        print(f"  Total Ingested:             {discovered_count}")
+        print(f"  Successfully Applied:       {applied_count}")
+        print(f"  Saved for Screening (Q's):  {questionnaire_count}")
+        print(f"  Ready in Queue:             {skipped_count}")
+        print("=" * 66)
 
-        print("\nKeeping Firefox open for 10 seconds...")
-        time.sleep(10)
+        crawl_stats = {
+            "total_crawled": discovered_count,
+            "newly_added": discovered_count,
+            "applied": applied_count,
+            "requires_questionnaire": questionnaire_count,
+            "ready_in_queue": skipped_count,
+        }
+        print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")
 
         context.close()
         print("✓ Done.")

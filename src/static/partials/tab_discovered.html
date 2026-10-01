@@ -88,6 +88,13 @@
               </select>
             </div>
 
+            <div class="date-filter-group" title="Filter discovered jobs by date range">
+              <span class="date-label">From</span>
+              <input type="date" id="discoveredDateFrom" class="input-date-clean" onchange="applyDiscoveredDateFilter()" title="Start date" />
+              <span class="date-label">To</span>
+              <input type="date" id="discoveredDateTo" class="input-date-clean" onchange="applyDiscoveredDateFilter()" title="End date" />
+            </div>
+
             <select id="selectSortBy" class="select-clean" onchange="handleSortSelectChange(this.value)" title="Sort posts">
               <option value="default" selected>Sort: Default</option>
               <option value="exp_asc">Exp: Low to High</option>

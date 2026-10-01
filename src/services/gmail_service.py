@@ -34,6 +34,42 @@ def navigate_to_gmail(page: Page, timeout: int = 30000):
         )
 
 
+def discard_open_compose_dialogs(page: Page):
+    """
+    Safely dismiss any alert popups and discard any lingering open compose windows.
+    Prevents unclosed or invalid dialogs from blocking subsequent email dispatches.
+    """
+    try:
+        # 1. Dismiss any alert dialogs (e.g. invalid recipient address error or confirmation)
+        alert_dialogs = page.locator('div[role="alertdialog"]')
+        for i in range(alert_dialogs.count()):
+            try:
+                alert = alert_dialogs.nth(i)
+                btn = alert.locator('button, div[role="button"]:has-text("OK"), div[role="button"]:has-text("Dismiss")').first
+                if btn.count() > 0 and btn.is_visible():
+                    btn.click(timeout=1500)
+                    page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+        # 2. Click discard draft buttons (trash can icon) in all open compose dialogs
+        discard_btns = page.locator('div[role="dialog"] div[data-tooltip*="Discard"], div[role="dialog"] div[aria-label*="Discard"]')
+        for i in range(discard_btns.count()):
+            try:
+                discard_btns.nth(i).click(timeout=2000)
+                page.wait_for_timeout(400)
+            except Exception:
+                pass
+
+        # 3. If any dialog remains, press Escape
+        dialogs = page.locator('div[role="dialog"]')
+        if dialogs.count() > 0:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(300)
+    except Exception:
+        pass
+
+
 def populate_email_draft(
     page: Page,
     recipient: str,
@@ -45,35 +81,51 @@ def populate_email_draft(
     Open compose modal in Gmail, populate all fields, attach resume,
     and leave the draft ready on screen for human review.
     """
+    # 0. Clean up any leftover or orphaned dialogs
+    discard_open_compose_dialogs(page)
+
     # 1. Click Compose button
     print("Opening compose window...")
     compose_btn = page.locator('div[gh="cm"], div[role="button"]:has-text("Compose")').first
     compose_btn.click()
-    page.wait_for_timeout(1500)
+    page.wait_for_timeout(1000)
 
-    # 2. Populate "To" recipient
+    # Wait for the compose dialog to appear
+    page.locator('div[role="dialog"]').last.wait_for(state="visible", timeout=10000)
+    dialog = page.locator('div[role="dialog"]').last
+
+    # 2. Populate "To" recipient (scoped strictly inside active dialog)
     print(f"  Setting recipient: {recipient}")
-    to_field = page.locator('input[aria-label*="To"], input.agP, input[peoplekit-id]').first
-    to_field.wait_for(state="visible", timeout=10000)
+    to_field = dialog.locator('input[aria-label*="To"], input.agP, input[peoplekit-id]').first
+    try:
+        to_field.wait_for(state="visible", timeout=6000)
+    except Exception:
+        # If the input is hidden, click the recipient container to focus/reveal it
+        recipient_container = dialog.locator('div[role="combobox"], div[name="to"], tr.n1tzfe, td.eV').first
+        if recipient_container.count() > 0:
+            recipient_container.click()
+            page.wait_for_timeout(300)
+        to_field.wait_for(state="visible", timeout=5000)
+
     to_field.click()
-    page.wait_for_timeout(300)
+    page.wait_for_timeout(200)
     page.keyboard.type(recipient, delay=5)
     page.wait_for_timeout(300)
     page.keyboard.press("Enter")
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(400)
 
-    # 3. Populate Subject
+    # 3. Populate Subject (scoped strictly inside active dialog)
     print(f"  Setting subject: {subject}")
-    subject_field = page.locator('input[name="subjectbox"]').first
+    subject_field = dialog.locator('input[name="subjectbox"]').first
     subject_field.wait_for(state="visible", timeout=5000)
     subject_field.click()
     page.wait_for_timeout(200)
     subject_field.fill(subject)
-    page.wait_for_timeout(500)
+    page.wait_for_timeout(400)
 
-    # 4. Populate Message Body with proper paragraph breaks
+    # 4. Populate Message Body with proper paragraph breaks (scoped inside active dialog)
     print(f"  Populating message body ({len(body)} chars)...")
-    body_field = page.locator('div[role="textbox"][aria-label*="Message Body"]').first
+    body_field = dialog.locator('div[role="textbox"][aria-label*="Message Body"]').first
     body_field.wait_for(state="visible", timeout=5000)
     body_field.click()
     page.wait_for_timeout(300)
@@ -86,26 +138,24 @@ def populate_email_draft(
         cleaned_lines.append(line)
     clean_body = "\n".join(cleaned_lines).strip()
 
-    # In Gmail's contenteditable rich text area, typing line-by-line with Enter
-    # creates proper <div>/paragraph blocks, preserving clean paragraph spacing.
     lines = clean_body.split("\n")
     for line in lines:
         if line.strip():
             page.keyboard.type(line, delay=0.5)
         page.keyboard.press("Enter")
 
-    page.wait_for_timeout(1000)
+    page.wait_for_timeout(800)
 
-    # 5. Attach Resume if specified
+    # 5. Attach Resume if specified (scoped inside active dialog)
     if attachment_path and os.path.exists(attachment_path):
         print(f"  Attaching resume: {attachment_path}")
-        file_input = page.locator('input[type="file"][name="Filedata"]').first
+        file_input = dialog.locator('input[type="file"][name="Filedata"]').first
         if file_input.count() > 0:
             file_input.set_input_files(attachment_path)
             print("  Waiting for attachment to upload...")
             page.wait_for_timeout(1500)
             try:
-                page.wait_for_selector('div[role="progressbar"], div[aria-label*="Uploading"]', state="hidden", timeout=12000)
+                dialog.wait_for_selector('div[role="progressbar"], div[aria-label*="Uploading"]', state="hidden", timeout=12000)
             except Exception:
                 page.wait_for_timeout(2500)
             print("  ✓ Resume attached.")
@@ -139,7 +189,6 @@ def send_email_directly(page: Page, timeout: int = 20000) -> bool:
         dialog = page
 
     # Primary send button strictly inside the compose dialog
-    # Matches Gmail's Send button (.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3, data-tooltip="Send ...", or text "Send")
     send_btn = dialog.locator(
         'div[role="button"].T-I-atl, '
         'div[role="button"][data-tooltip*="Send"], '
@@ -171,13 +220,29 @@ def send_email_directly(page: Page, timeout: int = 20000) -> bool:
         page.wait_for_timeout(300)
         page.keyboard.press("Control+Enter")
 
-    # 2. Wait for dialog to close indicating dispatch success
+    # 2. Check if an alert dialog popped up (e.g. invalid recipient address rejected by Gmail)
+    page.wait_for_timeout(600)
+    alert = page.locator('div[role="alertdialog"]').first
+    if alert.count() > 0 and alert.is_visible():
+        alert_text = alert.inner_text().strip()
+        print(f"  Alert popup detected: {alert_text}")
+        discard_open_compose_dialogs(page)
+        raise RuntimeError(f"Gmail rejected email dispatch: {alert_text}")
+
+    # 3. Wait for dialog to close indicating dispatch success
     try:
         page.wait_for_selector('div[role="dialog"]', state="hidden", timeout=timeout)
         print("✓ Compose dialog closed — email sent successfully.")
         return True
     except Exception:
         print("  Dialog still visible after timeout. Retrying with keyboard shortcuts...")
+        # Check alert dialog again
+        alert = page.locator('div[role="alertdialog"]').first
+        if alert.count() > 0 and alert.is_visible():
+            alert_text = alert.inner_text().strip()
+            discard_open_compose_dialogs(page)
+            raise RuntimeError(f"Gmail rejected email dispatch: {alert_text}")
+
         try:
             page.keyboard.press("Meta+Enter")
             page.wait_for_timeout(500)
@@ -191,5 +256,6 @@ def send_email_directly(page: Page, timeout: int = 20000) -> bool:
             if toast.count() > 0 and toast.is_visible():
                 print("✓ 'Message sent' confirmation detected.")
                 return True
+            discard_open_compose_dialogs(page)
             raise RuntimeError("Failed to send email: compose dialog remained open.")
 

@@ -56,8 +56,8 @@ This directory contains the modular styling system for the Reach web application
   - Draft Editor: `.email-draft-container`, `.email-subject-input`, `.email-body-textarea`, `.review-actions-bar`.
 
 ### 8. [`history.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/history.css)
-- **Scope**: Sent and cancelled history tab (`#tabSent`), status filter tabs, sent emails data table.
-- **Key Classes**: `.history-filter-bar`, `.history-table`, `.status-badge-sent`, `.status-badge-cancelled`, `.reason-pill`.
+- **Scope**: Sent and cancelled history tab (`#tabSent`), segmented view switcher, sent applications data table, automated activity & run log history table, parameter chips, status badges, and terminal output modal.
+- **Key Classes**: `.history-view-switcher`, `.view-switch-btn`, `.view-switch-badge`, `.history-filter-bar`, `.history-table`, `.status-badge-sent`, `.status-badge-cancelled`, `.reason-pill`, `.activity-logs-table`, `.activity-icon-box`, `.param-pill`, `.run-status-badge`, `.btn-view-run-logs`, `.logs-history-btn`, `.run-logs-dialog`, `.run-terminal-box`.
 
 ### 9. [`tasks.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/tasks.css)
 - **Scope**: Background automation tasks, live task drawer, terminal log monitor, alert banner.
@@ -67,7 +67,20 @@ This directory contains the modular styling system for the Reach web application
 - **Scope**: Modal overlays, dialog boxes, settings, add JD, direct outreach, notification unblock help, toasts.
 - **Key Classes**: `.modal-overlay`, `.modal-box`, `.modal-top`, `.modal-body`, `.modal-bottom`, `.notif-modal-box`, `.notif-status-grid`, `.toast-container`, `.toast`.
 
-### 11. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
+### 11. [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css)
+- **Scope**: LinkedIn Easy Apply workspace (`#tabEasyApply`), crawler header, CSV bulk search modal, 5-KPI ribbon, floating batch banner, zero-scroll responsive table layout, fixed-position status dropdowns, elevated details modal, and dedicated Screening Questionnaire Modal.
+- **Key Classes**:
+  - Header & Form: `.easy-apply-header`, `.easy-crawler-form`, `.easy-input`, `.btn-easy-crawl`, `.btn-easy-import`.
+  - KPI Metrics: `.easy-kpi-ribbon` (5 columns: Ready, Screening, Applied, Failed, Not Found), `.easy-kpi-card`, `.accent-slate`, `.kpi-num`, `.kpi-lbl`.
+  - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.pill-dot.slate`, `.easy-search-box`.
+  - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-banner-right`, `.batch-select-badge`, `.batch-transition-lbl`, `.batch-divider`, `.btn-batch-close`.
+  - Responsive Table: `#tabEasyApply .reach-table`, `.col-check`, `.col-role`, `.col-location`, `.col-exp`, `.col-status`, `.col-date`, `.col-actions`, `.easy-role-subline`, `.col-mobile-loc`, `.col-mobile-date`.
+  - Status Menu: `.easy-status-wrap`, `.tag-easy-status-btn`, `.status-caret`, `.easy-status-menu` (`position: fixed; z-index: 99999`), `.status-menu-opt`, `.opt-not-found`.
+  - Details Modal: `.easy-details-dialog`, `.easy-dialog-meta-grid`, `.meta-tile`, `.easy-dialog-status-card`, `.modal-status-segmented`, `.btn-modal-status-chip`, `.chip-dot`, `.easy-dialog-jd-section`, `.easy-jd-box`.
+  - Screening Modal: `.screening-modal`, `.screening-job-card`, `.screening-warning-banner`, `.screening-question-card`, `.screening-q-num`, `.screening-q-text`, `.screening-q-type`, `.screening-empty`, `.screening-modal-foot`.
+  - Bulk Search Modal: `.bulk-search-modal`, `.bulk-dropzone`, `.dropzone-icon`, `.bulk-keywords-textarea`, `.bulk-keywords-preview`, `.bulk-keyword-chip`, `.bulk-config-grid`.
+
+### 12. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
 - **Scope**: Media queries (`<= 1024px`, `<= 768px`, `<= 480px`), off-canvas mobile drawer, compact headers, mobile cards.
 - **Key Breakpoints**:
   - `@media (max-width: 1024px)`: Compact sidebar (240px) and tablet grid adjustments.
