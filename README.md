@@ -97,12 +97,13 @@
 - **Fast-Pace Watchdog**: Automated watcher scans for LinkedIn's *"We noticed you're applying at a fast pace"* safeguard notices, immediately halting automation before account restrictions occur.
 - **Cooldown Banner & Live Countdown**: Topbar alert banner displays remaining pause duration with confirmed "Resume Now" override option.
 
-### 15. 📝 Centralized Screening Question & Answer Bank with DB Persistence & Auto-Fill
-- **Persistent Database Architecture**: Structured `screening_questions` table in PostgreSQL with normalized deduplication keys, categories (*Contact*, *Experience*, *Compensation*, *Notice*, *Profile*), status (`PENDING` vs `ANSWERED`), occurrence counters, and sample job associations.
+### 15. 📝 Dedicated Screening Question Bank Page with DB Persistence, Searching & Question Deletion
+- **Dedicated Management Workspace (`#tabQuestionBank`)**: Full-page experience with real-time KPI ribbon (*Total*, *Ready for Auto-Apply*, *Pending Answers*, *Core Standard*), search toolbar, status segment filters (*All*, *Pending*, *Answered*), category filters (*Contact*, *Experience*, *Compensation*, *Notice*, *Profile*), and flexible sorting (*Most Frequent*, *Recently Updated*, *Alphabetical*, *Pending First*, *Standard First*).
+- **Persistent Database Architecture**: Structured `screening_questions` table in PostgreSQL with normalized deduplication keys, categories, status (`PENDING` vs `ANSWERED`), occurrence counters, and sample job associations.
+- **Single & Multi-Select Question Deletion**: Delete obsolete or unwanted questions individually (`DELETE /api/easy-apply/questions/{key}`) or select multiple questions using the batch selection bar to delete in bulk (`POST /api/easy-apply/questions/delete-batch`).
+- **Custom Question Creation**: Add custom questions and standard answers directly via the UI modal (`POST /api/easy-apply/questions/create`).
 - **Automated Playwright Form Answering**: When applying to jobs with custom questionnaires (both during crawling and manual Easy Apply), Reach matches form controls (text/numeric inputs, radio fieldsets, select dropdowns, checkboxes) against saved DB answers and auto-fills them in real time without aborting.
-- **Dynamic Question Capture & Pending Alerts**: If unknown or unanswered questions are encountered during automation, they are automatically saved to the PostgreSQL `screening_questions` table with `status = 'PENDING'`, the job is flagged as `REQUIRES_QUESTIONNAIRE`, and a prominent warning banner and toolbar badge alert you that questions need your answers.
-- **Inline Modal Answering**: Answer questions directly inside the job's Screening Questionnaire modal (`#modalScreeningQuestions`) with 1-click database persistence, unlocking instant `🚀 Auto-Apply Now` submission.
-- **Categorized Management Modal**: Centralized toolbar supporting instant category filtering, search, occurrence counts, and batch answer saving (`GET /api/easy-apply/questions`, `POST /api/easy-apply/questions/answers`).
+- **Dynamic Question Capture & Pending Alerts**: If unknown or unanswered questions are encountered during automation, they are automatically saved to the PostgreSQL `screening_questions` table with `status = 'PENDING'`, the job is flagged as `REQUIRES_QUESTIONNAIRE`, and a prominent warning banner and sidebar badge alert you that questions need your answers.
 
 ### 16. 🔄 Configurable Crawler Cycles with Hover Tooltips
 - **Manual Discovery Depth**: Directly configure crawler cycles (range 1–50, default 8) in both the Easy Apply and Job Crawlers toolbar.
@@ -511,8 +512,11 @@ reach-job-automation/
 | `POST` | `/api/scrape/easy-apply` | Enqueue LinkedIn Easy Apply scraper with configurable `cycles` and `pacing` |
 | `POST` | `/api/scrape/easy-apply/batch` | Enqueue batch Easy Apply scraper across multiple roles and locations |
 | `POST` | `/api/easy-apply/{id}` | Enqueue autonomous Easy Apply submission for a specific job post |
-| `GET` | `/api/easy-apply/questions` | Aggregate deduplicated screening questions with persistent user answers |
-| `POST` | `/api/easy-apply/questions/answers` | Persist question answers in PostgreSQL `settings` (`screening_question_bank`) |
+| `GET` | `/api/easy-apply/questions` | Aggregate deduplicated screening questions with filtering (`category`, `search`, `status`, `sort_by`) |
+| `POST` | `/api/easy-apply/questions/create` | Manually insert a custom question and answer into the Question Bank |
+| `POST` | `/api/easy-apply/questions/answers` | Persist question answers in PostgreSQL `screening_questions` table |
+| `DELETE` | `/api/easy-apply/questions/{key}` | Delete a single screening question from the Question Bank |
+| `POST` | `/api/easy-apply/questions/delete-batch` | Delete multiple screening questions in bulk |
 | `GET` | `/api/easy-apply/rate-limit-status` | Check active safeguard pause cooldown state, message, and remaining timer |
 | `POST` | `/api/easy-apply/rate-limit-resume` | Clear safeguard pause and resume Easy Apply automation |
 | `GET` | `/api/activity-logs` | Retrieve chronological history of all scraper runs and background tasks |

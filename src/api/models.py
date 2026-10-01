@@ -113,6 +113,17 @@ class SaveQuestionAnswersPayload(BaseModel):
     answers: dict
 
 
+class DeleteQuestionsPayload(BaseModel):
+    keys: List[str]
+
+
+class CreateQuestionPayload(BaseModel):
+    question: str
+    category: Optional[str] = None
+    answer: Optional[str] = None
+    default_placeholder: Optional[str] = None
+
+
 
 MAJOR_JOB_HUBS = [
     "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",

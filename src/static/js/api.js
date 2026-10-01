@@ -252,6 +252,15 @@ async function fetchStats() {
       countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready`;
     }
 
+    // 2c. Screening Question Bank badge
+    const countQBankEl = document.getElementById('countSidebarQuestionBank');
+    if (countQBankEl) {
+      const qbPending = stats.question_bank_pending !== undefined ? stats.question_bank_pending : 0;
+      countQBankEl.textContent = qbPending;
+      countQBankEl.title = `${qbPending} screening questions pending answers`;
+      countQBankEl.style.display = qbPending > 0 ? 'inline-flex' : 'none';
+    }
+
     // 3. Sent & History: Others tab counters
     const elOthersAll = document.getElementById('countOthersAll');
     if (elOthersAll) elOthersAll.textContent = othersCount;

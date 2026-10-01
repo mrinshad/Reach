@@ -45,6 +45,8 @@ from .models import (
     ReexecuteBatchPayload,
     DeleteBatchActivityLogsPayload,
     SaveQuestionAnswersPayload,
+    DeleteQuestionsPayload,
+    CreateQuestionPayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -550,10 +552,31 @@ def api_trigger_single_easy_apply(post_id: str):
 def api_get_easy_apply_questions(
     category: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
 ):
     """Return aggregated, deduplicated screening questions and persistent answers from Question Bank."""
     from src.services.question_bank_service import get_aggregated_question_bank
-    return get_aggregated_question_bank(category=category, search=search)
+    cat = category if isinstance(category, str) else None
+    s = search if isinstance(search, str) else None
+    stat = status if isinstance(status, str) else None
+    sb = sort_by if isinstance(sort_by, str) else None
+    return get_aggregated_question_bank(category=cat, search=s, status=stat, sort_by=sb)
+
+
+@router.post("/easy-apply/questions/create")
+def api_create_easy_apply_question(payload: CreateQuestionPayload):
+    """Manually add or update a screening question in the Question Bank."""
+    from src.services.question_bank_service import create_or_update_question
+    if not payload.question or not payload.question.strip():
+        raise HTTPException(status_code=400, detail="question text cannot be empty.")
+    res = create_or_update_question(
+        question_text=payload.question,
+        category=payload.category,
+        answer=payload.answer,
+        default_placeholder=payload.default_placeholder,
+    )
+    return {"success": True, "question": res}
 
 
 @router.post("/easy-apply/questions/answers")
@@ -564,6 +587,28 @@ def api_save_easy_apply_answers(payload: SaveQuestionAnswersPayload):
         raise HTTPException(status_code=400, detail="answers must be a key-value dictionary.")
     res = save_stored_answers(payload.answers)
     return {"success": True, **res}
+
+
+@router.delete("/easy-apply/questions/{key}")
+def api_delete_easy_apply_question(key: str):
+    """Delete a single screening question from the Question Bank."""
+    from src.services.question_bank_service import delete_question
+    if not key or not key.strip():
+        raise HTTPException(status_code=400, detail="Question key or ID must be provided.")
+    deleted = delete_question(key)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Question not found or already deleted.")
+    return {"success": True, "message": f"Question '{key}' deleted successfully."}
+
+
+@router.post("/easy-apply/questions/delete-batch")
+def api_delete_easy_apply_questions_batch(payload: DeleteQuestionsPayload):
+    """Delete multiple screening questions from the Question Bank in batch."""
+    from src.services.question_bank_service import delete_questions_batch
+    if not payload.keys:
+        raise HTTPException(status_code=400, detail="No question keys or IDs provided for batch deletion.")
+    count = delete_questions_batch(payload.keys)
+    return {"success": True, "deleted_count": count, "message": f"Successfully deleted {count} questions."}
 
 
 @router.get("/easy-apply/rate-limit-status")

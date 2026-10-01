@@ -1,0 +1,307 @@
+<!-- TAB: Screening Question Bank Workspace -->
+<div class="tab-panel hidden" id="tabQuestionBank">
+  <!-- Top Header Toolbar -->
+  <div class="qbank-page-header">
+    <div class="header-left">
+      <div class="qbank-badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <h2 class="qbank-page-title">Screening Question Bank</h2>
+          <span class="tag-status live">Autonomous Automation</span>
+        </div>
+        <p class="qbank-page-subtitle">
+          Centralized screening repository. Recruiter questions encountered during Easy Apply crawls are cataloged here. Provide standard answers once to automatically fulfill future multi-step questionnaires.
+        </p>
+      </div>
+    </div>
+
+    <!-- Header Action Buttons -->
+    <div class="qbank-header-actions">
+      <button class="btn btn-outline btn-sm" id="btnRefreshQuestionBank" onclick="loadQuestionBankPage()" title="Refresh question bank from database">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Refresh</span>
+      </button>
+      <button class="btn btn-outline btn-sm" id="btnOpenAddQuestionModal" onclick="openAddQuestionModal()" title="Add a custom question to the bank">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Add Question</span>
+      </button>
+      <button class="btn btn-primary btn-sm" id="btnSaveAllQuestionBankPage" onclick="saveAllQuestionBankPageAnswers()" title="Save all pending changes to the database">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+          <polyline points="17 21 17 13 7 13 7 21"></polyline>
+          <polyline points="7 3 7 8 15 8"></polyline>
+        </svg>
+        <span>Save All Changes</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Ribbon (4 Cards) -->
+  <div class="qbank-kpi-ribbon">
+    <div class="qbank-kpi-card accent-indigo" onclick="setQuestionBankCategoryFilter('all')" title="Total cataloged questions">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="qbankKpiTotal">0</span>
+        <span class="kpi-trend up">Cataloged</span>
+      </div>
+      <div class="kpi-card-body">
+        <div class="kpi-title">Total Questions</div>
+        <div class="kpi-meta">Across all application sources</div>
+      </div>
+    </div>
+
+    <div class="qbank-kpi-card accent-emerald" onclick="setQuestionBankStatusFilter('answered')" title="Filter to answered questions">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="qbankKpiAnswered">0</span>
+        <span class="kpi-trend ok" id="qbankKpiAnswerRate">0%</span>
+      </div>
+      <div class="kpi-card-body">
+        <div class="kpi-title">Ready for Auto-Apply</div>
+        <div class="kpi-meta">Saved answers auto-filled in forms</div>
+      </div>
+    </div>
+
+    <div class="qbank-kpi-card accent-amber" onclick="setQuestionBankStatusFilter('pending')" title="Filter to pending questions needing answers">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="qbankKpiPending">0</span>
+        <span class="kpi-trend warn" id="qbankKpiPendingBadge">Action Needed</span>
+      </div>
+      <div class="kpi-card-body">
+        <div class="kpi-title">Pending Answers</div>
+        <div class="kpi-meta">Provide answers to unblock jobs</div>
+      </div>
+    </div>
+
+    <div class="qbank-kpi-card accent-blue" onclick="setQuestionBankSort('standard')" title="Standard baseline profile questions">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="qbankKpiStandard">12</span>
+        <span class="kpi-trend neutral">Core</span>
+      </div>
+      <div class="kpi-card-body">
+        <div class="kpi-title">Standard Baseline</div>
+        <div class="kpi-meta">Contact, CTC, experience &amp; notice</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search, Filter & Action Toolbar -->
+  <div class="qbank-toolbar-container">
+    <div class="qbank-toolbar-primary">
+      <!-- Search Input -->
+      <div class="qbank-search-wrap">
+        <svg class="qbank-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          type="text" 
+          id="qbankPageSearchInput" 
+          class="qbank-search-input" 
+          placeholder="Search questions, keywords, categories, or sample jobs..." 
+          oninput="handleQuestionBankSearchInput(this.value)" 
+        />
+        <button class="qbank-search-clear hidden" id="btnQbankSearchClear" onclick="clearQuestionBankSearch()" title="Clear search">
+          &times;
+        </button>
+      </div>
+
+      <!-- Answering Status Segmented Buttons -->
+      <div class="qbank-status-segmented" role="radiogroup" aria-label="Status filter">
+        <button class="status-segment-btn active" id="btnQbankStatAll" onclick="setQuestionBankStatusFilter('all')">
+          All (<span id="qbankCountStatAll">0</span>)
+        </button>
+        <button class="status-segment-btn stat-pending" id="btnQbankStatPending" onclick="setQuestionBankStatusFilter('pending')">
+          <span class="dot-indicator amber"></span>
+          Pending (<span id="qbankCountStatPending">0</span>)
+        </button>
+        <button class="status-segment-btn stat-answered" id="btnQbankStatAnswered" onclick="setQuestionBankStatusFilter('answered')">
+          <span class="dot-indicator green"></span>
+          Answered (<span id="qbankCountStatAnswered">0</span>)
+        </button>
+      </div>
+
+      <!-- Category Filter Dropdown -->
+      <div class="qbank-filter-group">
+        <label for="selectQbankCategory" class="qbank-filter-label">Category:</label>
+        <select id="selectQbankCategory" class="select-clean qbank-select-category" onchange="setQuestionBankCategoryFilter(this.value)">
+          <option value="all" selected>All Categories</option>
+          <option value="contact">Basic Contact</option>
+          <option value="experience">Experience &amp; Skills</option>
+          <option value="compensation">Compensation / CTC</option>
+          <option value="notice">Notice Period</option>
+          <option value="profile">Profile &amp; General</option>
+        </select>
+      </div>
+
+      <!-- Sort Selector -->
+      <div class="qbank-filter-group">
+        <label for="selectQbankSort" class="qbank-filter-label">Sort:</label>
+        <select id="selectQbankSort" class="select-clean qbank-select-sort" onchange="setQuestionBankSort(this.value)">
+          <option value="occurrences" selected>🔥 Most Frequent</option>
+          <option value="recent">🕒 Recently Updated</option>
+          <option value="alpha">🔤 Alphabetical (A-Z)</option>
+          <option value="status">⚠️ Pending First</option>
+          <option value="standard">⭐ Standard Questions First</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Batch Selection Bar (Active when questions selected) -->
+    <div class="qbank-batch-bar hidden" id="qbankBatchBar">
+      <div class="batch-bar-left">
+        <label class="qbank-checkbox-label">
+          <input type="checkbox" id="qbankSelectAllCheckbox" onchange="toggleSelectAllQuestions(this.checked)" />
+          <span class="custom-checkbox"></span>
+          <span class="select-all-text">Select All Matching</span>
+        </label>
+        <span class="batch-count-badge" id="qbankBatchSelectedCount">0 selected</span>
+      </div>
+      <div class="batch-bar-actions">
+        <button class="btn btn-xs btn-outline" onclick="clearQuestionBankSelection()">
+          Clear Selection
+        </button>
+        <button class="btn btn-xs btn-danger btn-batch-delete" id="btnBatchDeleteQuestions" onclick="triggerBatchDeleteQuestions()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+          <span>Delete Selected</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Questions List Container -->
+  <div class="qbank-list-wrapper">
+    <!-- Unsaved Modifications Floating Bar -->
+    <div class="qbank-unsaved-toast hidden" id="qbankUnsavedToast">
+      <div class="unsaved-content">
+        <span class="unsaved-dot"></span>
+        <span class="unsaved-text"><strong id="qbankUnsavedCount">0</strong> answers modified but not yet saved</span>
+      </div>
+      <div class="unsaved-actions">
+        <button class="btn btn-xs btn-outline" onclick="discardQuestionBankEdits()">Discard</button>
+        <button class="btn btn-xs btn-primary" onclick="saveAllQuestionBankPageAnswers()">Save All</button>
+      </div>
+    </div>
+
+    <!-- Loading Skeleton -->
+    <div class="qbank-skeleton-list" id="qbankSkeletonList">
+      <div class="skeleton-card shimmer"></div>
+      <div class="skeleton-card shimmer"></div>
+      <div class="skeleton-card shimmer"></div>
+      <div class="skeleton-card shimmer"></div>
+    </div>
+
+    <!-- Empty State -->
+    <div class="qbank-empty-state hidden" id="qbankEmptyState">
+      <div class="empty-state-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </div>
+      <h3 class="empty-state-title">No Screening Questions Found</h3>
+      <p class="empty-state-desc" id="qbankEmptyDesc">
+        No questions match your current search or category filters. Clear filters or add a new question.
+      </p>
+      <div class="empty-state-actions">
+        <button class="btn btn-outline btn-sm" onclick="resetQuestionBankFilters()">Reset Filters</button>
+        <button class="btn btn-primary btn-sm" onclick="openAddQuestionModal()">+ Add New Question</button>
+      </div>
+    </div>
+
+    <!-- Active Question Cards Grid -->
+    <div class="qbank-cards-grid" id="qbankCardsGrid">
+      <!-- Dynamic Question Cards Rendered Here -->
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add New Screening Question Dialog -->
+<div class="modal-overlay hidden" id="modalAddQuestion" onclick="closeAddQuestionModal(event)">
+  <div class="modal-card modal-md" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <div class="modal-icon-badge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <h3 class="modal-title">Add Screening Question</h3>
+      </div>
+      <button class="close-x close-dialog-btn" onclick="closeAddQuestionModal()" title="Close dialog">&times;</button>
+    </div>
+
+    <form id="formAddQuestion" onsubmit="submitAddQuestion(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="inputAddQuestionText">Question Prompt <span class="required">*</span></label>
+          <textarea 
+            id="inputAddQuestionText" 
+            class="form-control" 
+            rows="3" 
+            placeholder="e.g. How many years of experience do you have with TypeScript?" 
+            required
+          ></textarea>
+          <span class="form-hint">Enter the question text as it appears on recruiter questionnaires.</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label class="form-label" for="selectAddQuestionCategory">Category</label>
+            <select id="selectAddQuestionCategory" class="form-control">
+              <option value="experience">Experience &amp; Skills</option>
+              <option value="compensation">Compensation / CTC</option>
+              <option value="notice">Notice Period</option>
+              <option value="contact">Contact Information</option>
+              <option value="profile">Profile &amp; General</option>
+            </select>
+          </div>
+
+          <div class="form-group flex-1">
+            <label class="form-label" for="inputAddQuestionPlaceholder">Suggested Placeholder</label>
+            <input 
+              type="text" 
+              id="inputAddQuestionPlaceholder" 
+              class="form-control" 
+              placeholder="e.g. 3 years / Immediate" 
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="inputAddQuestionAnswer">Your Standard Answer (Optional)</label>
+          <textarea 
+            id="inputAddQuestionAnswer" 
+            class="form-control" 
+            rows="2" 
+            placeholder="Your standard response that will auto-fill future Easy Apply applications..."
+          ></textarea>
+          <span class="form-hint">You can leave this blank and answer it later.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeAddQuestionModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitAddQuestion">
+          <span>Add to Question Bank</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

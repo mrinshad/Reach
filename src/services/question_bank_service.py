@@ -132,6 +132,8 @@ from src.db.question_bank import (
     get_unanswered_screening_questions_count,
     lookup_answer_for_question,
     upsert_screening_question,
+    delete_screening_question as db_delete_screening_question,
+    delete_screening_questions_batch as db_delete_screening_questions_batch,
 )
 
 
@@ -153,9 +155,37 @@ def save_stored_answers(answers: Dict[str, str]) -> Dict[str, Any]:
 def get_aggregated_question_bank(
     category: Optional[str] = None,
     search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Retrieve all screening questions from persistent PostgreSQL table."""
-    return db_get_aggregated_question_bank(category=category, search=search)
+    """Retrieve screening questions from persistent PostgreSQL table with optional filters."""
+    return db_get_aggregated_question_bank(category=category, search=search, status=status, sort_by=sort_by)
+
+
+def delete_question(key_or_id: str) -> bool:
+    """Delete a single screening question by id or normalized key."""
+    return db_delete_screening_question(key_or_id)
+
+
+def delete_questions_batch(keys: List[str]) -> int:
+    """Delete multiple screening questions by their keys or ids."""
+    return db_delete_screening_questions_batch(keys)
+
+
+def create_or_update_question(
+    question_text: str,
+    category: Optional[str] = None,
+    answer: Optional[str] = None,
+    default_placeholder: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Manually insert or update a custom question into the Question Bank."""
+    return upsert_screening_question(
+        question_text=question_text,
+        category=category,
+        answer=answer,
+        default_placeholder=default_placeholder,
+        sample_job="Manual User Ingestion",
+    )
 
 
 

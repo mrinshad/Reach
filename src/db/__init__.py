@@ -73,6 +73,8 @@ from src.db.question_bank import (
     normalize_question_key,
     infer_question_category,
     STANDARD_BASIC_QUESTIONS,
+    delete_screening_question,
+    delete_screening_questions_batch,
 )
 
 __all__ = [
@@ -128,4 +130,6 @@ __all__ = [
     "normalize_question_key",
     "infer_question_category",
     "STANDARD_BASIC_QUESTIONS",
+    "delete_screening_question",
+    "delete_screening_questions_batch",
 ]

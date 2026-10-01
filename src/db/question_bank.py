@@ -457,20 +457,36 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
 def get_aggregated_question_bank(
     category: Optional[str] = None,
     search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Retrieve all screening questions from PostgreSQL screening_questions table.
-    Sorts standard questions first, then by occurrence count descending, then question text.
+    Supports filtering by category, search text, answering status, and flexible sorting.
     """
+    order_clause = "ORDER BY is_standard DESC, occurrences DESC, question_text ASC"
+    if sort_by and isinstance(sort_by, str):
+        sb = sort_by.lower().strip()
+        if sb in ("recent", "updated"):
+            order_clause = "ORDER BY updated_at DESC, occurrences DESC"
+        elif sb in ("alpha", "alphabetical", "title"):
+            order_clause = "ORDER BY question_text ASC"
+        elif sb in ("occurrences", "popular", "frequent"):
+            order_clause = "ORDER BY occurrences DESC, question_text ASC"
+        elif sb in ("standard", "std"):
+            order_clause = "ORDER BY is_standard DESC, question_text ASC"
+        elif sb in ("status", "pending_first"):
+            order_clause = "ORDER BY (CASE WHEN answer IS NULL OR answer = '' THEN 0 ELSE 1 END) ASC, occurrences DESC"
+
     conn = get_connection()
     cur = conn.cursor()
 
-    cur.execute("""
+    cur.execute(f"""
         SELECT 
             id, question_key, question_text, category, answer,
             is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
         FROM screening_questions
-        ORDER BY is_standard DESC, occurrences DESC, question_text ASC;
+        {order_clause};
     """)
     rows = cur.fetchall()
     cur.close()
@@ -503,18 +519,30 @@ def get_aggregated_question_bank(
             "updated_at": r[10].isoformat() if r[10] else None,
         }
 
+        # Apply status filter if requested
+        if status and isinstance(status, str):
+            stat_low = status.lower().strip()
+            if stat_low in ("pending", "unanswered") and is_ans:
+                continue
+            elif stat_low in ("answered", "completed") and not is_ans:
+                continue
+
         # Apply category filter if requested
         if category and isinstance(category, str):
             cat_low = category.lower().strip()
-            if cat_low == "unanswered" and is_ans:
+            if cat_low in ("unanswered", "pending") and is_ans:
                 continue
-            elif cat_low != "all" and cat_low != "unanswered" and q_item["category"] != cat_low:
+            elif cat_low not in ("all", "unanswered", "pending") and q_item["category"] != cat_low:
                 continue
 
         # Apply search filter if requested
         if search and isinstance(search, str):
             s_low = search.lower().strip()
-            if s_low not in q_item["question"].lower() and s_low not in q_item["answer"].lower():
+            text_match = s_low in q_item["question"].lower()
+            ans_match = s_low in q_item["answer"].lower()
+            cat_match = s_low in q_item["category"].lower()
+            jobs_match = any(s_low in str(j).lower() for j in q_item["sample_jobs"])
+            if not (text_match or ans_match or cat_match or jobs_match):
                 continue
 
         questions.append(q_item)
@@ -692,3 +720,72 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
         }
 
     return None, None
+
+
+def delete_screening_question(key_or_id: str) -> bool:
+    """Delete a screening question by id or normalized question_key."""
+    if not key_or_id:
+        return False
+    k_clean = str(key_or_id).strip()
+    norm_key = normalize_question_key(k_clean)
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        DELETE FROM screening_questions
+        WHERE id = %s OR question_key = %s;
+    """, (k_clean, norm_key))
+    deleted = cur.rowcount > 0
+    conn.commit()
+
+    if deleted:
+        # Update settings.screening_question_bank
+        try:
+            raw = get_setting("screening_question_bank", "{}")
+            cur_dict = json.loads(raw) if raw else {}
+            if k_clean in cur_dict:
+                del cur_dict[k_clean]
+            if norm_key in cur_dict:
+                del cur_dict[norm_key]
+            set_setting("screening_question_bank", json.dumps(cur_dict))
+        except Exception:
+            pass
+
+    cur.close()
+    conn.close()
+    return deleted
+
+
+def delete_screening_questions_batch(keys_or_ids: List[str]) -> int:
+    """Delete multiple screening questions by their ids or keys."""
+    if not keys_or_ids:
+        return 0
+
+    clean_keys = [str(k).strip() for k in keys_or_ids if k]
+    norm_keys = [normalize_question_key(k) for k in clean_keys]
+    all_targets = list(set(clean_keys + norm_keys))
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        DELETE FROM screening_questions
+        WHERE id = ANY(%s) OR question_key = ANY(%s);
+    """, (all_targets, all_targets))
+    deleted_count = cur.rowcount
+    conn.commit()
+
+    if deleted_count > 0:
+        try:
+            raw = get_setting("screening_question_bank", "{}")
+            cur_dict = json.loads(raw) if raw else {}
+            for t in all_targets:
+                if t in cur_dict:
+                    del cur_dict[t]
+            set_setting("screening_question_bank", json.dumps(cur_dict))
+        except Exception:
+            pass
+
+    cur.close()
+    conn.close()
+    return deleted_count
+

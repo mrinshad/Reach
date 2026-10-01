@@ -75,6 +75,7 @@ function switchTab(tabId) {
   if (tabId === 'crawlers') tabId = 'tabCrawlers';
   else if (tabId === 'discovered') tabId = 'tabDiscovered';
   else if (tabId === 'easy_apply' || tabId === 'easyApply') tabId = 'tabEasyApply';
+  else if (tabId === 'questions' || tabId === 'question_bank' || tabId === 'questionBank') tabId = 'tabQuestionBank';
   else if (tabId === 'review') tabId = 'tabReview';
   else if (tabId === 'sent') tabId = 'tabSent';
   else if (tabId === 'analytics') tabId = 'tabAnalytics';
@@ -92,6 +93,7 @@ function switchTab(tabId) {
       tabCrawlers: '#crawlers',
       tabDiscovered: '#discovered',
       tabEasyApply: '#easy-apply',
+      tabQuestionBank: '#questions',
       tabReview: '#review',
       tabSent: (localStorage.getItem('reach_history_view') === 'logs' ? '#logs' : '#sent'),
     };
@@ -106,6 +108,7 @@ function switchTab(tabId) {
     tabCrawlers: { title: 'Job Crawlers & Portals', breadcrumb: 'Launch active scrapers or explore upcoming major job portal engines' },
     tabDiscovered: { title: 'Discovered Jobs', breadcrumb: 'Explore, filter, and review crawled job postings' },
     tabEasyApply: { title: 'LinkedIn Job Portal & Easy Apply', breadcrumb: 'Autonomous direct job crawling, auto-apply submissions & questionnaire screening' },
+    tabQuestionBank: { title: 'Screening Question Bank', breadcrumb: 'Centralized repository of Easy Apply recruiter screening questions & answers' },
     tabReview: { title: 'Review & Drafts', breadcrumb: 'Approve AI cover letters and dispatch outreach' },
     tabSent: { title: 'Sent & History', breadcrumb: 'Track dispatched applications and historical outreach' },
   };
@@ -123,6 +126,8 @@ function switchTab(tabId) {
   if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
   const btnEasyApply = document.getElementById('btnTabEasyApply');
   if (btnEasyApply) btnEasyApply.classList.toggle('active', tabId === 'tabEasyApply');
+  const btnQuestionBank = document.getElementById('btnTabQuestionBank');
+  if (btnQuestionBank) btnQuestionBank.classList.toggle('active', tabId === 'tabQuestionBank');
   const btnReview = document.getElementById('btnTabReview');
   if (btnReview) btnReview.classList.toggle('active', tabId === 'tabReview');
   const btnSent = document.getElementById('btnTabSent');
@@ -136,6 +141,8 @@ function switchTab(tabId) {
   if (panelDiscovered) panelDiscovered.classList.toggle('hidden', tabId !== 'tabDiscovered');
   const panelEasyApply = document.getElementById('tabEasyApply');
   if (panelEasyApply) panelEasyApply.classList.toggle('hidden', tabId !== 'tabEasyApply');
+  const panelQuestionBank = document.getElementById('tabQuestionBank');
+  if (panelQuestionBank) panelQuestionBank.classList.toggle('hidden', tabId !== 'tabQuestionBank');
   const panelReview = document.getElementById('tabReview');
   if (panelReview) panelReview.classList.toggle('hidden', tabId !== 'tabReview');
   const panelSent = document.getElementById('tabSent');
@@ -150,6 +157,8 @@ function switchTab(tabId) {
     fetchDiscoveredPosts();
   } else if (tabId === 'tabEasyApply') {
     if (typeof fetchEasyApplyPosts === 'function') fetchEasyApplyPosts();
+  } else if (tabId === 'tabQuestionBank') {
+    if (typeof loadQuestionBankPage === 'function') loadQuestionBankPage();
   } else if (tabId === 'tabReview') {
     fetchReviewPosts();
   } else if (tabId === 'tabSent') {
@@ -208,10 +217,7 @@ function jumpToEasyApply(statusFilter) {
 }
 
 function jumpToQuestionBank() {
-  switchTab('tabEasyApply');
-  if (typeof openQuestionBankModal === 'function') {
-    openQuestionBankModal();
-  }
+  switchTab('tabQuestionBank');
 }
 
 // Global Bindings

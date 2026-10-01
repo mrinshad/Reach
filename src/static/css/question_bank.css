@@ -1,0 +1,858 @@
+/* ==========================================================================
+   QUESTION_BANK.CSS — Dedicated Screening Question & Answer Bank Workspace
+   ========================================================================== */
+
+/* Page Header */
+.qbank-page-header {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.4rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-sm);
+}
+
+.qbank-page-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.qbank-badge-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(99, 102, 241, 0.12) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.15);
+}
+
+.qbank-page-title {
+  font-family: var(--font-logo);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.qbank-page-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin: 0.25rem 0 0 0;
+  line-height: 1.4;
+  max-width: 720px;
+}
+
+.qbank-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+/* KPI Ribbon */
+.qbank-kpi-ribbon {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.qbank-kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.05rem 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.qbank-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+.qbank-kpi-card.accent-indigo { border-left: 3.5px solid var(--accent-indigo); }
+.qbank-kpi-card.accent-emerald { border-left: 3.5px solid var(--accent-emerald); }
+.qbank-kpi-card.accent-amber { border-left: 3.5px solid var(--accent-amber); }
+.qbank-kpi-card.accent-blue { border-left: 3.5px solid #38bdf8; }
+
+.qbank-kpi-card .kpi-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.4rem;
+}
+
+.qbank-kpi-card .kpi-num {
+  font-family: var(--font-logo);
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.qbank-kpi-card .kpi-trend {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.qbank-kpi-card .kpi-trend.up {
+  background: rgba(99, 102, 241, 0.16);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.qbank-kpi-card .kpi-trend.ok {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.qbank-kpi-card .kpi-trend.warn {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  animation: pulse-warn 2s infinite ease-in-out;
+}
+
+@keyframes pulse-warn {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(0.97); }
+}
+
+.qbank-kpi-card .kpi-trend.neutral {
+  background: rgba(56, 189, 248, 0.14);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.qbank-kpi-card .kpi-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 0.15rem;
+}
+
+.qbank-kpi-card .kpi-meta {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* Toolbar & Filtering Container */
+.qbank-toolbar-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1.15rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.qbank-toolbar-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+/* Search Wrap */
+.qbank-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 280px;
+  min-width: 240px;
+}
+
+.qbank-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.qbank-search-input {
+  width: 100%;
+  padding: 0.55rem 2.2rem 0.55rem 2.35rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 0.83rem;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.qbank-search-input:focus {
+  border-color: var(--accent-indigo);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.qbank-search-clear {
+  position: absolute;
+  right: 0.65rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.2rem;
+}
+
+.qbank-search-clear:hover {
+  color: #fff;
+}
+
+/* Status Segmented Buttons */
+.qbank-status-segmented {
+  display: inline-flex;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem;
+  gap: 0.2rem;
+}
+
+.status-segment-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.18s ease;
+}
+
+.status-segment-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.status-segment-btn.active {
+  background: var(--bg-card);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.status-segment-btn.stat-pending.active {
+  border-bottom: 2px solid var(--accent-amber);
+}
+
+.status-segment-btn.stat-answered.active {
+  border-bottom: 2px solid var(--accent-emerald);
+}
+
+.dot-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-indicator.amber { background: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
+.dot-indicator.green { background: var(--accent-emerald); box-shadow: 0 0 6px var(--accent-emerald); }
+
+/* Filter Group */
+.qbank-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.qbank-filter-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.qbank-select-category,
+.qbank-select-sort {
+  padding: 0.5rem 1.8rem 0.5rem 0.75rem;
+  font-size: 0.81rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.qbank-select-category:focus,
+.qbank-select-sort:focus {
+  border-color: var(--accent-indigo);
+}
+
+/* Batch Action Bar */
+.qbank-batch-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.85rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: var(--radius-sm);
+  animation: slide-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.batch-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.batch-count-badge {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, 0.25);
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.batch-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-batch-delete {
+  background: rgba(244, 63, 94, 0.18);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.4);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+
+.btn-batch-delete:hover {
+  background: #f43f5e;
+  color: #fff;
+  border-color: #f43f5e;
+}
+
+/* Checkbox Styling */
+.qbank-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.qbank-checkbox-label input[type="checkbox"] {
+  display: none;
+}
+
+.custom-checkbox {
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--border-medium);
+  border-radius: 4px;
+  background: var(--bg-input);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.qbank-checkbox-label input[type="checkbox"]:checked + .custom-checkbox {
+  background: var(--accent-indigo);
+  border-color: var(--accent-indigo);
+}
+
+.qbank-checkbox-label input[type="checkbox"]:checked + .custom-checkbox::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-top: -1px;
+}
+
+/* Unsaved Floating Toast Bar */
+.qbank-unsaved-toast {
+  position: sticky;
+  top: 10px;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), 0 0 16px rgba(245, 158, 11, 0.12);
+  backdrop-filter: blur(8px);
+  animation: slide-toast 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slide-toast {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.unsaved-content {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.83rem;
+  color: #fef3c7;
+}
+
+.unsaved-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  box-shadow: 0 0 8px var(--accent-amber);
+  animation: pulse-warn 1.5s infinite;
+}
+
+.unsaved-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Question Cards Grid */
+.qbank-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.qbank-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.15rem 1.35rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.qbank-card:hover {
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-md);
+}
+
+.qbank-card.is-selected {
+  border-color: var(--accent-indigo);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.06) 0%, var(--bg-card) 100%);
+  box-shadow: 0 0 0 1px var(--accent-indigo), var(--shadow-md);
+}
+
+.qbank-card.status-pending {
+  border-left: 4px solid var(--accent-amber);
+}
+
+.qbank-card.status-answered {
+  border-left: 4px solid var(--accent-emerald);
+}
+
+/* Card Header */
+.qbank-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.card-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  flex: 1;
+}
+
+.card-title-group {
+  flex: 1;
+}
+
+.qbank-question-text {
+  font-family: var(--font-sans);
+  font-size: 0.97rem;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.45;
+  margin: 0 0 0.45rem 0;
+  word-break: break-word;
+}
+
+.qbank-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.qbank-badge {
+  font-size: 0.71rem;
+  font-weight: 600;
+  padding: 0.16rem 0.52rem;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-transform: capitalize;
+}
+
+.qbank-badge.cat-contact { background: rgba(56, 189, 248, 0.14); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.3); }
+.qbank-badge.cat-experience { background: rgba(168, 85, 247, 0.14); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.3); }
+.qbank-badge.cat-compensation { background: rgba(34, 197, 94, 0.14); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
+.qbank-badge.cat-notice { background: rgba(249, 115, 22, 0.14); color: #fdba74; border: 1px solid rgba(249, 115, 22, 0.3); }
+.qbank-badge.cat-profile { background: rgba(148, 163, 184, 0.14); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+.qbank-badge.status-ans {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.qbank-badge.status-pend {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.qbank-badge.badge-standard {
+  background: rgba(99, 102, 241, 0.14);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.qbank-badge.badge-occurrences {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.btn-card-action {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  color: var(--text-dim);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.76rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.18s ease;
+}
+
+.btn-card-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  border-color: var(--border-medium);
+}
+
+.btn-card-delete {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.25);
+}
+
+.btn-card-delete:hover {
+  background: rgba(244, 63, 94, 0.18);
+  border-color: #f43f5e;
+  color: #fff;
+}
+
+/* Sample Jobs Tag Ribbon */
+.qbank-sample-jobs {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.sample-job-tag {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 0.12rem 0.48rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Answer Input Field Area */
+.qbank-answer-field-wrap {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.qbank-answer-textarea {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 0.87rem;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 48px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.qbank-answer-textarea:focus {
+  border-color: var(--accent-indigo);
+  background: #0f1627;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+}
+
+.qbank-answer-textarea.is-dirty {
+  border-color: var(--accent-amber);
+  background: rgba(245, 158, 11, 0.03);
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.qbank-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.73rem;
+  color: var(--text-muted);
+}
+
+.qbank-status-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.qbank-status-text.saved {
+  color: #34d399;
+}
+
+.qbank-status-text.modified {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.card-save-btn {
+  background: var(--accent-indigo);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 0.32rem 0.75rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all 0.18s ease;
+}
+
+.card-save-btn:hover {
+  background: var(--accent-indigo-hover);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+}
+
+.card-save-btn.btn-disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+  background: var(--border-medium);
+}
+
+/* Skeleton Loading State */
+.qbank-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.skeleton-card {
+  height: 140px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* Empty State */
+.qbank-empty-state {
+  text-align: center;
+  padding: 3.5rem 1.5rem;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-medium);
+  border-radius: var(--radius-md);
+  margin-top: 1rem;
+}
+
+.empty-state-icon {
+  color: var(--text-muted);
+  margin-bottom: 0.9rem;
+  opacity: 0.6;
+}
+
+.empty-state-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 0.4rem 0;
+}
+
+.empty-state-desc {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  max-width: 480px;
+  margin: 0 auto 1.25rem auto;
+  line-height: 1.4;
+}
+
+.empty-state-actions {
+  display: inline-flex;
+  gap: 0.6rem;
+}
+
+/* Modal Form Styles */
+.form-row {
+  display: flex;
+  gap: 0.85rem;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.required {
+  color: #f43f5e;
+}
+
+.form-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  display: block;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 1024px) {
+  .qbank-kpi-ribbon {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .qbank-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .qbank-kpi-ribbon {
+    grid-template-columns: 1fr;
+  }
+  .qbank-toolbar-primary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .qbank-search-wrap {
+    width: 100%;
+  }
+  .qbank-status-segmented {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .status-segment-btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .form-row {
+    flex-direction: column;
+  }
+}
