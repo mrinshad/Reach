@@ -53,6 +53,14 @@
     background: linear-gradient(90deg, #f43f5e, #fb7185);
   }
 
+  .kpi-card.glow-cyan::before {
+    background: linear-gradient(90deg, #06b6d4, #22d3ee);
+  }
+
+  .kpi-card.glow-amber::before {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  }
+
   .kpi-header {
     display: flex;
     justify-content: space-between;

@@ -814,22 +814,33 @@ function openScreeningModal(postId) {
   const questions = parseScreeningQuestions(post.rejection_reason);
   const listEl = document.getElementById('screeningQuestionsList');
   const emptyEl = document.getElementById('screeningEmptyState');
+  const applyNowBtn = document.getElementById('btnScreeningApplyNow');
 
   if (questions.length > 0) {
     listEl.classList.remove('hidden');
     emptyEl.classList.add('hidden');
 
+    let allQuestionsAnswered = true;
+
     listEl.innerHTML = questions.map((q, i) => {
+      const normKey = q.label.toLowerCase().replace(/[^a-z0-9]/g, '');
       const typeTag = q.type
         ? `<div class="screening-q-type">${escapeHtml(q.type)}${q.step ? ` · Step ${q.step}` : ''}</div>`
         : (q.step ? `<div class="screening-q-type">Step ${q.step}</div>` : '');
 
       const savedAnswer = findQuestionBankAnswer(q.label);
-      const savedPill = savedAnswer
+      if (!savedAnswer) {
+        allQuestionsAnswered = false;
+      }
+
+      const answerRow = savedAnswer
         ? `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
              <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
            </div>`
-        : '';
+        : `<div class="screening-inline-ans-box" id="screeningAnsBox_${normKey}">
+             <input type="text" class="screening-inline-input" id="screeningAnsInp_${normKey}" placeholder="Type answer for Question Bank (e.g. 3, Immediate, Yes)..." onkeydown="if(event.key==='Enter') saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this.nextElementSibling)" />
+             <button class="btn btn-warning btn-xs screening-inline-save-btn" onclick="saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this)">Save Answer</button>
+           </div>`;
 
       return `
         <div class="screening-question-card">
@@ -837,15 +848,26 @@ function openScreeningModal(postId) {
           <div style="flex: 1;">
             <div class="screening-q-text">${escapeHtml(q.label)}</div>
             ${typeTag}
-            ${savedPill}
+            <div id="screeningAnsSlot_${normKey}">
+              ${answerRow}
+            </div>
           </div>
         </div>
       `;
     }).join('');
+
+    if (applyNowBtn) {
+      if (allQuestionsAnswered) {
+        applyNowBtn.classList.remove('hidden');
+      } else {
+        applyNowBtn.classList.add('hidden');
+      }
+    }
   } else {
     listEl.classList.add('hidden');
     listEl.innerHTML = '';
     emptyEl.classList.remove('hidden');
+    if (applyNowBtn) applyNowBtn.classList.add('hidden');
   }
 
   modal.classList.remove('hidden');
@@ -858,6 +880,75 @@ function closeScreeningModal(e) {
   const modal = document.getElementById('modalScreeningQuestions');
   if (modal) modal.classList.add('hidden');
   activeScreeningPost = null;
+}
+
+async function saveSingleInlineAnswer(normKey, label, btn) {
+  const input = document.getElementById(`screeningAnsInp_${normKey}`);
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) {
+    showAlert('Empty Answer', 'Please enter an answer before saving.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: { [normKey]: val, [label]: val } }),
+    });
+
+    if (res.ok) {
+      showToast('✓ Answer saved to Question Bank!', 'success');
+      // Update local dictionary immediately
+      if (questionBankAnswers) {
+        questionBankAnswers[normKey] = val;
+      }
+      // Replace inline box with saved pill
+      const slot = document.getElementById(`screeningAnsSlot_${normKey}`);
+      if (slot) {
+        slot.innerHTML = `
+          <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+            <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(val)}</strong>
+          </div>
+        `;
+      }
+      // Refresh Question Bank in background
+      fetchQuestionBank(false);
+
+      // Check if all questions are now answered
+      if (activeScreeningPost) {
+        const questions = parseScreeningQuestions(activeScreeningPost.rejection_reason);
+        const allAnswered = questions.every((q) => Boolean(findQuestionBankAnswer(q.label)));
+        const applyNowBtn = document.getElementById('btnScreeningApplyNow');
+        if (applyNowBtn && allAnswered) {
+          applyNowBtn.classList.remove('hidden');
+        }
+      }
+    } else {
+      const err = await res.json();
+      showAlert('Save Error', err.detail || 'Could not save answer.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Answer';
+    }
+  }
+}
+
+async function applyToCurrentScreeningPost() {
+  if (!activeScreeningPost) return;
+  const postId = activeScreeningPost.id;
+  closeScreeningModal();
+  await applyToSingleEasyPost(postId);
 }
 
 function openScreeningFromDetails() {
@@ -1116,14 +1207,33 @@ async function fetchQuestionBank(renderAfter = true) {
           if (q.id) questionBankAnswers[q.id] = q.answer;
         }
       });
-    }
-
     // Update Question Bank button counter
     const countEl = document.getElementById('totalQuestionsCount');
     if (countEl) countEl.textContent = data.total_count || 0;
 
     const allPillCount = document.getElementById('qbankCountAll');
     if (allPillCount) allPillCount.textContent = data.total_count || 0;
+
+    const unansweredPillCount = document.getElementById('qbankCountUnanswered');
+    if (unansweredPillCount) unansweredPillCount.textContent = data.pending_count || 0;
+
+    // Update pending alert banner and button badge
+    const pendingCount = data.pending_count || 0;
+    const alertBanner = document.getElementById('qbankPendingAlertBanner');
+    const bannerCountEl = document.getElementById('qbankPendingCountBanner');
+    const btnBadge = document.getElementById('qbankPendingBtnBadge');
+
+    if (pendingCount > 0) {
+      if (alertBanner) alertBanner.classList.remove('hidden');
+      if (bannerCountEl) bannerCountEl.textContent = pendingCount;
+      if (btnBadge) {
+        btnBadge.classList.remove('hidden');
+        btnBadge.textContent = `${pendingCount} pending`;
+      }
+    } else {
+      if (alertBanner) alertBanner.classList.add('hidden');
+      if (btnBadge) btnBadge.classList.add('hidden');
+    }
 
     if (renderAfter) {
       renderQuestionBankList();
@@ -1133,10 +1243,22 @@ async function fetchQuestionBank(renderAfter = true) {
   }
 }
 
-function openQuestionBankModal() {
+function openQuestionBankModal(cat) {
   const modal = document.getElementById('modalQuestionBank');
   if (!modal) return;
   modal.classList.remove('hidden');
+
+  if (cat) {
+    activeQBankCategory = cat;
+    document.querySelectorAll('.qbank-cat-pill').forEach((p) => {
+      if (p.getAttribute('data-cat') === cat) {
+        p.classList.add('active');
+      } else {
+        p.classList.remove('active');
+      }
+    });
+  }
+
   fetchQuestionBank(true);
 }
 
@@ -1215,7 +1337,7 @@ function renderQuestionBankList() {
     const catTag = `<span class="qbank-badge qbank-badge-cat">${escapeHtml(q.category || 'general')}</span>`;
     const ansBadge = isAnswered
       ? `<span class="qbank-badge qbank-badge-answered">✓ Answered</span>`
-      : '';
+      : `<span class="qbank-badge qbank-badge-pending">⚠️ Pending Answer</span>`;
 
     const sampleJobInfo = !q.is_standard && q.sample_jobs && q.sample_jobs.length > 0
       ? `<div class="qbank-sample-jobs" title="${escapeHtml(q.sample_jobs.join(' • '))}">
@@ -1403,6 +1525,8 @@ window.closeQuestionBankModal = closeQuestionBankModal;
 window.setQuestionBankCategory = setQuestionBankCategory;
 window.filterQuestionBankList = filterQuestionBankList;
 window.saveQuestionBankAnswers = saveQuestionBankAnswers;
+window.saveSingleInlineAnswer = saveSingleInlineAnswer;
+window.applyToCurrentScreeningPost = applyToCurrentScreeningPost;
 window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
 window.checkRateLimitSafeguard = checkRateLimitSafeguard;
 

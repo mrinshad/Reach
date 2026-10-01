@@ -349,6 +349,27 @@ async function loadAnalytics(days = 30) {
       if (elRejected) elRejected.textContent = Number(data.summary.total_rejected || 0).toLocaleString();
       const elSpamFlagged = document.getElementById('kpiSpamFlagged');
       if (elSpamFlagged) elSpamFlagged.textContent = `${Number(data.summary.potential_spam_total || 0).toLocaleString()} potential spam`;
+
+      // LinkedIn Easy Apply KPIs
+      const elEasyApplied = document.getElementById('kpiEasyApplyApplied');
+      if (elEasyApplied) elEasyApplied.textContent = Number(data.summary.easy_apply_applied || 0).toLocaleString();
+      const elEasyReady = document.getElementById('kpiEasyApplyReady');
+      if (elEasyReady) elEasyReady.textContent = `${Number(data.summary.easy_apply_ready || 0).toLocaleString()} ready`;
+      const elEasyScreened = document.getElementById('kpiEasyApplyScreened');
+      if (elEasyScreened) elEasyScreened.textContent = `${Number(data.summary.easy_apply_screened || 0).toLocaleString()} questionnaires`;
+
+      // Screening Question Bank KPIs
+      const elQBankTotal = document.getElementById('kpiQuestionBankTotal');
+      if (elQBankTotal) elQBankTotal.textContent = Number(data.summary.question_bank_total || 0).toLocaleString();
+      const elQBankAnswered = document.getElementById('kpiQuestionBankAnswered');
+      if (elQBankAnswered) elQBankAnswered.textContent = `${Number(data.summary.question_bank_answered || 0).toLocaleString()} answered`;
+      const elQBankRate = document.getElementById('kpiQuestionBankRate');
+      if (elQBankRate) {
+        const qTot = data.summary.question_bank_total || 0;
+        const qAns = data.summary.question_bank_answered || 0;
+        const qPct = qTot > 0 ? Math.round((qAns / qTot) * 100) : 0;
+        elQBankRate.textContent = `${qPct}% saved answers`;
+      }
     }
 
     // Update timeline badges

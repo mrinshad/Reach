@@ -33,12 +33,12 @@ This directory contains the modular styling system for the Reach web application
   - Crawler Trigger: `.crawler-sidebar-card`, `.crawler-source-select`, `.crawler-location-select`, `.btn-crawl-sidebar`.
 
 ### 5. [`dashboard.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/dashboard.css)
-- **Scope**: Overview dashboard tab (`#tabAnalytics`), KPI summary cards, Chart.js layouts, Headless browser mode switch.
+- **Scope**: Overview dashboard tab (`#tabAnalytics`), KPI summary cards, Chart.js layouts, Headless browser mode switch, and connected services safeguard health tracking.
 - **Key Classes**:
-  - KPI Cards: `.kpi-card`, `.kpi-val`, `.kpi-label`, `.clickable-kpi`, `.kpi-jump-action`.
+  - KPI Cards: `.kpi-card`, `.kpi-val`, `.kpi-label`, `.clickable-kpi`, `.kpi-jump-action`, `.glow-cyan`, `.glow-amber`.
   - Charts: `.chart-card`, `.chart-wrapper`, `.chart-grid`.
   - Headless Switch: `.headless-toggle-card`, `.toggle-switch-ios`, `.toggle-slider-ios`.
-  - Health: `.health-grid`, `.health-card`, `.health-status-dot`.
+  - Health: `.health-grid`, `.health-card`, `.health-status-dot`, `#healthCardEasyApply`.
 
 ### 6. [`discovered.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/discovered.css)
 - **Scope**: Discovered jobs tab (`#tabDiscovered`), 2-tier search/filter toolbar, data tables, pagination.
@@ -68,9 +68,10 @@ This directory contains the modular styling system for the Reach web application
 - **Key Classes**: `.modal-overlay`, `.modal-box`, `.modal-top`, `.modal-body`, `.modal-bottom`, `.notif-modal-box`, `.notif-status-grid`, `.toast-container`, `.toast`.
 
 ### 11. [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css)
-- **Scope**: LinkedIn Easy Apply workspace (`#tabEasyApply`), crawler header, CSV bulk search modal, 5-KPI ribbon, floating batch banner, zero-scroll responsive table layout, fixed-position status dropdowns, elevated details modal, and dedicated Screening Questionnaire Modal.
+- **Scope**: LinkedIn Easy Apply workspace (`#tabEasyApply`), crawler header, CSV bulk search modal, 5-KPI ribbon, floating batch banner, zero-scroll responsive table layout, fixed-position status dropdowns, elevated details modal, dedicated Screening Questionnaire Modal, and Question & Answer Bank Modal.
 - **Key Classes**:
   - Header & Form: `.easy-apply-header`, `.easy-crawler-form`, `.easy-input`, `.btn-easy-crawl`, `.btn-easy-import`.
+  - Pacing & Cycles: `.cycles-control-wrap`, `.cycles-label`, `.input-cycles-num`, `.tooltip-cycle`, `.pacing-select-wrap`.
   - KPI Metrics: `.easy-kpi-ribbon` (5 columns: Ready, Screening, Applied, Failed, Not Found), `.easy-kpi-card`, `.accent-slate`, `.kpi-num`, `.kpi-lbl`.
   - Filters & Search: `.easy-filter-bar`, `.status-pill-group`, `.filter-pill`, `.pill-dot.slate`, `.easy-search-box`.
   - Batch Actions: `.easy-batch-banner`, `.batch-info`, `.batch-banner-right`, `.batch-select-badge`, `.batch-transition-lbl`, `.batch-divider`, `.btn-batch-close`.
@@ -79,6 +80,7 @@ This directory contains the modular styling system for the Reach web application
   - Details Modal: `.easy-details-dialog`, `.easy-dialog-meta-grid`, `.meta-tile`, `.easy-dialog-status-card`, `.modal-status-segmented`, `.btn-modal-status-chip`, `.chip-dot`, `.easy-dialog-jd-section`, `.easy-jd-box`.
   - Screening Modal: `.screening-modal`, `.screening-job-card`, `.screening-warning-banner`, `.screening-question-card`, `.screening-q-num`, `.screening-q-text`, `.screening-q-type`, `.screening-empty`, `.screening-modal-foot`.
   - Bulk Search Modal: `.bulk-search-modal`, `.bulk-dropzone`, `.dropzone-icon`, `.bulk-keywords-textarea`, `.bulk-keywords-preview`, `.bulk-keyword-chip`, `.bulk-config-grid`.
+  - Question & Answer Bank Modal: `.question-bank-modal`, `.qbank-header`, `.qbank-search-bar`, `.qbank-filter-chips`, `.qbank-questions-list`, `.qbank-card`, `.qbank-question-label`, `.qbank-answer-input`, `.btn-save-answer`.
 
 ### 12. [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css)
 - **Scope**: Media queries (`<= 1024px`, `<= 768px`, `<= 480px`), off-canvas mobile drawer, compact headers, mobile cards.

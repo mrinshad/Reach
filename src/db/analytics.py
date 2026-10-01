@@ -116,6 +116,11 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
                 stats["with_emails"] = stats.get("email_outreach_total") or 0
             if "experience_cancelled_total" not in stats:
                 stats["experience_cancelled_total"] = 0
+            try:
+                from src.db.question_bank import get_unanswered_screening_questions_count
+                stats["question_bank_pending"] = get_unanswered_screening_questions_count()
+            except Exception:
+                stats["question_bank_pending"] = 0
             return stats
 
 
@@ -150,7 +155,11 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                     COUNT(*) FILTER (WHERE status = 'EMAIL_GENERATED') AS total_drafted,
                     COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected,
                     COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
-                    COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS pending_review
+                    COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS pending_review,
+                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY') AS easy_apply_total,
+                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
+                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_screened,
+                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
                 FROM posts;
             """)
             kpi_row = dict(cur.fetchone() or {})
@@ -163,20 +172,33 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
             email_rate = round((with_emails / total_scraped * 100), 1) if total_scraped > 0 else 0.0
             sent_conversion = round((total_sent / total_scraped * 100), 1) if total_scraped > 0 else 0.0
 
-            # 2. Daily Applied Timeline
+            try:
+                from src.services.question_bank_service import get_aggregated_question_bank
+                qbank = get_aggregated_question_bank()
+                total_questions = qbank.get("total_count", 0)
+                answered_questions = qbank.get("answered_count", 0)
+                pending_questions = qbank.get("pending_count", 0)
+            except Exception:
+                total_questions = 0
+                answered_questions = 0
+                pending_questions = 0
+
+            # 2. Daily Applied Timeline (Outreach Emails + Easy Apply Submissions)
             if cutoff_date:
                 cur.execute("""
-                    SELECT TO_CHAR(sent_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                    SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
                     FROM posts
-                    WHERE status = 'SENT' AND sent_at >= %s::date
+                    WHERE (status = 'SENT' OR status = 'APPLIED')
+                      AND COALESCE(sent_at, updated_at, created_at) >= %s::date
                     GROUP BY day
                     ORDER BY day ASC;
                 """, (cutoff_date,))
             else:
                 cur.execute("""
-                    SELECT TO_CHAR(sent_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                    SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
                     FROM posts
-                    WHERE status = 'SENT' AND sent_at IS NOT NULL
+                    WHERE (status = 'SENT' OR status = 'APPLIED')
+                      AND COALESCE(sent_at, updated_at, created_at) IS NOT NULL
                     GROUP BY day
                     ORDER BY day ASC;
                 """)
@@ -226,19 +248,27 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                 ORDER BY count DESC;
             """)
             status_colors = {
-                "SENT": "#10b981",            # Emerald
-                "EMAIL_GENERATED": "#6366f1", # Indigo
-                "DISCOVERED": "#0ea5e9",      # Sky blue
-                "GENERATING_EMAIL": "#f59e0b",# Amber
-                "REJECTED": "#f43f5e",        # Rose
-                "SELECTED": "#8b5cf6",        # Purple
+                "SENT": "#10b981",                   # Emerald
+                "APPLIED": "#10b981",                # Emerald (Easy Apply)
+                "EMAIL_GENERATED": "#6366f1",        # Indigo
+                "DISCOVERED": "#0ea5e9",             # Sky blue
+                "READY": "#38bdf8",                  # Light Sky
+                "GENERATING_EMAIL": "#f59e0b",       # Amber
+                "REQUIRES_QUESTIONNAIRE": "#f59e0b", # Amber
+                "REJECTED": "#f43f5e",               # Rose
+                "NOT_FOUND": "#64748b",              # Slate
+                "SELECTED": "#8b5cf6",               # Purple
             }
             status_labels = {
-                "SENT": "Applied / Sent",
-                "EMAIL_GENERATED": "Drafts Ready",
-                "DISCOVERED": "Discovered",
+                "SENT": "Email Outreach Sent",
+                "APPLIED": "Easy Apply Submitted",
+                "EMAIL_GENERATED": "AI Drafts Ready",
+                "DISCOVERED": "Discovered Leads",
+                "READY": "Ready to Apply",
                 "GENERATING_EMAIL": "Generating Draft",
+                "REQUIRES_QUESTIONNAIRE": "Screening Questionnaire",
                 "REJECTED": "Cancelled / Discarded",
+                "NOT_FOUND": "Closed / Not Found",
                 "SELECTED": "Selected",
             }
             raw_statuses = cur.fetchall()
@@ -311,6 +341,13 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                     "pending_review": kpi_row.get("pending_review") or 0,
                     "email_rate_pct": email_rate,
                     "sent_conversion_pct": sent_conversion,
+                    "easy_apply_total": kpi_row.get("easy_apply_total") or 0,
+                    "easy_apply_applied": kpi_row.get("easy_apply_applied") or 0,
+                    "easy_apply_screened": kpi_row.get("easy_apply_screened") or 0,
+                    "easy_apply_ready": kpi_row.get("easy_apply_ready") or 0,
+                    "question_bank_total": total_questions,
+                    "question_bank_answered": answered_questions,
+                    "question_bank_pending": pending_questions,
                 },
                 "timeline_applied": timeline_applied,
                 "timeline_scraped": timeline_scraped,

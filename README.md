@@ -85,7 +85,35 @@
 - **Scraping Sources Breakdown**: Relative performance of LinkedIn vs Infopark vs Manual entry vs Direct Outreach.
 - **Cancellation & Spam Analysis**: Visual frequency ranking of rejection reasons (unsuitable criteria, scams, irrelevant tech stack).
 - **Timeframe Filtering**: Instantly toggle between `7 Days`, `14 Days`, `30 Days`, and `All Time` with database-first aggregation.
-### 13. 🗺️ Hierarchical AGENTS.md Navigation & Modular Architecture
+- **Easy Apply & Question Bank KPI Integration**: Real-time counters and jump links for Easy Apply submissions, screening questionnaires, and question bank coverage.
+
+### 13. ⚡ LinkedIn Easy Apply Automation & Job Search
+- **Autonomous Job Crawling**: High-speed Playwright discovery targeting LinkedIn Easy Apply jobs with customizable search roles and geographic locations.
+- **Multi-Step Questionnaire Handling**: Automatically fills single-step and standard forms, navigates wizard steps, and attaches candidate resume PDFs.
+- **Screening Preserves Unhandled Questions**: Jobs requiring custom recruiter questions are automatically flagged as `REQUIRES_QUESTIONNAIRE` with full questions preserved in PostgreSQL for manual or assisted screening.
+
+### 14. 🛡️ Safe Human Pacing & Anti-Abuse Safeguards
+- **Realistic Human Pacing**: Configurable randomized delays (**45–75 seconds** default for *Safe*, **75–120s** for *Slow*, **30–45s** for *Standard*) between applications to protect account reputation.
+- **Fast-Pace Watchdog**: Automated watcher scans for LinkedIn's *"We noticed you're applying at a fast pace"* safeguard notices, immediately halting automation before account restrictions occur.
+- **Cooldown Banner & Live Countdown**: Topbar alert banner displays remaining pause duration with confirmed "Resume Now" override option.
+
+### 15. 📝 Centralized Screening Question & Answer Bank with DB Persistence & Auto-Fill
+- **Persistent Database Architecture**: Structured `screening_questions` table in PostgreSQL with normalized deduplication keys, categories (*Contact*, *Experience*, *Compensation*, *Notice*, *Profile*), status (`PENDING` vs `ANSWERED`), occurrence counters, and sample job associations.
+- **Automated Playwright Form Answering**: When applying to jobs with custom questionnaires (both during crawling and manual Easy Apply), Reach matches form controls (text/numeric inputs, radio fieldsets, select dropdowns, checkboxes) against saved DB answers and auto-fills them in real time without aborting.
+- **Dynamic Question Capture & Pending Alerts**: If unknown or unanswered questions are encountered during automation, they are automatically saved to the PostgreSQL `screening_questions` table with `status = 'PENDING'`, the job is flagged as `REQUIRES_QUESTIONNAIRE`, and a prominent warning banner and toolbar badge alert you that questions need your answers.
+- **Inline Modal Answering**: Answer questions directly inside the job's Screening Questionnaire modal (`#modalScreeningQuestions`) with 1-click database persistence, unlocking instant `🚀 Auto-Apply Now` submission.
+- **Categorized Management Modal**: Centralized toolbar supporting instant category filtering, search, occurrence counts, and batch answer saving (`GET /api/easy-apply/questions`, `POST /api/easy-apply/questions/answers`).
+
+### 16. 🔄 Configurable Crawler Cycles with Hover Tooltips
+- **Manual Discovery Depth**: Directly configure crawler cycles (range 1–50, default 8) in both the Easy Apply and Job Crawlers toolbar.
+- **Helpful Hover Tooltip**: An interactive `?` popover explains cycles clearly: *"A cycle is one scroll & search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs per cycle). Increase cycles to search deeper and find more jobs."*
+
+### 17. 📜 Activity Run Logs, Task Deletion & In-Place Retries
+- **Real-Time Terminal Log Viewer**: View full stdout/stderr streams for any background crawl, batch generation, or automation run with 1-click clipboard copy.
+- **Task Deletion**: Directly delete unretrievable, aborted, or unwanted task runs from PostgreSQL history (`DELETE /api/activity-logs/{id}`).
+- **In-Place Status Updates on Retry**: Retrying a stopped or failed task updates its existing status and terminal log output in-place, preventing duplicate clutter in the run history.
+
+### 18. 🗺️ Hierarchical AGENTS.md Navigation & Modular Architecture
 - **Zero-Search Agent Navigation**: Every subfolder across the repository (`src/api/`, `src/db/`, `src/services/`, `src/static/js/`, `src/static/css/`, `src/static/partials/`, `scripts/`, `docs/`) houses a dedicated `AGENTS.md` specifying component routing, responsibilities, and APIs.
 - **Clean Decoupled Subsystems**: Independent architecture separation across database storage (`src/db/`), automation workers (`src/services/`), REST API routers (`src/api/`), and modular vanilla client scripts (`src/static/js/`).
 - **100% Backward Compatibility**: Transparent shims and package re-exports ensure existing scripts, tests, and CLI runners function without modification.
@@ -480,6 +508,17 @@ reach-job-automation/
 | `GET` | `/api/settings` | Retrieve active application configuration (DB + config.json) |
 | `POST` | `/api/settings` | Update configuration (`chatgpt_url`, `search_query`, `headless_mode`) |
 | `POST` | `/api/settings/headless` | 1-click toggle between Headless Mode and Headed Mode |
+| `POST` | `/api/scrape/easy-apply` | Enqueue LinkedIn Easy Apply scraper with configurable `cycles` and `pacing` |
+| `POST` | `/api/scrape/easy-apply/batch` | Enqueue batch Easy Apply scraper across multiple roles and locations |
+| `POST` | `/api/easy-apply/{id}` | Enqueue autonomous Easy Apply submission for a specific job post |
+| `GET` | `/api/easy-apply/questions` | Aggregate deduplicated screening questions with persistent user answers |
+| `POST` | `/api/easy-apply/questions/answers` | Persist question answers in PostgreSQL `settings` (`screening_question_bank`) |
+| `GET` | `/api/easy-apply/rate-limit-status` | Check active safeguard pause cooldown state, message, and remaining timer |
+| `POST` | `/api/easy-apply/rate-limit-resume` | Clear safeguard pause and resume Easy Apply automation |
+| `GET` | `/api/activity-logs` | Retrieve chronological history of all scraper runs and background tasks |
+| `GET` | `/api/activity-logs/{id}` | Retrieve terminal stdout/stderr logs for a specific activity run |
+| `DELETE` | `/api/activity-logs/{id}` | Delete an unretrievable, stopped, or unwanted run record from history |
+| `POST` | `/api/activity-logs/{id}/retry` | In-place retry of a failed/stopped task (updates existing record without duplicates) |
 
 ---
 

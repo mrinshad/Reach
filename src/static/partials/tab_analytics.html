@@ -65,6 +65,56 @@
         </div>
       </div>
 
+      <div class="kpi-card glow-cyan clickable-kpi" onclick="jumpToEasyApply()"
+        title="Click to open LinkedIn Easy Apply Workspace">
+        <div class="kpi-header">
+          <span class="kpi-label">LinkedIn Easy Apply</span>
+          <span class="kpi-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
+            </svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
+          <div class="kpi-sublabel">Submitted Applications</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-green" id="kpiEasyApplyReady">0 ready</span>
+          <span class="kpi-note" id="kpiEasyApplyScreened">0 questionnaires</span>
+        </div>
+        <div class="kpi-jump-action">
+          <span>Open Easy Apply Workspace →</span>
+        </div>
+      </div>
+
+      <div class="kpi-card glow-amber clickable-kpi" onclick="jumpToQuestionBank()"
+        title="Click to view and answer centralized Screening Question Bank">
+        <div class="kpi-header">
+          <span class="kpi-label">Question & Answer Bank</span>
+          <span class="kpi-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
+          <div class="kpi-sublabel">Questions Collected</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-blue" id="kpiQuestionBankAnswered">0 answered</span>
+          <span class="kpi-note" id="kpiQuestionBankRate">0% saved answers</span>
+        </div>
+        <div class="kpi-jump-action">
+          <span>Manage Question Bank →</span>
+        </div>
+      </div>
+
       <div class="kpi-card glow-sky clickable-kpi" onclick="jumpToOutreachReady()"
         title="Click to view Leads with Direct Contact Emails">
         <div class="kpi-header">
@@ -449,6 +499,26 @@
         <div class="health-card-name">PostgreSQL DB</div>
         <div class="health-card-status" id="healthLabelDatabase">Checking...</div>
         <div class="health-card-note">Local Database</div>
+      </div>
+      <div class="health-card health-card-interactive" id="healthCardEasyApply" onclick="jumpToEasyApply()" title="Click to open Easy Apply & view safeguard cooldown / pacing status">
+        <div class="health-card-top">
+          <span class="health-card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <polyline points="9 12 11 14 15 10"></polyline>
+            </svg>
+          </span>
+          <span class="health-status-dot ok" id="healthEasyApply"></span>
+        </div>
+        <div class="health-card-name">Easy Apply Safeguard</div>
+        <div class="health-card-status" id="healthLabelEasyApply">Safe Pacing Active</div>
+        <button class="health-action-btn btn-subtle" id="healthBtnEasyApply" onclick="event.stopPropagation(); jumpToEasyApply()" title="Open Easy Apply Workspace">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+          <span id="healthBtnLabelEasyApply">Open</span>
+        </button>
       </div>
     </div>
   </div>

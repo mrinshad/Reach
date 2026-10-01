@@ -77,12 +77,29 @@
         <button class="btn btn-outline btn-easy-answers" id="btnOpenQuestionBankModal" onclick="openQuestionBankModal()" title="View and answer all screening questions collected across Easy Apply jobs">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
           <span>Question Bank (<span id="totalQuestionsCount">0</span>)</span>
+          <span class="qbank-btn-pending-badge hidden" id="qbankPendingBtnBadge">0 pending</span>
         </button>
         <button class="btn btn-outline btn-easy-import" id="btnOpenBulkSearchModal" onclick="openBulkSearchModal()" title="Import CSV or batch keywords to search multiple roles">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           <span>Bulk Search (CSV)</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Warning Banner: Unanswered Screening Questions Pending -->
+  <div class="qbank-pending-alert-banner hidden" id="qbankPendingAlertBanner">
+    <div class="qbank-pending-alert-content">
+      <span class="qbank-alert-icon">⚠️</span>
+      <div class="qbank-alert-text">
+        <strong class="qbank-alert-title"><span id="qbankPendingCountBanner">0</span> Screening Questions Need Your Answers</strong>
+        <p class="qbank-alert-sub">Jobs with custom questionnaires are waiting. Save your answers in the Question Bank so future applications submit automatically without manual intervention.</p>
+      </div>
+    </div>
+    <div class="qbank-pending-alert-actions">
+      <button class="btn btn-warning btn-sm" onclick="openQuestionBankModal('unanswered')" title="Answer pending screening questions">
+        <span>Answer Questions Now</span>
+      </button>
     </div>
   </div>
 

@@ -558,6 +558,9 @@
           <button class="btn btn-outline btn-sm" onclick="markScreeningAsReady()" title="Mark as ready to apply manually">
             <span>✓ Mark Screened</span>
           </button>
+          <button class="btn btn-success btn-sm hidden" id="btnScreeningApplyNow" onclick="applyToCurrentScreeningPost()" title="All questions answered! Auto-submit this job application now">
+            <span>🚀 Auto-Apply Now</span>
+          </button>
           <button class="btn btn-primary btn-sm" onclick="triggerScreeningRescan()" title="Re-crawl all form pages for questions" id="btnScreeningRescan">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>Re-Scan Questions</span>
@@ -595,7 +598,7 @@
             <button class="qbank-cat-pill" data-cat="experience" onclick="setQuestionBankCategory('experience', this)">Experience &amp; Skills</button>
             <button class="qbank-cat-pill" data-cat="compensation" onclick="setQuestionBankCategory('compensation', this)">Compensation / CTC</button>
             <button class="qbank-cat-pill" data-cat="notice" onclick="setQuestionBankCategory('notice', this)">Notice Period</button>
-            <button class="qbank-cat-pill" data-cat="unanswered" onclick="setQuestionBankCategory('unanswered', this)">Unanswered</button>
+            <button class="qbank-cat-pill" data-cat="unanswered" onclick="setQuestionBankCategory('unanswered', this)">Unanswered (<span id="qbankCountUnanswered">0</span>)</button>
           </div>
         </div>
 

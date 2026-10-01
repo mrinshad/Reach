@@ -200,6 +200,20 @@ function jumpToScreenedApplications() {
   applyFilters();
 }
 
+function jumpToEasyApply(statusFilter) {
+  switchTab('tabEasyApply');
+  if (statusFilter && typeof filterEasyApplyByStatus === 'function') {
+    filterEasyApplyByStatus(statusFilter);
+  }
+}
+
+function jumpToQuestionBank() {
+  switchTab('tabEasyApply');
+  if (typeof openQuestionBankModal === 'function') {
+    openQuestionBankModal();
+  }
+}
+
 // Global Bindings
 window.handleBrandLogoClick = handleBrandLogoClick;
 window.closeMobileSidebar = closeMobileSidebar;
@@ -212,3 +226,5 @@ window.jumpToOutreachReady = jumpToOutreachReady;
 window.jumpToReviewDrafts = jumpToReviewDrafts;
 window.jumpToDiscovered = jumpToDiscovered;
 window.jumpToScreenedApplications = jumpToScreenedApplications;
+window.jumpToEasyApply = jumpToEasyApply;
+window.jumpToQuestionBank = jumpToQuestionBank;

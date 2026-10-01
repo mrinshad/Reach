@@ -547,10 +547,13 @@ def api_trigger_single_easy_apply(post_id: str):
 
 
 @router.get("/easy-apply/questions")
-def api_get_easy_apply_questions():
+def api_get_easy_apply_questions(
+    category: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+):
     """Return aggregated, deduplicated screening questions and persistent answers from Question Bank."""
     from src.services.question_bank_service import get_aggregated_question_bank
-    return get_aggregated_question_bank()
+    return get_aggregated_question_bank(category=category, search=search)
 
 
 @router.post("/easy-apply/questions/answers")

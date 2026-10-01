@@ -15,6 +15,28 @@ async function fetchHealth() {
     updateHealthPill('healthGmail', state.health.gmail);
     updateHealthPill('healthDatabase', state.health.database);
 
+    // Update Easy Apply Safeguard Health Card
+    try {
+      const easyRes = await fetch('/api/easy-apply/rate-limit-status');
+      if (easyRes.ok) {
+        const easyData = await easyRes.json();
+        const dot = document.getElementById('healthEasyApply');
+        const label = document.getElementById('healthLabelEasyApply');
+        if (dot && label) {
+          dot.classList.remove('ok', 'warn', 'error');
+          if (easyData.paused) {
+            dot.classList.add('warn');
+            label.textContent = `Safeguard Active (${easyData.remaining_seconds}s)`;
+            label.style.color = '#fde68a';
+          } else {
+            dot.classList.add('ok');
+            label.textContent = 'Safe Pacing Active';
+            label.style.color = '#a7f3d0';
+          }
+        }
+      }
+    } catch (_) {}
+
     const banner = document.getElementById('systemAlertBanner');
     const msgEl = document.getElementById('systemAlertMessage');
     const actionsEl = document.getElementById('systemAlertActions');

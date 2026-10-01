@@ -123,6 +123,18 @@ def infer_question_category(question_text: str) -> str:
     return "profile"
 
 
+from src.db.question_bank import (
+    STANDARD_BASIC_QUESTIONS,
+    normalize_question_key,
+    infer_question_category,
+    save_screening_answers as db_save_screening_answers,
+    get_aggregated_question_bank as db_get_aggregated_question_bank,
+    get_unanswered_screening_questions_count,
+    lookup_answer_for_question,
+    upsert_screening_question,
+)
+
+
 def get_stored_answers() -> Dict[str, str]:
     """Retrieve saved answers from PostgreSQL settings."""
     raw = get_setting("screening_question_bank", "{}")
@@ -134,114 +146,17 @@ def get_stored_answers() -> Dict[str, str]:
 
 
 def save_stored_answers(answers: Dict[str, str]) -> Dict[str, Any]:
-    """Merge and persist updated answers into PostgreSQL settings."""
-    current = get_stored_answers()
-    current.update(answers)
-    set_setting("screening_question_bank", json.dumps(current))
-    return {
-        "saved_count": len(answers),
-        "total_saved": len(current),
-    }
+    """Persist updated answers into PostgreSQL screening_questions table and settings."""
+    return db_save_screening_answers(answers)
 
 
-def get_aggregated_question_bank() -> Dict[str, Any]:
-    """
-    Aggregate all unique screening questions across:
-    1. Standard profile questions (contact, compensation, notice, experience).
-    2. Dynamically extracted questions from all REQUIRES_QUESTIONNAIRE posts.
-    Merges with persistent answers from database settings.
-    """
-    saved_answers = get_stored_answers()
-    questions_map: Dict[str, Dict[str, Any]] = {}
+def get_aggregated_question_bank(
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Retrieve all screening questions from persistent PostgreSQL table."""
+    return db_get_aggregated_question_bank(category=category, search=search)
 
-    # 1. Seed standard profile questions
-    for std in STANDARD_BASIC_QUESTIONS:
-        norm_key = normalize_question_key(std["question"])
-        # Also check if user answered by id or norm_key
-        ans = saved_answers.get(std["id"]) or saved_answers.get(norm_key) or ""
-        questions_map[norm_key] = {
-            "id": std["id"],
-            "key": norm_key,
-            "question": std["question"],
-            "category": std["category"],
-            "default_placeholder": std.get("default_placeholder", ""),
-            "is_standard": True,
-            "occurrences": 1,
-            "sample_jobs": ["Standard Profile Question"],
-            "answer": ans,
-        }
-
-    # 2. Extract dynamic questions from database posts
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, author_headline, author_name, rejection_reason 
-        FROM posts 
-        WHERE status = 'REQUIRES_QUESTIONNAIRE' 
-          AND (category = 'EASY_APPLY' OR category IS NULL);
-    """)
-    screened_posts = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    ignored_generic = {
-        "requires screening questions",
-        "multi-step questionnaire (saved for screening)",
-        "multi-step form required manual input",
-        "exceeded step limit, saved for screening",
-    }
-
-    for pid, headline, company, reason in screened_posts:
-        if not reason:
-            continue
-        raw = reason
-        if raw.startswith("Questions:"):
-            raw = raw[len("Questions:"):].strip()
-
-        # Split multiple questions by semicolon
-        parts = [p.strip() for p in raw.split(";") if p.strip()]
-        job_label = f"{headline or 'Job'} @ {company or 'Company'}"
-
-        for p in parts:
-            cleaned = p.rstrip("*").strip()
-            if not cleaned or len(cleaned) < 3 or cleaned.lower() in ignored_generic:
-                continue
-
-            norm_key = normalize_question_key(cleaned)
-            if not norm_key:
-                continue
-
-            if norm_key in questions_map:
-                questions_map[norm_key]["occurrences"] += 1
-                if job_label not in questions_map[norm_key]["sample_jobs"] and len(questions_map[norm_key]["sample_jobs"]) < 4:
-                    questions_map[norm_key]["sample_jobs"].append(job_label)
-            else:
-                ans = saved_answers.get(norm_key) or ""
-                cat = infer_question_category(cleaned)
-                questions_map[norm_key] = {
-                    "id": f"q_{norm_key[:24]}",
-                    "key": norm_key,
-                    "question": cleaned,
-                    "category": cat,
-                    "default_placeholder": "Enter your answer...",
-                    "is_standard": False,
-                    "occurrences": 1,
-                    "sample_jobs": [job_label],
-                    "answer": ans,
-                }
-
-    # Sort questions: standard first, then by occurrences descending, then by question label
-    question_list = list(questions_map.values())
-    question_list.sort(key=lambda q: (not q["is_standard"], -q["occurrences"], q["question"]))
-
-    total_count = len(question_list)
-    answered_count = sum(1 for q in question_list if bool(q.get("answer", "").strip()))
-
-    return {
-        "total_count": total_count,
-        "answered_count": answered_count,
-        "questions": question_list,
-    }
 
 
 def get_rate_limit_safeguard_status() -> Dict[str, Any]:

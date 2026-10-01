@@ -20,6 +20,7 @@ from src.services.firefox_connector import launch_firefox_context
 from src.services.experience_extractor import extract_experience
 from src.db.posts import upsert_post, get_post_by_id, update_post_status
 from src.db.settings import get_setting
+from src.db.question_bank import lookup_answer_for_question, upsert_screening_question
 from src.config import load_config
 
 LINKEDIN_BASE = "https://www.linkedin.com"
@@ -288,9 +289,252 @@ def upload_or_select_resume(page: Page, resume_path: Optional[str]):
         pass
 
 
-def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], logger=print) -> Tuple[str, str]:
+def handle_screening_form_step(
+    page: Page,
+    job_label: Optional[str] = None,
+    logger=print
+) -> Dict[str, Any]:
+    """
+    Inspect the current step of the Easy Apply modal for questionnaire elements:
+    - Text and numeric inputs
+    - Dropdowns (<select>)
+    - Radio button groups (<fieldset>)
+    - Checkboxes
+
+    For each element:
+    1. Extracts the question prompt.
+    2. Checks if the field is already satisfied.
+    3. Looks up the answer in the DB Question Bank.
+    4. If answered, auto-fills / selects / checks the matching option.
+    5. If unanswered, records the question in PostgreSQL screening_questions
+       with status='PENDING' and flags it as pending.
+
+    Returns {
+        "can_proceed": bool,
+        "answered": List[str],
+        "unanswered": List[str]
+    }
+    """
+    answered = []
+    unanswered = []
+
+    # Standard items to skip as questions
+    standard_skip = [
+        "select language", "search", "photo", "terms", "agree", "privacy", "drag and drop", "upload resume"
+    ]
+    # Basic items already handled by fill_contact_info
+    basic_profile_terms = [
+        "first name", "last name", "phone", "mobile", "email", "resume",
+        "country code", "contact info", "headline", "summary"
+    ]
+
+    def is_skip(text: str) -> bool:
+        t = (text or "").lower().strip()
+        if not t or len(t) < 2:
+            return True
+        return any(s in t for s in standard_skip)
+
+    # 1. Inspect Fieldsets (Radio Groups)
+    try:
+        fieldsets = page.locator(".jobs-easy-apply-modal fieldset:visible, div[role='dialog'] fieldset:visible").all()
+        for fs in fieldsets:
+            try:
+                legend_el = fs.locator("legend").first
+                prompt = legend_el.inner_text().strip() if legend_el.count() > 0 else ""
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # Check if an option is already selected
+                checked_count = fs.locator("input[type='radio']:checked").count()
+                if checked_count > 0:
+                    continue
+
+                # Look up answer in DB
+                ans, qdict = lookup_answer_for_question(prompt)
+                if ans:
+                    # Match radio option
+                    options = fs.locator("label, .fb-radio-label, .artdeco-radio-button__label").all()
+                    clicked = False
+                    ans_low = ans.lower().strip()
+
+                    # Exact text match first
+                    for opt in options:
+                        opt_txt = opt.inner_text().strip().lower()
+                        if opt_txt == ans_low:
+                            opt.click()
+                            clicked = True
+                            break
+
+                    # Substring match if exact didn't match
+                    if not clicked:
+                        for opt in options:
+                            opt_txt = opt.inner_text().strip().lower()
+                            if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
+                                opt.click()
+                                clicked = True
+                                break
+
+                    # Keyword match for Yes / No
+                    if not clicked:
+                        if any(w in ans_low for w in ["yes", "true", "comfortable", "immediate", "open"]):
+                            yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
+                            if yes_opt.count() > 0:
+                                yes_opt.click()
+                                clicked = True
+                        elif any(w in ans_low for w in ["no", "false", "not comfortable"]):
+                            no_opt = fs.locator("label:has-text('No'), input[value='No']").first
+                            if no_opt.count() > 0:
+                                no_opt.click()
+                                clicked = True
+
+                    if clicked:
+                        answered.append(f"{prompt} -> {ans}")
+                        logger(f"  ✓ Radio selected for '{prompt}': {ans}")
+                        page.wait_for_timeout(300)
+                    else:
+                        # Radio options didn't match answer
+                        upsert_screening_question(prompt, sample_job=job_label)
+                        unanswered.append(prompt)
+                else:
+                    # Unanswered in DB: persist to DB as pending
+                    upsert_screening_question(prompt, sample_job=job_label)
+                    unanswered.append(prompt)
+            except Exception as e:
+                logger(f"  Notice inspecting fieldset: {e}")
+    except Exception:
+        pass
+
+    # 2. Inspect Dropdowns (<select>)
+    try:
+        selects = page.locator(".jobs-easy-apply-modal select:visible, div[role='dialog'] select:visible").all()
+        for sel in selects:
+            try:
+                # Find prompt
+                sel_id = sel.get_attribute("id") or ""
+                prompt = ""
+                if sel_id:
+                    lbl = page.locator(f"label[for='{sel_id}']").first
+                    if lbl.count() > 0:
+                        prompt = lbl.inner_text().strip()
+                if not prompt:
+                    prompt = sel.get_attribute("aria-label") or sel.locator("xpath=preceding::label[1]").inner_text().strip()
+
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # Check if already has a selected non-placeholder option
+                curr_val = sel.input_value()
+                curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
+                if curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]:
+                    continue
+
+                ans, qdict = lookup_answer_for_question(prompt)
+                if ans:
+                    ans_low = ans.lower().strip()
+                    options = sel.locator("option").all()
+                    matched_opt_val = None
+                    for opt in options:
+                        otxt = opt.inner_text().strip().lower()
+                        oval = (opt.get_attribute("value") or "").strip().lower()
+                        if otxt == ans_low or oval == ans_low or (otxt and otxt in ans_low):
+                            matched_opt_val = opt.get_attribute("value")
+                            break
+
+                    if matched_opt_val is not None:
+                        sel.select_option(value=matched_opt_val)
+                        answered.append(f"{prompt} -> {ans}")
+                        logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
+                        page.wait_for_timeout(300)
+                    else:
+                        upsert_screening_question(prompt, sample_job=job_label)
+                        unanswered.append(prompt)
+                else:
+                    upsert_screening_question(prompt, sample_job=job_label)
+                    unanswered.append(prompt)
+            except Exception as e:
+                logger(f"  Notice inspecting select: {e}")
+    except Exception:
+        pass
+
+    # 3. Inspect Text, Number, and Textarea Inputs
+    try:
+        inputs = page.locator(
+            ".jobs-easy-apply-modal input[type='text']:visible, "
+            ".jobs-easy-apply-modal input[type='number']:visible, "
+            ".jobs-easy-apply-modal input[type='tel']:visible, "
+            ".jobs-easy-apply-modal textarea:visible"
+        ).all()
+
+        for inp in inputs:
+            try:
+                # Skip radio or file inputs
+                itype = (inp.get_attribute("type") or "text").lower()
+                if itype in ["radio", "checkbox", "file", "hidden"]:
+                    continue
+
+                # Find prompt
+                inp_id = inp.get_attribute("id") or ""
+                prompt = ""
+                if inp_id:
+                    lbl = page.locator(f"label[for='{inp_id}']").first
+                    if lbl.count() > 0:
+                        prompt = lbl.inner_text().strip()
+                if not prompt:
+                    prompt = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
+
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # If this is basic contact (phone, city), fill_contact_info already handles it, but if still empty:
+                curr_val = inp.input_value().strip()
+                if curr_val:
+                    continue
+
+                ans, qdict = lookup_answer_for_question(prompt)
+                if ans:
+                    # Sanitize for number input
+                    if itype == "number" or "in days" in prompt.lower() or "how many" in prompt.lower() or "years" in prompt.lower():
+                        digits = re.findall(r"\d+", ans)
+                        fill_val = digits[0] if digits else ans
+                    else:
+                        fill_val = ans
+
+                    inp.click()
+                    inp.fill("")
+                    inp.press_sequentially(fill_val, delay=20)
+                    answered.append(f"{prompt} -> {fill_val}")
+                    logger(f"  ✓ Filled input for '{prompt}': {fill_val}")
+                    page.wait_for_timeout(300)
+                else:
+                    # Check if it's a basic contact term that was skipped
+                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+                    if not is_basic:
+                        upsert_screening_question(prompt, sample_job=job_label)
+                        unanswered.append(prompt)
+            except Exception as e:
+                logger(f"  Notice inspecting input: {e}")
+    except Exception:
+        pass
+
+    return {
+        "can_proceed": len(unanswered) == 0,
+        "answered": answered,
+        "unanswered": unanswered,
+    }
+
+
+def execute_easy_apply(
+    page: Page,
+    job_url: str,
+    resume_path: Optional[str],
+    logger=print,
+    job_label: Optional[str] = None
+) -> Tuple[str, str]:
     """
     Attempt to submit an Easy Apply application for a given job URL.
+    Auto-fills screening questions from DB Question Bank.
+    If unhandled or unanswered questions appear, saves them to DB screening_questions
+    with status='PENDING' and defers the post for screening.
     Returns (status, detail_message) where status is:
       - 'APPLIED': Successfully submitted
       - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
@@ -380,20 +624,23 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
             except Exception:
                 page.wait_for_timeout(1500)
 
-            inspection = inspect_easy_apply_modal(page)
-
-            # If custom questionnaire questions detected:
-            if inspection["requires_questionnaire"]:
-                all_q = inspection["questions"] or inspection["custom_questions"]
-                q_summary = "; ".join(all_q)
-                logger(f"  📋 Custom questionnaire detected ({q_summary}). Saving link for screening...")
-                dismiss_easy_apply_modal(page)
-                return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
-
+            # Auto-fill standard contact info
             fill_contact_info(page)
             upload_or_select_resume(page, resume_path)
 
-            # Natural human pause before action
+            # Check and auto-fill custom screening questions on this step
+            screening_result = handle_screening_form_step(page, job_label=job_label, logger=logger)
+            if not screening_result["can_proceed"]:
+                unanswered_q = screening_result["unanswered"]
+                q_summary = "; ".join(unanswered_q)
+                logger(f"  📋 Step {step}: Unanswered screening questions ({q_summary}). Saved to DB Question Bank.")
+                dismiss_easy_apply_modal(page)
+                return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
+            elif screening_result.get("answered"):
+                ans_list = screening_result["answered"]
+                logger(f"  ✓ Step {step}: Auto-filled {len(ans_list)} screening question(s) from Question Bank")
+
+            # Natural human pause before next action
             page.wait_for_timeout(random.randint(1200, 2200))
 
             # Check for Submit application button
@@ -467,6 +714,9 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
             # If neither Next, Review, nor Submit is visible, inspect if stuck
             inspection = inspect_easy_apply_modal(page)
             all_q = inspection["questions"] or inspection["custom_questions"]
+            if all_q:
+                for q in all_q:
+                    upsert_screening_question(q, sample_job=job_label)
             q_summary = "; ".join(all_q) if all_q else "Multi-step form required manual input"
             logger(f"  Step {step}: Unhandled form state, saving for screening ({q_summary}).")
             dismiss_easy_apply_modal(page)
@@ -474,6 +724,9 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
 
         inspection = inspect_easy_apply_modal(page)
         all_q = inspection["questions"] or inspection["custom_questions"]
+        if all_q:
+            for q in all_q:
+                upsert_screening_question(q, sample_job=job_label)
         q_summary = "; ".join(all_q) if all_q else "Exceeded step limit, saved for screening"
         dismiss_easy_apply_modal(page)
         return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
@@ -632,7 +885,9 @@ def run_easy_apply_crawler(
             discovered_count += 1
 
             # Attempt Easy Apply
-            status, detail = execute_easy_apply(page, job_url, resume_path, logger=logger)
+            status, detail = execute_easy_apply(
+                page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+            )
 
             if status == "APPLIED":
                 update_post_status(post_id, "APPLIED")
@@ -720,7 +975,9 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
         )
         page = context.pages[0] if context.pages else context.new_page()
 
-        status, detail = execute_easy_apply(page, job_url, resume_path, logger=logger)
+        status, detail = execute_easy_apply(
+            page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+        )
         context.close()
 
         if status == "APPLIED":

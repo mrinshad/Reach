@@ -63,6 +63,18 @@ from src.db.activity_logs import (
     get_activity_log_counts,
 )
 
+from src.db.question_bank import (
+    init_question_bank,
+    upsert_screening_question,
+    save_screening_answers,
+    get_aggregated_question_bank,
+    get_unanswered_screening_questions_count,
+    lookup_answer_for_question,
+    normalize_question_key,
+    infer_question_category,
+    STANDARD_BASIC_QUESTIONS,
+)
+
 __all__ = [
     "DEFAULT_DB_URL",
     "get_connection",
@@ -107,4 +119,13 @@ __all__ = [
     "reset_activity_log_for_retry",
     "cleanup_orphaned_running_logs",
     "get_activity_log_counts",
+    "init_question_bank",
+    "upsert_screening_question",
+    "save_screening_answers",
+    "get_aggregated_question_bank",
+    "get_unanswered_screening_questions_count",
+    "lookup_answer_for_question",
+    "normalize_question_key",
+    "infer_question_category",
+    "STANDARD_BASIC_QUESTIONS",
 ]
