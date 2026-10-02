@@ -30,6 +30,7 @@ from src.services.automation_tasks import (
     run_linkedin_scraper,
     run_linkedin_easy_apply_scraper,
     run_single_easy_apply,
+    run_batch_easy_apply,
     get_registered_scrapers,
     run_scraper_by_source,
     run_interactive_login,
@@ -40,6 +41,7 @@ from .models import (
     DirectOutreachPayload,
     ScrapePayload,
     EasyApplyBatchScrapePayload,
+    EasyApplyBatchApplyPayload,
     LinkedInBatchScrapePayload,
     BatchScrapePayload,
     ReexecuteBatchPayload,
@@ -529,6 +531,79 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
         "message": f"Queued {len(queued)} Easy Apply searches in FIFO queue (starting at Position #{first_pos}).",
         "count": len(queued),
         "tasks": queued,
+    }
+
+
+@router.post("/easy-apply/batch")
+def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
+    """
+    Enqueue sequential batch Easy Apply submissions for either:
+    1. A specified list of post IDs (selected from the UI).
+    2. All posts currently in REQUIRES_QUESTIONNAIRE status (rerun screened applications).
+    """
+    target_ids: List[str] = []
+
+    if payload.all_screened:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE'
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No screened applications found in REQUIRES_QUESTIONNAIRE status."
+            )
+    elif payload.post_ids:
+        target_ids = [p.strip() for p in payload.post_ids if p and p.strip()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid post IDs provided for batch Easy Apply."
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Must specify either post_ids or all_screened=True for batch Easy Apply."
+        )
+
+    count = len(target_ids)
+    pacing = payload.pacing or "safe"
+    task_name = (
+        f"Batch Easy Apply — Rerun Screened ({count} applications)"
+        if payload.all_screened
+        else f"Batch Easy Apply ({count} applications)"
+    )
+    snippet = f"{count} screened jobs" if payload.all_screened else f"{count} jobs"
+
+    res = task_manager.enqueue_task(
+        task_type="easy_apply_batch",
+        task_name=task_name,
+        short_name="Batch Easy Apply",
+        snippet=snippet,
+        runner_func=run_batch_easy_apply,
+        args=(target_ids, pacing),
+        metadata={
+            "count": count,
+            "all_screened": payload.all_screened,
+            "pacing": pacing,
+            "post_ids": target_ids[:50],
+        },
+    )
+    msg = (
+        f"Queued batch Easy Apply for {count} jobs (Position #{res['position']})"
+        if res["queued"]
+        else f"Batch Easy Apply started for {count} jobs."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "count": count,
+        "all_screened": payload.all_screened,
+        **res,
     }
 
 

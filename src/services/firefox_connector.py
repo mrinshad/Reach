@@ -170,6 +170,26 @@ def cleanup_stale_profile_locks(profile_dir: str, force: bool = False):
                 pass
 
 
+def get_desktop_firefox_user_agent() -> str:
+    """Retrieve or construct the matching User-Agent string for desktop Firefox."""
+    profile_path = find_desktop_firefox_profile()
+    version = "157.0"
+    if profile_path:
+        compat_file = os.path.join(profile_path, "compatibility.ini")
+        if os.path.exists(compat_file):
+            try:
+                with open(compat_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("LastVersion="):
+                            raw_ver = line.split("=")[1].strip().split("_")[0]
+                            if raw_ver:
+                                version = raw_ver
+                            break
+            except Exception:
+                pass
+    return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:{version}) Gecko/20100101 Firefox/{version}"
+
+
 def get_headless_mode() -> bool:
     """Return whether headless mode is enabled in user configuration."""
     try:
@@ -215,14 +235,23 @@ def launch_firefox_context(
 
     cleanup_stale_profile_locks(profile_dir)
 
+    ua = get_desktop_firefox_user_agent()
+    firefox_prefs = {
+        "dom.webdriver.enabled": False,
+        "useAutomationExtension": False,
+    }
+
     print(f"Launching Firefox persistent context...")
     print(f"  Profile directory: {profile_dir}")
     print(f"  Headless: {headless}")
+    print(f"  User-Agent: {ua}")
 
     try:
         context = playwright.firefox.launch_persistent_context(
             user_data_dir=profile_dir,
             headless=headless,
+            user_agent=ua,
+            firefox_user_prefs=firefox_prefs,
             viewport={"width": 1280, "height": 800},
         )
     except Exception as e:
@@ -234,10 +263,22 @@ def launch_firefox_context(
             context = playwright.firefox.launch_persistent_context(
                 user_data_dir=profile_dir,
                 headless=headless,
+                user_agent=ua,
+                firefox_user_prefs=firefox_prefs,
                 viewport={"width": 1280, "height": 800},
             )
         else:
             raise
+
+    # Mask navigator.webdriver in all newly spawned pages and iframes
+    try:
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+    except Exception:
+        pass
 
     if sync_cookies_domains:
         desktop_cookies = extract_desktop_cookies(sync_cookies_domains)

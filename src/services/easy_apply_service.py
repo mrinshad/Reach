@@ -539,12 +539,7 @@ def handle_screening_form_step(
                     except Exception:
                         pass
 
-                # Check if an option is already selected
-                checked_count = fs.locator("input[type='radio']:checked").count()
-                if checked_count > 0:
-                    continue
-
-                # Look up answer in DB
+                # Check DB Question Bank for answer first
                 ans, qdict = lookup_answer_for_question(prompt)
                 is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
 
@@ -561,7 +556,8 @@ def handle_screening_form_step(
                     for opt in radio_labels:
                         opt_txt = opt.inner_text().strip().lower()
                         if opt_txt == ans_low:
-                            opt.click()
+                            if opt.locator("input[type='radio']:checked").count() == 0:
+                                opt.click()
                             clicked = True
                             break
 
@@ -570,7 +566,8 @@ def handle_screening_form_step(
                         for opt in radio_labels:
                             opt_txt = opt.inner_text().strip().lower()
                             if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
-                                opt.click()
+                                if opt.locator("input[type='radio']:checked").count() == 0:
+                                    opt.click()
                                 clicked = True
                                 break
 
@@ -595,22 +592,26 @@ def handle_screening_form_step(
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
-                    upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
-                    unanswered.append(prompt)
+                    # No answer in Question Bank
+                    checked_count = fs.locator("input[type='radio']:checked").count()
+                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+                    if not is_basic:
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
 
-                # If still not clicked and dummy mode enabled to advance step
-                if not clicked and fill_dummies_to_advance:
-                    yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
-                    if yes_opt.count() > 0:
-                        yes_opt.click()
-                        clicked = True
-                    elif radio_labels:
-                        radio_labels[0].click()
-                        clicked = True
-                    if clicked:
-                        filled_placeholders.append(prompt)
-                        logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt}' to advance step")
-                        page.wait_for_timeout(250)
+                    # If still not clicked and dummy mode enabled to advance step
+                    if checked_count == 0 and fill_dummies_to_advance:
+                        yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
+                        if yes_opt.count() > 0:
+                            yes_opt.click()
+                            clicked = True
+                        elif radio_labels:
+                            radio_labels[0].click()
+                            clicked = True
+                        if clicked:
+                            filled_placeholders.append(prompt)
+                            logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt}' to advance step")
+                            page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting fieldset: {e}")
     except Exception:
@@ -645,12 +646,7 @@ def handle_screening_form_step(
                     except Exception:
                         pass
 
-                # Check if already has a selected non-placeholder option
-                curr_val = sel.input_value()
-                curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
-                if curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]:
-                    continue
-
+                # Check DB Question Bank for answer first
                 ans, qdict = lookup_answer_for_question(prompt)
                 is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
 
@@ -670,7 +666,8 @@ def handle_screening_form_step(
                             break
 
                     if matched_opt_val is not None:
-                        sel.select_option(value=matched_opt_val)
+                        if sel.input_value() != matched_opt_val:
+                            sel.select_option(value=matched_opt_val)
                         answered.append(f"{prompt} -> {ans}")
                         logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
                         page.wait_for_timeout(250)
@@ -678,26 +675,33 @@ def handle_screening_form_step(
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
-                    upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
-                    unanswered.append(prompt)
+                    # No answer in Question Bank
+                    curr_val = sel.input_value()
+                    curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
+                    has_selection = curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]
+                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
 
-                # Fallback to advance step if unselected
-                if matched_opt_val is None and fill_dummies_to_advance:
-                    fallback_val = None
-                    for opt in sel_opts:
-                        otxt = opt.inner_text().strip().lower()
-                        oval = (opt.get_attribute("value") or "").strip()
-                        if oval and otxt not in ["", "select", "select an option", "please select"]:
-                            if "yes" in otxt:
-                                fallback_val = oval
-                                break
-                            if fallback_val is None:
-                                fallback_val = oval
-                    if fallback_val is not None:
-                        sel.select_option(value=fallback_val)
-                        filled_placeholders.append(prompt)
-                        logger(f"  ℹ️ Selected compliant placeholder dropdown option for '{prompt}' to advance step")
-                        page.wait_for_timeout(250)
+                    if not is_basic:
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
+                    # Fallback to advance step if unselected
+                    if not has_selection and fill_dummies_to_advance:
+                        fallback_val = None
+                        for opt in sel_opts:
+                            otxt = opt.inner_text().strip().lower()
+                            oval = (opt.get_attribute("value") or "").strip()
+                            if oval and otxt not in ["", "select", "select an option", "please select"]:
+                                if "yes" in otxt:
+                                    fallback_val = oval
+                                    break
+                                if fallback_val is None:
+                                    fallback_val = oval
+                        if fallback_val is not None:
+                            sel.select_option(value=fallback_val)
+                            filled_placeholders.append(prompt)
+                            logger(f"  ℹ️ Selected compliant placeholder dropdown option for '{prompt}' to advance step")
+                            page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting select: {e}")
     except Exception:
@@ -736,23 +740,13 @@ def handle_screening_form_step(
                 max_attr = inp.get_attribute("max") or ""
                 pattern = inp.get_attribute("pattern") or ""
 
-                curr_val = inp.input_value().strip()
-                if curr_val:
-                    # Check if curr_val exceeds limit or has inline error
-                    if maxlength and len(curr_val) > int(maxlength):
-                        # Fix existing overflow
-                        clean_val = curr_val[:int(maxlength)]
-                        inp.click()
-                        inp.fill("")
-                        inp.press_sequentially(clean_val, delay=15)
-                    continue
-
                 ans, qdict = lookup_answer_for_question(prompt)
                 is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
 
                 if is_explicit_empty:
-                    inp.click()
-                    inp.fill("")
+                    if inp.input_value().strip():
+                        inp.click()
+                        inp.fill("")
                     answered.append(f"{prompt} -> (empty)")
                     logger(f"  ✓ Left input empty for '{prompt}' as configured")
                     page.wait_for_timeout(150)
@@ -769,19 +763,30 @@ def handle_screening_form_step(
                         pattern=pattern,
                         is_dummy_mode=False
                     )
-                    inp.click()
-                    inp.fill("")
-                    inp.press_sequentially(fill_val, delay=15)
+                    curr_val = inp.input_value().strip()
+                    if curr_val != fill_val:
+                        inp.click()
+                        inp.fill("")
+                        inp.press_sequentially(fill_val, delay=15)
                     answered.append(f"{prompt} -> {fill_val}")
                     logger(f"  ✓ Filled input for '{prompt}': {fill_val}")
                     page.wait_for_timeout(200)
                 else:
+                    curr_val = inp.input_value().strip()
                     is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+
+                    # Fix existing overflow if any
+                    if curr_val and maxlength and len(curr_val) > int(maxlength):
+                        clean_val = curr_val[:int(maxlength)]
+                        inp.click()
+                        inp.fill("")
+                        inp.press_sequentially(clean_val, delay=15)
+
                     if not is_basic:
                         upsert_screening_question(prompt, sample_job=job_label)
                         unanswered.append(prompt)
 
-                    if fill_dummies_to_advance:
+                    if not curr_val and fill_dummies_to_advance:
                         fill_val = resolve_field_value(
                             prompt,
                             raw_answer=None,
@@ -1304,7 +1309,7 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
         context.close()
 
         if status == "APPLIED":
-            update_post_status(post_id, "APPLIED")
+            update_post_status(post_id, "APPLIED", rejection_reason="")
             logger(f"✓ Application successfully submitted for {title} @ {company}")
             return {"success": True, "status": "APPLIED", "detail": detail}
         elif status == "RATE_LIMITED":
@@ -1320,4 +1325,131 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
         else:
             logger(f"ℹ️ Easy Apply did not submit: {detail}")
             return {"success": False, "status": status, "detail": detail}
+
+
+def apply_to_batch_easy_apply_posts(
+    post_ids: List[str],
+    pacing: str = "safe",
+    task_manager: Optional[Any] = None
+) -> Dict[str, Any]:
+    """
+    Sequentially run Easy Apply submissions for a batch of posts using a single persistent Firefox session.
+    Auto-fills screening questions from Question Bank, submits applications when all questions are answered,
+    and paces requests with safe human delays.
+    """
+    total = len(post_ids)
+    if total == 0:
+        return {"success": True, "total": 0, "applied": 0, "questionnaire": 0, "failed": 0}
+
+    logger = task_manager.log if task_manager else print
+
+    if is_cooldown_active():
+        msg = "LinkedIn Easy Apply is currently paused due to rate-limit safeguard cooldown."
+        logger(f"🚨 {msg}")
+        if task_manager:
+            task_manager.fail_task(msg)
+        return {"success": False, "status": "RATE_LIMITED", "detail": msg}
+
+    config = load_config()
+    resume_path = config.get("resume_path", "")
+    headless = config.get("headless", True)
+
+    applied_count = 0
+    questionnaire_count = 0
+    failed_count = 0
+
+    if task_manager:
+        task_manager.start_task(f"Batch Easy Apply ({total} jobs)", total_items=total)
+
+    logger("=" * 60)
+    logger(f"🚀 Launching Batch Easy Apply for {total} job(s) in Firefox (pacing={pacing})")
+    logger("=" * 60)
+
+    with sync_playwright() as playwright:
+        logger("Launching Firefox persistent context...")
+        context = launch_firefox_context(
+            playwright,
+            headless=headless,
+            sync_cookies_domains=["linkedin.com"],
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+
+        for idx, post_id in enumerate(post_ids, 1):
+            if task_manager and task_manager.is_cancel_requested():
+                logger("🛑 Batch Easy Apply stopped upon user request.")
+                break
+
+            post = get_post_by_id(post_id)
+            if not post:
+                logger(f"⚠️ Post '{post_id}' not found in database, skipping.")
+                failed_count += 1
+                continue
+
+            job_url = post.get("post_url")
+            title = post.get("author_headline") or f"Job #{post_id[:8]}"
+            company = post.get("author_name") or "Company"
+
+            if not job_url:
+                logger(f"⚠️ Post '{post_id}' does not have a valid LinkedIn URL, skipping.")
+                failed_count += 1
+                continue
+
+            logger("\n" + "-" * 50)
+            logger(f"[{idx}/{total}] Processing Easy Apply: {title} @ {company}")
+            logger(f"  URL: {job_url}")
+
+            status, detail = execute_easy_apply(
+                page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+            )
+
+            if status == "APPLIED":
+                update_post_status(post_id, "APPLIED", rejection_reason="")
+                applied_count += 1
+                logger(f"  🎉 Application successfully submitted! Status -> APPLIED")
+            elif status == "RATE_LIMITED":
+                from src.db.settings import set_setting
+                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
+                set_setting("easy_apply_safeguard_reason", detail)
+                logger(f"  🚨 Safeguard rate-limit triggered: {detail}")
+                if task_manager:
+                    task_manager.fail_task(detail)
+                break
+            elif status == "REQUIRES_QUESTIONNAIRE":
+                update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
+                questionnaire_count += 1
+                logger(f"  📌 Saved for screening under REQUIRES_QUESTIONNAIRE: {detail}")
+            else:
+                failed_count += 1
+                logger(f"  ℹ️ Application did not submit: {detail}")
+
+            if task_manager:
+                task_manager.update_progress(idx)
+
+            # Safe human delay between applications
+            if idx < total:
+                cancel_fn = task_manager.is_cancel_requested if task_manager else None
+                if pacing == "slow":
+                    logger("  ⏳ Extra slow pacing safeguard: Pausing 75–120s before next job...")
+                    human_sleep(75.0, 120.0, cancel_check=cancel_fn)
+                elif pacing == "standard":
+                    logger("  ⏳ Moderate pacing: Pausing 25–40s before next job...")
+                    human_sleep(25.0, 40.0, cancel_check=cancel_fn)
+                else:  # safe (default)
+                    logger("  ⏳ Safe human pacing safeguard: Pausing 40–70s before next job...")
+                    human_sleep(40.0, 70.0, cancel_check=cancel_fn)
+
+        context.close()
+
+    logger("\n" + "=" * 60)
+    logger(f"✨ Batch Easy Apply completed: {applied_count} submitted, {questionnaire_count} need questionnaire answers, {failed_count} skipped/failed.")
+    logger("=" * 60)
+
+    return {
+        "success": True,
+        "total": total,
+        "applied": applied_count,
+        "questionnaire": questionnaire_count,
+        "failed": failed_count,
+    }
+
 

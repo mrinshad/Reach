@@ -127,6 +127,13 @@ class CreateQuestionPayload(BaseModel):
     options: Optional[List[str]] = None
 
 
+class EasyApplyBatchApplyPayload(BaseModel):
+    post_ids: Optional[List[str]] = None
+    all_screened: bool = False
+    pacing: Optional[str] = "safe"
+
+
+
 
 MAJOR_JOB_HUBS = [
     "San Francisco", "Seattle", "New York", "Boston", "Austin", "Los Angeles",

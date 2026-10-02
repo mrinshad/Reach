@@ -1289,6 +1289,12 @@ def run_single_easy_apply(post_id: str):
     apply_to_single_easy_apply_post(post_id, task_manager=task_manager)
 
 
+def run_batch_easy_apply(post_ids: List[str], pacing: str = "safe"):
+    """Run sequential batch Easy Apply submissions in Firefox using Question Bank answers."""
+    from src.services.easy_apply_service import apply_to_batch_easy_apply_posts
+    return apply_to_batch_easy_apply_posts(post_ids, pacing=pacing, task_manager=task_manager)
+
+
 SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
     "linkedin": {
         "id": "linkedin",

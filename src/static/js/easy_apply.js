@@ -153,6 +153,9 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const countScreening = document.getElementById('countPillScreening');
   if (countScreening) countScreening.textContent = questionnaire;
 
+  const rerunBtnCount = document.getElementById('countRerunScreenedBtn');
+  if (rerunBtnCount) rerunBtnCount.textContent = questionnaire;
+
   const countApplied = document.getElementById('countPillApplied');
   if (countApplied) countApplied.textContent = applied;
 
@@ -283,7 +286,10 @@ function renderEasyApplyTable() {
     if (post.status === 'APPLIED') {
       actionBtn = `<span class="tag-easy-status applied" style="opacity: 0.9; font-size: 0.68rem; cursor: default;">✓ Submitted</span>`;
     } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
-      actionBtn = `<button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>`;
+      actionBtn = `
+        <button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Rerun Easy Apply with saved Question Bank answers"><span>⚡ Rerun</span></button>
+        <button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>
+      `;
     } else if (post.status === 'NOT_FOUND') {
       actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;">🚫 Closed</span>`;
     }
@@ -607,21 +613,70 @@ async function batchApplySelectedEasyJobs() {
 
   const confirmed = await showConfirm(
     'Batch Easy Apply',
-    `Queue automated Easy Apply for ${ids.length} selected jobs sequentially?`,
+    `Queue automated Easy Apply for ${ids.length} selected jobs sequentially?\n\nSaved answers from your Question Bank will be automatically filled, and applications will submit directly once all questions are answered.`,
     { confirmText: 'Queue Applications' }
   );
   if (!confirmed) return;
 
-  for (const id of ids) {
-    try {
-      await fetch(`/api/easy-apply/${id}`, { method: 'POST' });
-    } catch (_) {}
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+
+  try {
+    const res = await fetch('/api/easy-apply/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, pacing: pacing }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      selectedEasyJobIds.clear();
+      showToast(data.message || `Queued batch Easy Apply for ${ids.length} jobs!`, 'info');
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      fetchEasyApplyPosts();
+    } else {
+      const err = await res.json();
+      showAlert('Batch Error', err.detail || 'Failed to enqueue batch Easy Apply.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function triggerRerunScreenedApplications() {
+  const screenedCount = easyApplyPosts.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
+  if (screenedCount === 0) {
+    showAlert('No Screened Jobs', 'There are currently no applications requiring questionnaire screening in your queue.');
+    return;
   }
 
-  selectedEasyJobIds.clear();
-  showToast(`Queued ${ids.length} Easy Apply tasks!`, 'info');
-  if (typeof startTaskPolling === 'function') startTaskPolling();
-  fetchEasyApplyPosts();
+  const confirmed = await showConfirm(
+    'Rerun Screened Applications',
+    `Re-run Easy Apply for all ${screenedCount} screened applications sequentially?\n\nThe automated browser will navigate each role and automatically submit applications using the saved answers in your Question Bank.`,
+    { confirmText: `Rerun All (${screenedCount})` }
+  );
+  if (!confirmed) return;
+
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+
+  try {
+    const res = await fetch('/api/easy-apply/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all_screened: true, pacing: pacing }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(data.message || `Enqueued batch rerun for ${screenedCount} screened jobs!`, 'success');
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      fetchEasyApplyPosts();
+    } else {
+      const err = await res.json();
+      showAlert('Cannot Start Rerun', err.detail || 'Failed to start batch rerun.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
 }
 
 // Status Transitions & Interactivity — Fixed-Position Smart Dropdown
@@ -1052,7 +1107,7 @@ async function applyToCurrentScreeningPost() {
   if (!activeScreeningPost) return;
   const postId = activeScreeningPost.id;
   closeScreeningModal();
-  await applyToSingleEasyPost(postId);
+  await triggerSingleEasyApply(postId);
 }
 
 function openScreeningFromDetails() {
@@ -1670,6 +1725,7 @@ window.filterQuestionBankList = filterQuestionBankList;
 window.saveQuestionBankAnswers = saveQuestionBankAnswers;
 window.saveSingleInlineAnswer = saveSingleInlineAnswer;
 window.applyToCurrentScreeningPost = applyToCurrentScreeningPost;
+window.triggerRerunScreenedApplications = triggerRerunScreenedApplications;
 window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
 window.checkRateLimitSafeguard = checkRateLimitSafeguard;
 

@@ -244,6 +244,14 @@
           oninput="handleEasyTableSearch(this.value)" />
       </div>
 
+      <!-- Rerun Screened Applications Button -->
+      <button class="btn-easy-rerun" id="btnRerunScreenedEasyApply" onclick="triggerRerunScreenedApplications()" title="Re-run all screened applications using saved Question Bank answers">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+        <span>Rerun Screened (<span id="countRerunScreenedBtn">0</span>)</span>
+      </button>
+
       <!-- Clear Filters Button -->
       <button class="btn-clear-filters hidden" id="btnClearEasyFilters" onclick="clearEasyApplyFilters()" title="Reset all filters, date ranges, and search back to All">
         <span>✕ Clear</span>

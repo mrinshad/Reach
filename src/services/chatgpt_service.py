@@ -32,6 +32,25 @@ def get_default_chatgpt_url() -> str:
     return "https://chatgpt.com"
 
 
+PROMPT_BOX_SELECTOR = (
+    "#prompt-textarea, "
+    "div[data-composer-markdown], "
+    "form[data-chatgpt-composer] div.ProseMirror, "
+    "div.ProseMirror[aria-label*='ChatGPT'], "
+    "form[data-chatgpt-composer] div[contenteditable='true']"
+)
+
+SEND_BTN_SELECTOR = (
+    "button[aria-label='Send'], "
+    "form[data-chatgpt-composer] button[type='submit'], "
+    "button[data-testid='send-button'], "
+    "form button[aria-label='Send prompt'], "
+    "form button[data-testid='send-button'], "
+    "form button[data-testid='fruitjuice-send-button'], "
+    "form button[type='submit']"
+)
+
+
 def navigate_to_conversation(page: Page, url: Optional[str] = None, timeout: int = 30000):
     """Navigate to the dedicated custom GPT conversation and ensure ready state."""
     target_url = url or get_default_chatgpt_url()
@@ -48,8 +67,17 @@ def navigate_to_conversation(page: Page, url: Optional[str] = None, timeout: int
     if login_btn.count() > 0 and login_btn.first.is_visible():
         raise RuntimeError("Not logged in to ChatGPT! Please log in manually in the Firefox window.")
 
-    # Wait for prompt textarea
-    page.wait_for_selector("#prompt-textarea", timeout=20000)
+    # Dismiss any transient retry prompts or banners if present
+    retry_btn = page.locator("button:has-text('Retry')")
+    if retry_btn.count() > 0 and retry_btn.last.is_visible():
+        try:
+            retry_btn.last.click(timeout=1500)
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+    # Wait for prompt box (supports new ChatGPT ProseMirror composer and legacy #prompt-textarea)
+    page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=20000)
     print("✓ ChatGPT conversation loaded and prompt box ready.")
 
 
@@ -78,6 +106,7 @@ def is_unsuitable_response(raw_text: str) -> bool:
 def parse_email_response(raw_text: str) -> Tuple[str, str]:
     """
     Parse a ChatGPT generated application response into (subject, body).
+    Supports both standard Markdown responses and Canvas writing block formatting.
     """
     if not raw_text:
         return "", ""
@@ -96,20 +125,42 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
         flags=re.IGNORECASE,
     ).strip()
 
-    lines = clean_text.split("\n")
+    # Strip Canvas UI boilerplate headers
+    clean_text = re.sub(r"^Connect email(?:\s+[^\n]+)?\n+", "", clean_text, flags=re.IGNORECASE).strip()
+    clean_text = re.sub(r"^Recipients\s*\n+", "", clean_text, flags=re.IGNORECASE).strip()
+
+    lines = [l.rstrip() for l in clean_text.split("\n")]
+    filtered_lines = []
     subject = ""
-    body_lines = []
-    found_subject = False
 
-    for line in lines:
-        match = re.match(r"^(?:\*\*)?Subject(?:\*\*)?:\s*(.+)$", line.strip(), re.IGNORECASE)
-        if match and not found_subject:
-            subject = match.group(1).replace("**", "").strip()
-            found_subject = True
+    # Check if first non-empty line contains an Application title or Subject line
+    idx = 0
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+
+    if idx < len(lines):
+        first_line = lines[idx].strip()
+        sub_match = re.match(r"^(?:\*\*)?Subject(?:\*\*)?:\s*(.+)$", first_line, re.IGNORECASE)
+        app_match = re.match(r"^(?:Application|Outreach|Cold Outreach)\s*[-–—:]\s*(.+)$", first_line, re.IGNORECASE)
+        if sub_match:
+            subject = sub_match.group(1).replace("**", "").strip()
+            idx += 1
+        elif app_match or first_line.lower().startswith("application for "):
+            subject = first_line.replace("**", "").strip()
+            idx += 1
+
+    for line in lines[idx:]:
+        l_str = line.strip()
+        # Skip Canvas metadata lines like "Connect email", "Recipients", or solitary "Email"
+        if re.match(r"^(?:Email|Connect email|Recipients)(?:\s+[^\n]+)?$", l_str, re.IGNORECASE):
             continue
-        body_lines.append(line)
+        sub_match = re.match(r"^(?:\*\*)?Subject(?:\*\*)?:\s*(.+)$", l_str, re.IGNORECASE)
+        if sub_match and not subject:
+            subject = sub_match.group(1).replace("**", "").strip()
+            continue
+        filtered_lines.append(line)
 
-    body = "\n".join(body_lines).strip()
+    body = "\n".join(filtered_lines).strip()
     # Strip any residual leading "Email\n\n" or "Subject:\n"
     body = re.sub(r"^(?:Email(?:\s+Draft)?[:\s]*\n+)+", "", body, flags=re.IGNORECASE).strip()
 
@@ -405,16 +456,33 @@ def _send_prompt_and_wait_response(
 ) -> Tuple[str, str]:
     """
     Internal helper to submit a prompt to the active ChatGPT conversation and wait for completion.
+    Supports both traditional streaming chat messages and Canvas writing blocks.
     """
-    # 1. Record existing last assistant message ID and text
-    existing_msgs = page.locator("[data-message-author-role='assistant']")
+    # 1. Record existing state before sending prompt
+    wbs_loc = page.locator("[data-testid='chatgpt-writing-block'], .group\\/writing-block-surface")
+    initial_wb_count = wbs_loc.count()
+    initial_wb_text = ""
+    if initial_wb_count > 0:
+        try:
+            initial_wb_text = wbs_loc.last.inner_text().strip()
+        except Exception:
+            pass
+
+    ASSISTANT_MSG_SELECTOR = (
+        "[data-markdown-text-style='assistant-message'], "
+        "[data-message-author-role='assistant'], "
+        "div[data-dil-message-id], "
+        "article"
+    )
+
+    existing_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
     initial_count = existing_msgs.count()
     last_msg_id = ""
     initial_last_text = ""
     if initial_count > 0:
         try:
             last_msg_id = existing_msgs.last.evaluate(
-                "el => el.getAttribute('data-message-id') || ''"
+                "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
             )
         except Exception:
             pass
@@ -424,22 +492,23 @@ def _send_prompt_and_wait_response(
             pass
 
     # 2. Focus prompt box
-    prompt_box = page.locator("#prompt-textarea")
+    prompt_box = page.locator(PROMPT_BOX_SELECTOR).first
     prompt_box.click()
     page.wait_for_timeout(300)
 
     # 3. Fast insert into ProseMirror contenteditable via native execCommand
     inserted = False
     try:
-        inserted = page.evaluate("""(text) => {
-            const el = document.querySelector('#prompt-textarea');
+        inserted = page.evaluate("""({sel, text}) => {
+            const el = document.querySelector(sel);
             if (!el) return false;
             el.focus();
             document.execCommand('selectAll', false, null);
             const ok = document.execCommand('insertText', false, text);
             el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
             return ok;
-        }""", prompt_text.strip())
+        }""", {"sel": PROMPT_BOX_SELECTOR, "text": prompt_text.strip()})
     except Exception as eval_err:
         print(f"    execCommand insert notice: {eval_err}")
         inserted = False
@@ -472,20 +541,12 @@ def _send_prompt_and_wait_response(
 
     # 4. Click Send Button or press Enter
     sent = False
-    send_btn_query = (
-        "button[data-testid='send-button'], "
-        "form button[aria-label='Send prompt'], "
-        "form button[data-testid='send-button'], "
-        "form button[data-testid='fruitjuice-send-button'], "
-        "form button[type='submit']"
-    )
-
     start_btn = time.time()
     while time.time() - start_btn < 4:
-        btn = page.locator(send_btn_query).first
+        btn = page.locator(SEND_BTN_SELECTOR).first
         if btn.count() > 0 and btn.is_visible():
             try:
-                is_disabled = btn.evaluate("el => el.disabled || el.getAttribute('aria-disabled') === 'true'")
+                is_disabled = btn.evaluate("el => el.disabled || el.getAttribute('aria-disabled') === 'true' || el.classList.contains('opacity-50')")
             except Exception:
                 is_disabled = False
             if not is_disabled:
@@ -509,22 +570,72 @@ def _send_prompt_and_wait_response(
 
     page.wait_for_timeout(1000)
 
-    # 5. Wait for Response Generation
+    # 5. Wait for Response Generation (handles streaming stop button, writing blocks, and assistant messages)
     elapsed = 0
     response_text = ""
+    has_streamed = False
 
     while elapsed < max_wait:
         time.sleep(poll_interval)
         elapsed += poll_interval
 
-        current_msgs = page.locator("[data-message-author-role='assistant']")
-        current_count = current_msgs.count()
+        # Check for transient retry button
+        retry_btn = page.locator("button:has-text('Retry')")
+        if retry_btn.count() > 0 and retry_btn.last.is_visible():
+            try:
+                retry_btn.last.click(timeout=1500)
+                time.sleep(1.0)
+            except Exception:
+                pass
 
+        # Check if currently streaming
+        stop_btn = page.locator(
+            "button[aria-label*='Stop' i], "
+            "button[data-testid='stop-button'], "
+            "button[aria-label*='stop' i]"
+        )
+        is_streaming = stop_btn.count() > 0 and stop_btn.first.is_visible()
+        if is_streaming:
+            has_streamed = True
+            print(f"    ...streaming response ({elapsed}s)")
+            continue
+
+        # Check Canvas Writing Blocks
+        cur_wbs = page.locator("[data-testid='chatgpt-writing-block'], .group\\/writing-block-surface")
+        cur_wb_count = cur_wbs.count()
+        if cur_wb_count > 0:
+            last_wb = cur_wbs.last
+            try:
+                cur_wb_text = last_wb.inner_text().strip()
+            except Exception:
+                cur_wb_text = ""
+
+            is_wb_updated = (cur_wb_count > initial_wb_count) or (has_streamed and cur_wb_text != initial_wb_text) or (cur_wb_text != initial_wb_text and len(cur_wb_text) > 40)
+            if is_wb_updated and len(cur_wb_text) > 40:
+                pm = last_wb.locator(".ProseMirror")
+                if pm.count() > 0:
+                    pm_text = pm.inner_text().strip()
+                    header = last_wb.locator("header, div[class*='header']").first
+                    header_text = header.inner_text().strip() if header.count() > 0 else ""
+                    if header_text and header_text not in pm_text:
+                        response_text = f"{header_text}\n\n{pm_text}"
+                    else:
+                        response_text = pm_text
+                else:
+                    response_text = cur_wb_text
+
+                if response_text and response_text != initial_wb_text:
+                    print(f"    ✓ Received writing block response ({elapsed}s, {len(response_text)} chars)")
+                    break
+
+        # Check Standard & Modern Assistant Chat Messages
+        current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+        current_count = current_msgs.count()
         if current_count > 0:
             last_msg = current_msgs.last
             try:
                 new_last_id = last_msg.evaluate(
-                    "el => el.getAttribute('data-message-id') || ''"
+                    "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
                 )
             except Exception:
                 new_last_id = ""
@@ -534,47 +645,53 @@ def _send_prompt_and_wait_response(
             except Exception:
                 current_last_text = ""
 
-            # Check if a new message has arrived
             is_new_message = (
                 (new_last_id and last_msg_id and new_last_id != last_msg_id)
                 or current_count > initial_count
-                or (current_last_text and current_last_text != initial_last_text)
+                or (has_streamed and current_last_text != initial_last_text)
+                or (current_last_text and current_last_text != initial_last_text and len(current_last_text) > 40)
             )
 
             if is_new_message:
-                # Check if still streaming
-                stop_btn = page.locator(
-                    "button[aria-label='Stop generating'], "
-                    "button[data-testid='stop-button'], "
-                    "button[aria-label='Stop reasoning'], "
-                    "button[aria-label*='Stop']"
-                )
-                if stop_btn.count() > 0 and stop_btn.first.is_visible():
-                    print(f"    ...streaming response ({elapsed}s)")
-                    continue
-
-                # Finished streaming!
-                md_el = last_msg.locator(".markdown")
+                md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
                 if md_el.count() > 0:
                     response_text = md_el.first.inner_text().strip()
                 else:
                     response_text = current_last_text
 
                 if response_text and response_text != initial_last_text:
-                    print(f"    ✓ Received full response ({elapsed}s, {len(response_text)} chars)")
+                    print(f"    ✓ Received assistant response ({elapsed}s, {len(response_text)} chars)")
                     break
 
     if not response_text:
-        # Fallback: only if a new message was actually produced
-        current_msgs = page.locator("[data-message-author-role='assistant']")
-        if current_msgs.count() > initial_count:
-            last_msg = current_msgs.last
-            md_el = last_msg.locator(".markdown")
-            response_text = md_el.first.inner_text().strip() if md_el.count() > 0 else last_msg.inner_text().strip()
-        else:
-            raise TimeoutError("Timed out waiting for ChatGPT response (no new assistant reply was generated).")
+        # Fallback inspection of latest writing block or assistant message
+        cur_wbs = page.locator("[data-testid='chatgpt-writing-block'], .group\\/writing-block-surface")
+        if cur_wbs.count() > 0:
+            last_wb = cur_wbs.last
+            pm = last_wb.locator(".ProseMirror")
+            response_text = pm.inner_text().strip() if pm.count() > 0 else last_wb.inner_text().strip()
+
+        if not response_text:
+            current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+            if current_msgs.count() > initial_count:
+                last_msg = current_msgs.last
+                md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
+                response_text = md_el.first.inner_text().strip() if md_el.count() > 0 else last_msg.inner_text().strip()
+
+    if not response_text:
+        raise TimeoutError("Timed out waiting for ChatGPT response (no new assistant reply or writing block was generated).")
 
     subject, body = parse_email_response(response_text)
+
+    # Copy to system clipboard via pbcopy on macOS
+    try:
+        import subprocess
+        full_clipboard_text = f"Subject: {subject}\n\n{body}" if (subject and subject != "UNSUITABLE_JD") else response_text
+        subprocess.run(["pbcopy"], input=full_clipboard_text, text=True, check=False)
+        print("    📋 Copied generated response to system clipboard (pbcopy)")
+    except Exception:
+        pass
+
     return subject, body
 
 
