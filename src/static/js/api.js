@@ -460,6 +460,19 @@ async function fetchSettings() {
       }
     }
 
+    // Restore persistent cycles for Easy Apply and Crawlers
+    const easyCyclesEl = document.getElementById('easyCrawlerCycles');
+    if (easyCyclesEl) {
+      const saved = localStorage.getItem('reach_easy_apply_cycles') || state.config?.easy_apply_cycles;
+      if (saved) easyCyclesEl.value = saved;
+    }
+
+    const crawlerCyclesEl = document.getElementById('crawlerInputCycles');
+    if (crawlerCyclesEl) {
+      const saved = localStorage.getItem('reach_crawler_cycles') || state.config?.crawler_cycles;
+      if (saved) crawlerCyclesEl.value = saved;
+    }
+
     if (typeof updateCrawlerSearchPlaceholder === 'function') {
       updateCrawlerSearchPlaceholder();
     }

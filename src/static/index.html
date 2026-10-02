@@ -466,15 +466,26 @@
               <span class="action-card-badge">FIFO Queue</span>
             </div>
             <div class="crawler-cycles-row" style="margin-bottom: 0.8rem;">
-              <div class="cycles-control-wrap" title="Number of scroll & discovery passes">
+              <div class="cycles-control-wrap" title="Number of scroll & discovery passes (automatically saved permanently)">
                 <label for="crawlerInputCycles" class="cycles-label">Cycles:</label>
-                <input type="number" id="crawlerInputCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                <div class="cycles-stepper-box">
+                  <input type="number" id="crawlerInputCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                  <div class="cycles-stepper-btns">
+                    <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('crawlerInputCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    </button>
+                    <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('crawlerInputCycles', -1)" title="Decrease cycles" aria-label="Decrease cycles">
+                      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                  </div>
+                </div>
                 <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
                   <span class="tooltip-icon-circle">?</span>
                   <span class="tooltip-popover">
                     <strong>What is a Cycle?</strong><br>
                     A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs per cycle).<br>
-                    Increase cycles (e.g. 5–15) to search deeper and find more jobs.
+                    Increase cycles (e.g. 5–15) to search deeper and find more jobs.<br>
+                    <em>Cycles setting is automatically saved permanently.</em>
                   </span>
                 </span>
               </div>
@@ -865,12 +876,14 @@
       <span class="safeguard-icon">🛡️</span>
       <div class="safeguard-text">
         <strong>LinkedIn Safeguard Active:</strong>
-        <span id="easyRateLimitMsg">LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.</span>
+        <span id="easyRateLimitMsg">LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is
+          paused to protect your account.</span>
         <span class="safeguard-timer" id="easyRateLimitTimer"></span>
       </div>
     </div>
     <div class="safeguard-banner-actions">
-      <button id="btnResumeEasySafeguard" class="btn btn-xs btn-outline btn-safeguard-resume" onclick="resumeEasyApplySafeguard()" title="Clear pause and resume immediately if you're sure">
+      <button id="btnResumeEasySafeguard" class="btn btn-xs btn-outline btn-safeguard-resume"
+        onclick="resumeEasyApplySafeguard()" title="Clear pause and resume immediately if you're sure">
         Resume Now
       </button>
     </div>
@@ -881,7 +894,8 @@
     <div class="header-left">
       <div class="easy-apply-badge-icon">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
+          <path
+            d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
         </svg>
       </div>
       <div>
@@ -899,11 +913,20 @@
     <div class="easy-crawler-form">
       <div class="crawler-inputs-row">
         <div class="easy-input-group">
-          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="easySearchQuery" class="easy-input" placeholder="Job title or keywords..." value="Full Stack Developer" />
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input type="text" id="easySearchQuery" class="easy-input" placeholder="Job title or keywords..."
+            value="Full Stack Developer" />
         </div>
         <div class="easy-input-group">
-          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
+            <path
+              d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z" />
+          </svg>
           <input type="text" id="easySearchLocation" class="easy-input" placeholder="Location..." value="India" />
         </div>
         <select id="easyTimeFilter" class="select-clean easy-select-time" title="Filter jobs by posted date">
@@ -912,34 +935,69 @@
           <option value="month">Past Month</option>
           <option value="all">Anytime</option>
         </select>
-        <select id="selectEasyPacing" class="select-clean easy-select-pacing" title="Submission delay between applications to protect account from fast pace warnings">
+        <select id="selectEasyPacing" class="select-clean easy-select-pacing"
+          title="Submission delay between applications to protect account from fast pace warnings">
           <option value="safe" selected>🛡️ Safe (45-75s)</option>
           <option value="slow">🐢 Extra Slow (75-120s)</option>
           <option value="standard">⚡ Moderate (30-45s)</option>
         </select>
-        <div class="cycles-control-wrap" title="Number of scroll & discovery passes">
+        <div class="cycles-control-wrap" title="Number of scroll & discovery passes (automatically saved permanently)">
           <label for="easyCrawlerCycles" class="cycles-label">Cycles:</label>
-          <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="50" value="8" />
+          <div class="cycles-stepper-box">
+            <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="50" value="8" />
+            <div class="cycles-stepper-btns">
+              <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyCrawlerCycles', 1)"
+                title="Increase cycles" aria-label="Increase cycles">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </svg>
+              </button>
+              <button type="button" class="btn-cycle-stepper btn-cycle-down"
+                onclick="stepCycles('easyCrawlerCycles', -1)" title="Decrease cycles" aria-label="Decrease cycles">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
           <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
             <span class="tooltip-icon-circle">?</span>
             <span class="tooltip-popover">
               <strong>What is a Cycle?</strong><br>
-              A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs per cycle).<br>
-              Increase cycles (e.g. 5–15) to search deeper and find more jobs.
+              A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs
+              per cycle).<br>
+              Increase cycles (e.g. 5–15) to search deeper and find more jobs.<br>
+              <em>Cycles setting is automatically saved permanently.</em>
             </span>
           </span>
         </div>
         <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
           <span>Crawl &amp; Auto-Apply</span>
         </button>
-        <button class="btn btn-outline btn-easy-answers" id="btnOpenQuestionBankModal" onclick="switchTab('tabQuestionBank')" title="View and answer all screening questions collected across Easy Apply jobs">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        <button class="btn btn-outline btn-easy-answers" id="btnOpenQuestionBankModal"
+          onclick="switchTab('tabQuestionBank')"
+          title="View and answer all screening questions collected across Easy Apply jobs">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
           <span>Question Bank (<span id="totalQuestionsCount">0</span>)</span>
           <span class="qbank-btn-pending-badge hidden" id="qbankPendingBtnBadge">0 pending</span>
         </button>
-        <button class="btn btn-outline btn-easy-import" id="btnOpenBulkSearchModal" onclick="openBulkSearchModal()" title="Import CSV or batch keywords to search multiple roles">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <button class="btn btn-outline btn-easy-import" id="btnOpenBulkSearchModal" onclick="openBulkSearchModal()"
+          title="Import CSV or batch keywords to search multiple roles">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
           <span>Bulk Search (CSV)</span>
         </button>
       </div>
@@ -947,7 +1005,7 @@
   </div>
 
   <!-- Warning Banner: Unanswered Screening Questions Pending -->
-  <div class="qbank-pending-alert-banner hidden" id="qbankPendingAlertBanner">
+  <!-- <div class="qbank-pending-alert-banner hidden" id="qbankPendingAlertBanner">
     <div class="qbank-pending-alert-content">
       <span class="qbank-alert-icon">⚠️</span>
       <div class="qbank-alert-text">
@@ -960,39 +1018,44 @@
         <span>Answer Questions Now</span>
       </button>
     </div>
-  </div>
+  </div> -->
 
   <!-- KPI Metrics Ribbon (5 cards) -->
   <div class="easy-kpi-ribbon" style="grid-template-columns: repeat(5, 1fr);">
-    <div class="easy-kpi-card accent-indigo" onclick="filterEasyApplyStatus('ALL')" title="View all Easy Apply opportunities">
+    <div class="easy-kpi-card accent-indigo" onclick="filterEasyApplyStatus('ALL')"
+      title="View all Easy Apply opportunities">
       <div class="kpi-card-header">
         <span class="kpi-num" id="easyKpiTotal">0</span>
         <span class="kpi-icon-badge badge-indigo">💼</span>
       </div>
       <span class="kpi-lbl">Total Easy Apply Jobs</span>
     </div>
-    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')" title="View successfully submitted applications">
+    <div class="easy-kpi-card accent-green" onclick="filterEasyApplyStatus('APPLIED')"
+      title="View successfully submitted applications">
       <div class="kpi-card-header">
         <span class="kpi-num" id="easyKpiApplied">0</span>
         <span class="kpi-icon-badge badge-green">✓</span>
       </div>
       <span class="kpi-lbl">Successfully Applied</span>
     </div>
-    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')" title="View roles requiring custom questionnaires">
+    <div class="easy-kpi-card accent-amber" onclick="filterEasyApplyStatus('REQUIRES_QUESTIONNAIRE')"
+      title="View roles requiring custom questionnaires">
       <div class="kpi-card-header">
         <span class="kpi-num" id="easyKpiQuestionnaire">0</span>
         <span class="kpi-icon-badge badge-amber">📋</span>
       </div>
       <span class="kpi-lbl">Screening (Questionnaires)</span>
     </div>
-    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')" title="View jobs ready in queue for auto-apply">
+    <div class="easy-kpi-card accent-blue" onclick="filterEasyApplyStatus('DISCOVERED')"
+      title="View jobs ready in queue for auto-apply">
       <div class="kpi-card-header">
         <span class="kpi-num" id="easyKpiReady">0</span>
         <span class="kpi-icon-badge badge-blue">⚡</span>
       </div>
       <span class="kpi-lbl">Ready in Queue</span>
     </div>
-    <div class="easy-kpi-card accent-slate" onclick="filterEasyApplyStatus('NOT_FOUND')" title="View jobs marked as not found / closed">
+    <div class="easy-kpi-card accent-slate" onclick="filterEasyApplyStatus('NOT_FOUND')"
+      title="View jobs marked as not found / closed">
       <div class="kpi-card-header">
         <span class="kpi-num" id="easyKpiNotFound">0</span>
         <span class="kpi-icon-badge badge-slate">🚫</span>
@@ -1034,15 +1097,21 @@
       <!-- Date Range Filter -->
       <div class="date-filter-group" title="Filter Easy Apply jobs by date range">
         <span class="date-label">From</span>
-        <input type="date" id="easyDateFrom" class="input-date-clean" onchange="applyEasyDateFilter()" title="Start date" />
+        <input type="date" id="easyDateFrom" class="input-date-clean" onchange="applyEasyDateFilter()"
+          title="Start date" />
         <span class="date-label">To</span>
         <input type="date" id="easyDateTo" class="input-date-clean" onchange="applyEasyDateFilter()" title="End date" />
       </div>
 
       <!-- Live In-Table Search Input -->
       <div class="easy-search-box">
-        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..." oninput="handleEasyTableSearch(this.value)" />
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..."
+          oninput="handleEasyTableSearch(this.value)" />
       </div>
     </div>
   </div>
@@ -1054,29 +1123,39 @@
     </div>
     <div class="batch-banner-center">
       <span class="batch-action-lbl">Move Status:</span>
-      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('DISCOVERED')" title="Move selected to Ready">
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('DISCOVERED')"
+        title="Move selected to Ready">
         <span>⚡ Ready</span>
       </button>
-      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('REQUIRES_QUESTIONNAIRE')" title="Move selected to Questionnaire Screening">
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('REQUIRES_QUESTIONNAIRE')"
+        title="Move selected to Questionnaire Screening">
         <span>📋 Screening</span>
       </button>
-      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('APPLIED')" title="Move selected to Applied">
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('APPLIED')"
+        title="Move selected to Applied">
         <span>✓ Applied</span>
       </button>
-      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('NOT_FOUND')" title="Mark selected as Not Found / Closed">
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('NOT_FOUND')"
+        title="Mark selected as Not Found / Closed">
         <span>🚫 Not Found</span>
       </button>
     </div>
     <div class="batch-banner-right">
       <button class="btn btn-primary btn-xs" onclick="batchApplySelectedEasyJobs()" title="Apply to selected jobs">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
         <span>Apply Selected</span>
       </button>
       <button class="btn btn-outline btn-xs" onclick="batchCopyEasyLinks()" title="Copy links for screening">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
         <span>Copy Links</span>
       </button>
-      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()" title="Dismiss selected jobs">
+      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissEasyJobs()"
+        title="Dismiss selected jobs">
         <span>Dismiss</span>
       </button>
       <button class="btn-batch-close" onclick="clearEasySelection()" title="Clear selection">✕</button>
@@ -1089,7 +1168,8 @@
       <thead>
         <tr>
           <th class="col-check">
-            <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)" title="Select all" />
+            <input type="checkbox" id="selectAllEasyCheck" onchange="toggleSelectAllEasyJobs(this.checked)"
+              title="Select all" />
           </th>
           <th class="col-role">Role &amp; Company</th>
           <th class="col-location">Location</th>
@@ -1109,7 +1189,6 @@
     </table>
   </div>
 </div>
-
       <!-- TAB 2: Review & Drafts (Side-by-Side) -->
     <div class="tab-panel hidden" id="tabReview">
       <div class="review-split">
@@ -3016,7 +3095,7 @@
         <button class="btn btn-outline btn-sm" onclick="clearBulkCrawlerKeywords()">Clear List</button>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
           <button class="btn btn-outline btn-sm" onclick="closeBulkCrawlerSearchModal()">Cancel</button>
-          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawlerCrawl" onclick="submitBulkCrawlerSearch()" disabled>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawlerCrawl" onclick="submitBulkCrawlerSearch()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span id="btnLaunchBulkCrawlerCrawlText">Queue Searches</span>
           </button>
@@ -3091,7 +3170,7 @@
         <button class="btn btn-outline btn-sm" onclick="clearBulkKeywords()">Clear List</button>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
           <button class="btn btn-outline btn-sm" onclick="closeBulkSearchModal()">Cancel</button>
-          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawl" onclick="submitBulkEasySearch()" disabled>
+          <button class="btn btn-primary btn-sm" id="btnLaunchBulkCrawl" onclick="submitBulkEasySearch()">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span id="btnLaunchBulkCrawlText">Queue Searches</span>
           </button>

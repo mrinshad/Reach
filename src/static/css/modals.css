@@ -3,8 +3,7 @@
    ========================================================================== */
 
   /* Modals & Dialogs */
-  .modal-overlay,
-  .dialog-overlay {
+  .modal-overlay {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.78);
@@ -13,6 +12,20 @@
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    padding: 1.5rem 1rem;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
     padding: 1.5rem 1rem;
     overflow-y: auto;
     box-sizing: border-box;

@@ -1398,25 +1398,47 @@
 .cycles-control-wrap {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  padding: 0.26rem 0.55rem;
+  padding: 0.2rem 0.5rem;
   position: relative;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cycles-control-wrap:focus-within {
+  border-color: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
 }
 
 .cycles-label {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   user-select: none;
 }
 
+.cycles-stepper-box {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 5px;
+  padding: 1px 2px 1px 4px;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.cycles-stepper-box:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
 .input-cycles-num {
-  width: 44px;
+  width: 32px;
   background: transparent;
   border: none;
   color: #fff;
@@ -1426,11 +1448,55 @@
   outline: none;
   padding: 0;
   font-family: inherit;
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .input-cycles-num::-webkit-inner-spin-button,
 .input-cycles-num::-webkit-outer-spin-button {
-  opacity: 0.6;
+  -webkit-appearance: none;
+  margin: 0;
+  display: none;
+}
+
+.cycles-stepper-btns {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  margin-left: 2px;
+}
+
+.btn-cycle-stepper {
+  width: 15px;
+  height: 11px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.12s ease;
+  line-height: 1;
+}
+
+.btn-cycle-stepper:hover {
+  background: rgba(99, 102, 241, 0.32);
+  border-color: rgba(99, 102, 241, 0.55);
+  color: #c7d2fe;
+}
+
+.btn-cycle-stepper:active {
+  background: rgba(99, 102, 241, 0.5);
+  transform: scale(0.92);
+}
+
+.btn-cycle-stepper svg {
+  pointer-events: none;
 }
 
 /* Tooltip Trigger & Popover */

@@ -448,7 +448,40 @@ async function copyEmailDraft() {
   }
 }
 
+// Stepper controller for cycle number inputs
+function stepCycles(inputId, delta) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const min = parseInt(input.getAttribute('min') || '1', 10);
+  const max = parseInt(input.getAttribute('max') || '100', 10);
+  let val = parseInt(input.value || `${min}`, 10);
+  if (isNaN(val)) val = min;
+  val = Math.min(max, Math.max(min, val + delta));
+  input.value = val;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Persist cycles setting to backend settings API
+let persistCyclesTimer = null;
+function persistCyclesSetting(key, val) {
+  clearTimeout(persistCyclesTimer);
+  persistCyclesTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: parseInt(val, 10) }),
+      });
+    } catch (e) {
+      console.warn('Could not persist cycles setting to backend:', e);
+    }
+  }, 400);
+}
+
 // Bind utilities globally
+window.stepCycles = stepCycles;
+window.persistCyclesSetting = persistCyclesSetting;
 window.showConfirm = showConfirm;
 window.showCenterAlert = showCenterAlert;
 window.closeCustomDialog = closeCustomDialog;

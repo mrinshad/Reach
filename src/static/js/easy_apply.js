@@ -41,10 +41,33 @@ async function fetchEasyApplyPosts() {
     renderEasyApplyTable();
     checkRateLimitSafeguard();
     fetchQuestionBank(false);
+    initEasyCyclesPersistence();
   } catch (err) {
     console.error('Error fetching Easy Apply posts:', err);
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #ef4444;">Error loading jobs: ${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+function initEasyCyclesPersistence() {
+  const input = document.getElementById('easyCrawlerCycles');
+  if (!input || input.dataset.persisted) return;
+  input.dataset.persisted = 'true';
+
+  const saved = localStorage.getItem('reach_easy_apply_cycles');
+  if (saved) input.value = saved;
+
+  const onCyclesUpdate = (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val >= 1) {
+      localStorage.setItem('reach_easy_apply_cycles', val);
+      if (typeof persistCyclesSetting === 'function') {
+        persistCyclesSetting('easy_apply_cycles', val);
+      }
+    }
+  };
+
+  input.addEventListener('change', onCyclesUpdate);
+  input.addEventListener('input', onCyclesUpdate);
 }
 
 function applyEasyDateFilter() {
@@ -1061,6 +1084,16 @@ function openBulkSearchModal() {
   if (locInput) locInput.value = currentLoc;
   if (timeSelect) timeSelect.value = currentTime;
 
+  // Pre-fill keywords from active search query if textarea is currently empty
+  const activeQuery = (document.getElementById('easySearchQuery')?.value || '').trim();
+  const kwTextarea = document.getElementById('bulkKeywordsInput');
+  if (kwTextarea && !kwTextarea.value.trim() && activeQuery) {
+    kwTextarea.value = activeQuery;
+    handleBulkKeywordsInput(activeQuery);
+  } else if (kwTextarea && kwTextarea.value.trim()) {
+    handleBulkKeywordsInput(kwTextarea.value);
+  }
+
   modal.classList.remove('hidden');
 }
 
@@ -1112,12 +1145,12 @@ function renderBulkKeywordsChips() {
       </span>
     `).join('');
 
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) submitBtn.style.opacity = '1';
     if (submitText) submitText.textContent = `Queue ${count} Search${count === 1 ? '' : 'es'}`;
   } else {
     container.classList.add('hidden');
     container.innerHTML = '';
-    if (submitBtn) submitBtn.disabled = true;
+    if (submitBtn) submitBtn.style.opacity = '0.85';
     if (submitText) submitText.textContent = 'Queue Searches';
   }
 }
@@ -1169,8 +1202,20 @@ function clearBulkKeywords() {
 }
 
 async function submitBulkEasySearch() {
+  const kwTextarea = document.getElementById('bulkKeywordsInput');
+  const rawInput = (kwTextarea?.value || '').trim();
+  if ((!bulkParsedKeywords || bulkParsedKeywords.length === 0) && rawInput) {
+    bulkParsedKeywords = parseKeywordsString(rawInput);
+    renderBulkKeywordsChips();
+  }
+
   if (!bulkParsedKeywords || bulkParsedKeywords.length === 0) {
-    showAlert('No Keywords', 'Please enter or import at least one keyword to search.');
+    if (kwTextarea) {
+      kwTextarea.focus();
+      kwTextarea.style.borderColor = '#f43f5e';
+      setTimeout(() => { kwTextarea.style.borderColor = ''; }, 2000);
+    }
+    showAlert('No Keywords Provided', 'Please enter, paste, or upload at least one role keyword (e.g. "Full Stack Developer, Python Developer") to queue searches.', { centerPopup: true });
     return;
   }
 
@@ -1210,6 +1255,11 @@ async function submitBulkEasySearch() {
       closeBulkSearchModal();
       clearBulkKeywords();
       if (typeof startTaskPolling === 'function') startTaskPolling();
+      if (typeof toggleTaskDrawer === 'function') {
+        toggleTaskDrawer(true);
+      } else if (typeof toggleTaskLogs === 'function') {
+        toggleTaskLogs(true);
+      }
     } else {
       const err = await res.json();
       showAlert('Bulk Search Error', err.detail || 'Could not enqueue bulk search tasks.');

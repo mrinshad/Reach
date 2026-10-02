@@ -69,6 +69,8 @@ class SettingsPayload(BaseModel):
     pacing_max_seconds: Optional[float] = None
     headless_mode: Optional[bool] = None
     headless: Optional[bool] = None
+    easy_apply_cycles: Optional[int] = None
+    crawler_cycles: Optional[int] = None
 
 
 class HeadlessTogglePayload(BaseModel):

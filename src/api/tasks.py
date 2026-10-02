@@ -403,6 +403,7 @@ def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
     loc = (payload.location or "").strip() or None
     time_filter = payload.time_filter or "24h"
 
+    cycles = payload.cycles
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin", query=kw, location=loc, time_filter=time_filter)
         res = task_manager.enqueue_task(
@@ -411,8 +412,8 @@ def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=run_linkedin_scraper,
-            args=(kw, loc, time_filter),
-            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter},
+            args=(kw, loc, time_filter, cycles),
+            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles},
         )
         queued.append({"keyword": kw, **res})
 

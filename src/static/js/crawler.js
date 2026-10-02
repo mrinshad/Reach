@@ -108,6 +108,29 @@ function initCrawlerControls() {
   }
   updateCrawlerSearchPlaceholder();
   handleCrawlerSourceChange();
+  initCrawlerCyclesPersistence();
+}
+
+function initCrawlerCyclesPersistence() {
+  const input = document.getElementById('crawlerInputCycles');
+  if (!input || input.dataset.persisted) return;
+  input.dataset.persisted = 'true';
+
+  const saved = localStorage.getItem('reach_crawler_cycles');
+  if (saved) input.value = saved;
+
+  const onCyclesUpdate = (e) => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val) && val >= 1) {
+      localStorage.setItem('reach_crawler_cycles', val);
+      if (typeof persistCyclesSetting === 'function') {
+        persistCyclesSetting('crawler_cycles', val);
+      }
+    }
+  };
+
+  input.addEventListener('change', onCyclesUpdate);
+  input.addEventListener('input', onCyclesUpdate);
 }
 
 async function fetchScrapers() {
@@ -428,6 +451,16 @@ function openBulkCrawlerSearchModal() {
     }
   }
 
+  // Pre-fill keywords from active search input if textarea is currently empty
+  const activeKw = (document.getElementById('crawlerSearchInput')?.value || '').trim();
+  const kwTextarea = document.getElementById('bulkCrawlerKeywordsInput');
+  if (kwTextarea && !kwTextarea.value.trim() && activeKw) {
+    kwTextarea.value = activeKw;
+    handleBulkCrawlerKeywordsInput(activeKw);
+  } else if (kwTextarea && kwTextarea.value.trim()) {
+    handleBulkCrawlerKeywordsInput(kwTextarea.value);
+  }
+
   modal.classList.remove('hidden');
 }
 
@@ -459,12 +492,12 @@ function renderBulkCrawlerKeywordsChips() {
       </span>
     `).join('');
 
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) submitBtn.style.opacity = '1';
     if (submitText) submitText.textContent = `Queue ${count} Search${count === 1 ? '' : 'es'}`;
   } else {
     container.classList.add('hidden');
     container.innerHTML = '';
-    if (submitBtn) submitBtn.disabled = true;
+    if (submitBtn) submitBtn.style.opacity = '0.85';
     if (submitText) submitText.textContent = 'Queue Searches';
   }
 }
@@ -516,8 +549,20 @@ function clearBulkCrawlerKeywords() {
 }
 
 async function submitBulkCrawlerSearch() {
+  const kwTextarea = document.getElementById('bulkCrawlerKeywordsInput');
+  const rawInput = (kwTextarea?.value || '').trim();
+  if ((!bulkCrawlerParsedKeywords || bulkCrawlerParsedKeywords.length === 0) && rawInput) {
+    bulkCrawlerParsedKeywords = parseKeywordsString(rawInput);
+    renderBulkCrawlerKeywordsChips();
+  }
+
   if (!bulkCrawlerParsedKeywords || bulkCrawlerParsedKeywords.length === 0) {
-    showAlert('No Keywords', 'Please enter or import at least one keyword to search.');
+    if (kwTextarea) {
+      kwTextarea.focus();
+      kwTextarea.style.borderColor = '#f43f5e';
+      setTimeout(() => { kwTextarea.style.borderColor = ''; }, 2000);
+    }
+    showAlert('No Keywords Provided', 'Please enter, paste, or upload at least one role keyword (e.g. "Full Stack Developer, Python Developer") to queue searches.', { centerPopup: true });
     return;
   }
 
@@ -525,6 +570,7 @@ async function submitBulkCrawlerSearch() {
   const location = (document.getElementById('bulkCrawlerLocation')?.value || '').trim();
   const timeFilter = document.getElementById('bulkCrawlerTimeFilter')?.value || '24h';
   const count = bulkCrawlerParsedKeywords.length;
+  const cycles = parseInt(document.getElementById('crawlerInputCycles')?.value || '8', 10);
 
   const sourceLabel = source === 'linkedin_jobs' ? 'LinkedIn Job Portal (Easy Apply)' : 'LinkedIn Hiring Posts';
   const locLabel = location ? `for "${location}"` : '(No location filter)';
@@ -548,6 +594,7 @@ async function submitBulkCrawlerSearch() {
         keywords: bulkCrawlerParsedKeywords,
         location: location || null,
         time_filter: timeFilter,
+        cycles: isNaN(cycles) ? 8 : cycles,
       }),
     });
 
@@ -557,6 +604,11 @@ async function submitBulkCrawlerSearch() {
       closeBulkCrawlerSearchModal();
       clearBulkCrawlerKeywords();
       if (typeof startTaskPolling === 'function') startTaskPolling();
+      if (typeof toggleTaskDrawer === 'function') {
+        toggleTaskDrawer(true);
+      } else if (typeof toggleTaskLogs === 'function') {
+        toggleTaskLogs(true);
+      }
     } else {
       const err = await res.json();
       showAlert('Bulk Search Error', err.detail || 'Could not enqueue bulk search tasks.');
@@ -567,6 +619,7 @@ async function submitBulkCrawlerSearch() {
     if (submitBtn) submitBtn.disabled = false;
   }
 }
+
 
 // Global Bindings
 window.triggerInfoparkScrape = triggerInfoparkScrape;
