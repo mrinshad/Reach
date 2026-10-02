@@ -451,6 +451,15 @@ function openBulkCrawlerSearchModal() {
     }
   }
 
+  // Pre-fill cycles and pacing
+  const currentCycles = document.getElementById('crawlerInputCycles')?.value || '8';
+  const cyclesInput = document.getElementById('bulkCrawlerCycles');
+  if (cyclesInput) cyclesInput.value = currentCycles;
+
+  const pacingSelect = document.getElementById('bulkCrawlerPacing');
+  const activePacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+  if (pacingSelect) pacingSelect.value = activePacing;
+
   // Pre-fill keywords from active search input if textarea is currently empty
   const activeKw = (document.getElementById('crawlerSearchInput')?.value || '').trim();
   const kwTextarea = document.getElementById('bulkCrawlerKeywordsInput');
@@ -570,14 +579,17 @@ async function submitBulkCrawlerSearch() {
   const location = (document.getElementById('bulkCrawlerLocation')?.value || '').trim();
   const timeFilter = document.getElementById('bulkCrawlerTimeFilter')?.value || '24h';
   const count = bulkCrawlerParsedKeywords.length;
-  const cycles = parseInt(document.getElementById('crawlerInputCycles')?.value || '8', 10);
+  const cycles = parseInt(document.getElementById('bulkCrawlerCycles')?.value || document.getElementById('crawlerInputCycles')?.value || '8', 10);
+  const pacing = document.getElementById('bulkCrawlerPacing')?.value || 'safe';
+  const pacingLabels = { safe: 'Safe (45-75s)', slow: 'Extra Slow (75-120s)', standard: 'Moderate (30-45s)' };
+  const pacingLabel = pacingLabels[pacing] || pacing;
 
   const sourceLabel = source === 'linkedin_jobs' ? 'LinkedIn Job Portal (Easy Apply)' : 'LinkedIn Hiring Posts';
   const locLabel = location ? `for "${location}"` : '(No location filter)';
 
   const confirmed = await showConfirm(
     `Launch Bulk ${sourceLabel} Searches`,
-    `Enqueue ${count} searches sequentially in background ${locLabel}?\n\nEach search will run one after another in persistent Firefox with auto-deduplication.`,
+    `Enqueue ${count} searches sequentially in background ${locLabel}?\n\n• Cycles: ${cycles} per search\n• Submission delay: ${pacingLabel}\n• Persistent Firefox context with auto-deduplication`,
     { confirmText: `Queue ${count} Searches` }
   );
   if (!confirmed) return;
@@ -595,6 +607,7 @@ async function submitBulkCrawlerSearch() {
         location: location || null,
         time_filter: timeFilter,
         cycles: isNaN(cycles) ? 8 : cycles,
+        pacing: pacing,
       }),
     });
 

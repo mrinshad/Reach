@@ -1076,13 +1076,21 @@ function openBulkSearchModal() {
   const modal = document.getElementById('modalBulkEasySearch');
   if (!modal) return;
 
-  // Pre-fill location & time filter from active crawler form if set
+  // Pre-fill location, time filter, pacing & cycles from active crawler form if set
   const currentLoc = document.getElementById('easySearchLocation')?.value || 'India';
   const currentTime = document.getElementById('easyTimeFilter')?.value || '24h';
+  const currentPacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+  const currentCycles = document.getElementById('easyCrawlerCycles')?.value || '8';
+
   const locInput = document.getElementById('bulkSearchLocation');
   const timeSelect = document.getElementById('bulkTimeFilter');
+  const pacingSelect = document.getElementById('bulkEasyPacing');
+  const cyclesInput = document.getElementById('bulkEasyCycles');
+
   if (locInput) locInput.value = currentLoc;
   if (timeSelect) timeSelect.value = currentTime;
+  if (pacingSelect) pacingSelect.value = currentPacing;
+  if (cyclesInput) cyclesInput.value = currentCycles;
 
   // Pre-fill keywords from active search query if textarea is currently empty
   const activeQuery = (document.getElementById('easySearchQuery')?.value || '').trim();
@@ -1221,20 +1229,21 @@ async function submitBulkEasySearch() {
 
   const location = (document.getElementById('bulkSearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('bulkTimeFilter')?.value || '24h';
+  const cycles = parseInt(document.getElementById('bulkEasyCycles')?.value || document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const pacing = document.getElementById('bulkEasyPacing')?.value || document.getElementById('selectEasyPacing')?.value || 'safe';
+  const pacingLabels = { safe: 'Safe (45-75s)', slow: 'Extra Slow (75-120s)', standard: 'Moderate (30-45s)' };
+  const pacingLabel = pacingLabels[pacing] || pacing;
   const count = bulkParsedKeywords.length;
 
   const confirmed = await showConfirm(
     'Launch Bulk LinkedIn Search',
-    `Enqueue ${count} searches sequentially in background for "${location}"?\n\nEach search will run one after another in persistent Firefox.`,
+    `Enqueue ${count} searches sequentially in background for "${location}"?\n\n• Cycles: ${cycles} per role\n• Submission delay: ${pacingLabel}\n• Persistent headed/headless Firefox`,
     { confirmText: `Queue ${count} Searches` }
   );
   if (!confirmed) return;
 
   const submitBtn = document.getElementById('btnLaunchBulkCrawl');
   if (submitBtn) submitBtn.disabled = true;
-
-  const cycles = parseInt(document.getElementById('easyCrawlerCycles')?.value || '8', 10);
-  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
 
   try {
     const res = await fetch('/api/scrape/easy-apply/batch', {

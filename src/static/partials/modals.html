@@ -665,7 +665,7 @@
           <!-- Rendered chips inserted here -->
         </div>
 
-        <!-- Shared Configuration (Source, Location & Time Filter) -->
+        <!-- Shared Configuration (Source, Location, Time Filter, Cycles & Submission Delay) -->
         <div class="bulk-config-grid" style="grid-template-columns: 1fr 1fr; gap: 0.85rem;">
           <div class="form-block">
             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Scraper Target:</label>
@@ -690,6 +690,38 @@
               <svg class="easy-input-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
               <input type="text" id="bulkCrawlerLocation" class="easy-input" value="" placeholder="Anywhere (leave empty) or e.g. Dubai, Bengaluru, London, Remote..." />
             </div>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Cycles per Search:</label>
+            <div class="cycles-control-wrap" style="height: 36px; width: 100%; justify-content: space-between; box-sizing: border-box;" title="Number of scroll & discovery passes per role">
+              <span class="cycles-label">Cycles:</span>
+              <div class="cycles-stepper-box">
+                <input type="number" id="bulkCrawlerCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                <div class="cycles-stepper-btns">
+                  <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('bulkCrawlerCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  </button>
+                  <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('bulkCrawlerCycles', -1)" title="Decrease cycles" aria-label="Decrease cycles">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                </div>
+              </div>
+              <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
+                <span class="tooltip-icon-circle">?</span>
+                <span class="tooltip-popover">
+                  <strong>What is a Cycle?</strong><br>
+                  A cycle is one scroll &amp; search pass (~5–8 jobs per cycle).
+                </span>
+              </span>
+            </div>
+          </div>
+          <div class="form-block" id="bulkCrawlerPacingBlock">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Submission Delay:</label>
+            <select id="bulkCrawlerPacing" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;" title="Delay between submissions (for Easy Apply roles)">
+              <option value="safe" selected>🛡️ Safe (45-75s)</option>
+              <option value="slow">🐢 Extra Slow (75-120s)</option>
+              <option value="standard">⚡ Moderate (30-45s)</option>
+            </select>
           </div>
         </div>
       </div>
@@ -748,7 +780,7 @@
           <!-- Rendered chips inserted here -->
         </div>
 
-        <!-- Shared Configuration (Location & Time Filter) -->
+        <!-- Shared Configuration (Location, Time Filter, Submission Delay & Cycles) -->
         <div class="bulk-config-grid">
           <div class="form-block">
             <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Location for all searches:</label>
@@ -765,6 +797,38 @@
               <option value="month">Past Month</option>
               <option value="all">Anytime</option>
             </select>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Submission Delay:</label>
+            <select id="bulkEasyPacing" class="select-clean" style="height: 36px; padding: 0 0.75rem; font-size: 0.8rem;" title="Submission delay between applications to protect account from fast pace warnings">
+              <option value="safe" selected>🛡️ Safe (45-75s)</option>
+              <option value="slow">🐢 Extra Slow (75-120s)</option>
+              <option value="standard">⚡ Moderate (30-45s)</option>
+            </select>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Cycles per Search:</label>
+            <div class="cycles-control-wrap" style="height: 36px; width: 100%; justify-content: space-between; box-sizing: border-box;" title="Number of scroll & discovery passes per role">
+              <span class="cycles-label">Cycles:</span>
+              <div class="cycles-stepper-box">
+                <input type="number" id="bulkEasyCycles" class="input-cycles-num" min="1" max="50" value="8" />
+                <div class="cycles-stepper-btns">
+                  <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('bulkEasyCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  </button>
+                  <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('bulkEasyCycles', -1)" title="Decrease cycles" aria-label="Decrease cycles">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                </div>
+              </div>
+              <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
+                <span class="tooltip-icon-circle">?</span>
+                <span class="tooltip-popover">
+                  <strong>What is a Cycle?</strong><br>
+                  A cycle is one scroll &amp; search pass (~5–8 jobs per cycle).
+                </span>
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -442,9 +442,13 @@ def api_trigger_scrape_batch(payload: BatchScrapePayload):
         from src.services.automation_tasks import run_linkedin_easy_apply_scraper
         runner = run_linkedin_easy_apply_scraper
         source_key = "linkedin_jobs"
+        task_args_builder = lambda k: (k, loc, time_filter, payload.cycles, payload.pacing)
+        task_meta_builder = lambda k: {"source": source_key, "query": k, "location": loc, "time_filter": time_filter, "cycles": payload.cycles, "pacing": payload.pacing}
     else:
         runner = run_linkedin_scraper
         source_key = "linkedin"
+        task_args_builder = lambda k: (k, loc, time_filter, payload.cycles)
+        task_meta_builder = lambda k: {"source": source_key, "query": k, "location": loc, "time_filter": time_filter, "cycles": payload.cycles}
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels(source_key, query=kw, location=loc, time_filter=time_filter)
@@ -454,8 +458,8 @@ def api_trigger_scrape_batch(payload: BatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=runner,
-            args=(kw, loc, time_filter),
-            metadata={"source": source_key, "query": kw, "location": loc, "time_filter": time_filter},
+            args=task_args_builder(kw),
+            metadata=task_meta_builder(kw),
         )
         queued.append({"keyword": kw, **res})
 
