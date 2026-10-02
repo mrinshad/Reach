@@ -157,9 +157,18 @@ def get_aggregated_question_bank(
     search: Optional[str] = None,
     status: Optional[str] = None,
     sort_by: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Retrieve screening questions from persistent PostgreSQL table with optional filters."""
-    return db_get_aggregated_question_bank(category=category, search=search, status=status, sort_by=sort_by)
+    return db_get_aggregated_question_bank(
+        category=category,
+        search=search,
+        status=status,
+        sort_by=sort_by,
+        from_date=from_date,
+        to_date=to_date,
+    )
 
 
 def delete_question(key_or_id: str) -> bool:

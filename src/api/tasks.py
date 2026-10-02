@@ -559,14 +559,18 @@ def api_get_easy_apply_questions(
     search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     sort_by: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
 ):
-    """Return aggregated, deduplicated screening questions and persistent answers from Question Bank."""
+    """Return aggregated, deduplicated screening questions and persistent answers from Question Bank with optional date range."""
     from src.services.question_bank_service import get_aggregated_question_bank
     cat = category if isinstance(category, str) else None
     s = search if isinstance(search, str) else None
     stat = status if isinstance(status, str) else None
     sb = sort_by if isinstance(sort_by, str) else None
-    return get_aggregated_question_bank(category=cat, search=s, status=stat, sort_by=sb)
+    fd = from_date if isinstance(from_date, str) and from_date.strip() else None
+    td = to_date if isinstance(to_date, str) and to_date.strip() else None
+    return get_aggregated_question_bank(category=cat, search=s, status=stat, sort_by=sb, from_date=fd, to_date=td)
 
 
 @router.post("/easy-apply/questions/create")

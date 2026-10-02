@@ -156,6 +156,19 @@
           <option value="standard">⭐ Standard Questions First</option>
         </select>
       </div>
+
+      <!-- Date Range Filter -->
+      <div class="date-filter-group" title="Filter screening questions by date range">
+        <span class="date-label">From</span>
+        <input type="date" id="qbankDateFrom" class="input-date-clean" onchange="applyQuestionBankDateFilter()" title="Start date" />
+        <span class="date-label">To</span>
+        <input type="date" id="qbankDateTo" class="input-date-clean" onchange="applyQuestionBankDateFilter()" title="End date" />
+      </div>
+
+      <!-- Clear Filters Button -->
+      <button class="btn-clear-filters hidden" id="btnClearQbankFilters" onclick="resetQuestionBankFilters()" title="Reset all filters, categories, date ranges, and search back to defaults">
+        <span>✕ Clear</span>
+      </button>
     </div>
 
     <!-- Batch Selection Bar (Active when questions selected) -->

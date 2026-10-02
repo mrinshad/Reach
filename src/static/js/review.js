@@ -4,10 +4,47 @@
  */
 
 let reviewSearchDebounce = null;
+let reviewDateFrom = '';
+let reviewDateTo = '';
+
+function updateReviewClearFiltersButton() {
+  const btn = document.getElementById('btnClearReviewFilters');
+  if (!btn) return;
+  const isFiltered = Boolean(state.searchReview) || Boolean(reviewDateFrom) || Boolean(reviewDateTo);
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
+function applyReviewDateFilter() {
+  const fromEl = document.getElementById('reviewDateFrom');
+  const toEl = document.getElementById('reviewDateTo');
+  reviewDateFrom = fromEl ? fromEl.value.trim() : '';
+  reviewDateTo = toEl ? toEl.value.trim() : '';
+  updateReviewClearFiltersButton();
+  fetchReviewPosts();
+}
+
+function clearReviewFilters() {
+  state.searchReview = '';
+  reviewDateFrom = '';
+  reviewDateTo = '';
+
+  const searchInput = document.getElementById('inputSearchReview');
+  if (searchInput) searchInput.value = '';
+
+  const fromEl = document.getElementById('reviewDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('reviewDateTo');
+  if (toEl) toEl.value = '';
+
+  updateReviewClearFiltersButton();
+  fetchReviewPosts();
+}
+
 function handleSearchReview(val) {
   clearTimeout(reviewSearchDebounce);
   reviewSearchDebounce = setTimeout(() => {
     state.searchReview = (val || '').trim();
+    updateReviewClearFiltersButton();
     fetchReviewPosts();
   }, 250);
 }
@@ -26,6 +63,12 @@ async function fetchReviewPosts() {
     });
     if (state.searchReview) {
       params.append('search', state.searchReview);
+    }
+    if (reviewDateFrom) {
+      params.append('from_date', reviewDateFrom);
+    }
+    if (reviewDateTo) {
+      params.append('to_date', reviewDateTo);
     }
 
     const res = await fetch(`/api/posts?${params.toString()}`);
@@ -916,6 +959,8 @@ window.addEventListener('focus', async () => {
 
 // Global Bindings
 window.handleSearchReview = handleSearchReview;
+window.applyReviewDateFilter = applyReviewDateFilter;
+window.clearReviewFilters = clearReviewFilters;
 window.fetchReviewPosts = fetchReviewPosts;
 window.selectReviewPost = selectReviewPost;
 window.openPostInReview = openPostInReview;

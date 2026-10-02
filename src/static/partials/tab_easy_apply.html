@@ -243,6 +243,11 @@
         <input type="text" id="easyFilterKeyword" placeholder="Filter by title, company, location..."
           oninput="handleEasyTableSearch(this.value)" />
       </div>
+
+      <!-- Clear Filters Button -->
+      <button class="btn-clear-filters hidden" id="btnClearEasyFilters" onclick="clearEasyApplyFilters()" title="Reset all filters, date ranges, and search back to All">
+        <span>✕ Clear</span>
+      </button>
     </div>
   </div>
 

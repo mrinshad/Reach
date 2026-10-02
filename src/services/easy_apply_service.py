@@ -289,9 +289,195 @@ def upload_or_select_resume(page: Page, resume_path: Optional[str]):
         pass
 
 
+def resolve_field_value(
+    prompt: str,
+    raw_answer: Optional[str] = None,
+    itype: str = "text",
+    inputmode: str = "",
+    maxlength: Optional[str] = None,
+    max_attr: Optional[str] = None,
+    pattern: str = "",
+    is_dummy_mode: bool = False,
+) -> str:
+    """
+    Resolve and sanitize field values to prevent validation and 'exceeded limit' errors on LinkedIn.
+    Supports:
+    - Phone / Mobile / Tel: Exactly 10 digits (e.g. '9895612423').
+    - Postal code: Exactly 6 digits (e.g. '676505').
+    - Years of experience / numeric / notice / salary:
+      Extracts clean numbers, handles 'no experience' -> '0', clamps 0..30 for years,
+      respects maxlength, and ensures no non-digits are sent to numeric inputs.
+    - URLs / portfolios: Valid URL, truncated to maxlength.
+    - City / location: Clean string, truncated to maxlength.
+    - Generic text / textareas: Clean short string, truncated to maxlength.
+    - Compliant placeholder values when is_dummy_mode=True to allow advancing through multi-step forms.
+    """
+    p_low = (prompt or "").lower().strip()
+    ans = (raw_answer or "").strip() if raw_answer is not None else ""
+    itype_low = (itype or "text").lower().strip()
+    imode_low = (inputmode or "").lower().strip()
+
+    max_len = None
+    if maxlength:
+        try:
+            max_len = int(maxlength)
+        except Exception:
+            pass
+
+    max_val = None
+    if max_attr:
+        try:
+            max_val = int(max_attr)
+        except Exception:
+            pass
+
+    # 1. Phone / Tel / Mobile (10 digits)
+    if itype_low == "tel" or any(k in p_low for k in ["phone", "mobile", "contact number", "telephone"]):
+        if ans and not is_dummy_mode:
+            digits = re.sub(r"\D", "", ans)
+            if len(digits) >= 10:
+                val = digits[-10:]
+            elif digits:
+                val = "9895612423"
+            else:
+                val = "9895612423"
+        else:
+            val = "9895612423"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 2. Postal / Zip Code (6 digits)
+    if any(k in p_low for k in ["postal", "zip", "pin code", "pincode"]):
+        if ans and not is_dummy_mode:
+            digits = re.sub(r"\D", "", ans)
+            val = digits[:6] if digits else "676505"
+        else:
+            val = "676505"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 3. Numeric / Experience / Notice / Salary / Years
+    is_numeric_field = (
+        itype_low == "number"
+        or imode_low == "numeric"
+        or ("[0-9]" in pattern)
+        or (max_len is not None and max_len <= 4)
+        or any(k in p_low for k in [
+            "year", "years", "experience", "how many", "how much", "in days",
+            "notice", "notice period", "months", "ctc", "salary", "compensation",
+            "lpa", "inr", "pricing execution", "pricing"
+        ])
+    )
+
+    if is_numeric_field:
+        # A. Notice Period
+        if "notice" in p_low or "in days" in p_low or "days" in p_low:
+            if ans and not is_dummy_mode:
+                if any(w in ans.lower() for w in ["immediate", "ready", "0", "zero", "none"]):
+                    val = "0"
+                else:
+                    digits = re.findall(r"\d+", ans)
+                    val = digits[0][:3] if digits else "30"
+            else:
+                val = "30"
+            if max_len:
+                val = val[:max_len]
+            return val
+
+        # B. Salary / CTC / Compensation
+        if any(k in p_low for k in ["ctc", "salary", "lpa", "compensation"]):
+            if ans and not is_dummy_mode:
+                digits = re.findall(r"\d+", ans)
+                val = digits[0] if digits else "1200000"
+            else:
+                val = "1200000"
+            if max_len:
+                val = val[:max_len]
+            return val
+
+        # C. Years of Experience (General or Specific skill like Pricing Execution Engine)
+        if any(k in p_low for k in ["year", "experience", "how many", "pricing", "pricing execution"]) or (max_len is not None and max_len <= 3):
+            if ans and not is_dummy_mode:
+                # Check for explicit negation first: "no experience", "0", "none", "haven't"
+                low_ans = ans.lower()
+                has_negation = bool(re.search(r"\b(no|none|never|zero|0|fresher|haven't|not\s+have|without)\b", low_ans))
+                if has_negation and ("no experience" in low_ans or "0" in low_ans or "none" in low_ans or "without" in low_ans):
+                    val = "0"
+                else:
+                    digits = re.findall(r"\d+", ans)
+                    if digits:
+                        num = int(digits[0])
+                        # Clamp to reasonable range 0..30
+                        num = min(max(0, num), 30)
+                        val = str(num)
+                    else:
+                        val = "0"
+            else:
+                # Compliant small integer dummy to move to next
+                val = "2"
+            if max_val is not None:
+                try:
+                    val = str(min(int(val), max_val))
+                except Exception:
+                    pass
+            if max_len:
+                val = val[:max_len]
+            return val or "0"
+
+        # D. Generic numbers
+        if ans and not is_dummy_mode:
+            digits = re.findall(r"\d+", ans)
+            val = digits[0][:4] if digits else "1"
+        else:
+            val = "1"
+        if max_len:
+            val = val[:max_len]
+        return val or "1"
+
+    # 4. URL / Website / Portfolio / LinkedIn / GitHub
+    if any(k in p_low for k in ["website", "portfolio", "github", "linkedin", "profile link", "url"]) or itype_low == "url":
+        if ans and not is_dummy_mode:
+            val = ans
+        elif "github" in p_low:
+            val = "https://github.com/mrinshad"
+        elif "linkedin" in p_low:
+            val = "https://www.linkedin.com/in/rinshad"
+        else:
+            val = "https://github.com/mrinshad"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 5. City / Location / Address
+    if any(k in p_low for k in ["city", "location", "address", "state"]):
+        if ans and not is_dummy_mode:
+            val = ans
+        else:
+            val = "Malappuram"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 6. Generic Text / Textarea
+    if ans and not is_dummy_mode:
+        val = ans
+    else:
+        # Compliant dummy string
+        if any(p_low.startswith(w) for w in ["are you", "do you", "can you", "will you", "have you", "is"]):
+            val = "Yes"
+        else:
+            val = "Yes"
+    if max_len:
+        val = val[:max_len]
+    return val
+
+
 def handle_screening_form_step(
     page: Page,
     job_label: Optional[str] = None,
+    fill_dummies_to_advance: bool = True,
     logger=print
 ) -> Dict[str, Any]:
     """
@@ -305,18 +491,16 @@ def handle_screening_form_step(
     1. Extracts the question prompt.
     2. Checks if the field is already satisfied.
     3. Looks up the answer in the DB Question Bank.
-    4. If answered, auto-fills / selects / checks the matching option.
-    5. If unanswered, records the question in PostgreSQL screening_questions
-       with status='PENDING' and flags it as pending.
-
-    Returns {
-        "can_proceed": bool,
-        "answered": List[str],
-        "unanswered": List[str]
-    }
+    4. If answered, auto-fills / selects / checks the matching option with sanitized values.
+    5. If unanswered:
+       - Records the question in PostgreSQL screening_questions with status='PENDING'.
+       - If fill_dummies_to_advance=True: fills compliant, properly-typed placeholder values
+         (10 digits for phone, small integer for experience, clean string for text, valid option for selects/radios)
+         to allow clicking 'Next' and discovering remaining questions across all steps.
     """
     answered = []
     unanswered = []
+    filled_placeholders = []
 
     # Standard items to skip as questions
     standard_skip = [
@@ -369,9 +553,8 @@ def handle_screening_form_step(
                     logger(f"  ✓ Left radio choice empty for '{prompt}' as configured")
                     continue
 
+                clicked = False
                 if ans:
-                    # Match radio option
-                    clicked = False
                     ans_low = ans.lower().strip()
 
                     # Exact text match first
@@ -407,15 +590,27 @@ def handle_screening_form_step(
                     if clicked:
                         answered.append(f"{prompt} -> {ans}")
                         logger(f"  ✓ Radio selected for '{prompt}': {ans}")
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(250)
                     else:
-                        # Radio options didn't match answer
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
-                    # Unanswered in DB: persist to DB as pending with options
                     upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                     unanswered.append(prompt)
+
+                # If still not clicked and dummy mode enabled to advance step
+                if not clicked and fill_dummies_to_advance:
+                    yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
+                    if yes_opt.count() > 0:
+                        yes_opt.click()
+                        clicked = True
+                    elif radio_labels:
+                        radio_labels[0].click()
+                        clicked = True
+                    if clicked:
+                        filled_placeholders.append(prompt)
+                        logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt}' to advance step")
+                        page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting fieldset: {e}")
     except Exception:
@@ -464,9 +659,9 @@ def handle_screening_form_step(
                     logger(f"  ✓ Left dropdown empty for '{prompt}' as configured")
                     continue
 
+                matched_opt_val = None
                 if ans:
                     ans_low = ans.lower().strip()
-                    matched_opt_val = None
                     for opt in sel_opts:
                         otxt = opt.inner_text().strip().lower()
                         oval = (opt.get_attribute("value") or "").strip().lower()
@@ -478,19 +673,37 @@ def handle_screening_form_step(
                         sel.select_option(value=matched_opt_val)
                         answered.append(f"{prompt} -> {ans}")
                         logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
-                        page.wait_for_timeout(300)
+                        page.wait_for_timeout(250)
                     else:
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
                     upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                     unanswered.append(prompt)
+
+                # Fallback to advance step if unselected
+                if matched_opt_val is None and fill_dummies_to_advance:
+                    fallback_val = None
+                    for opt in sel_opts:
+                        otxt = opt.inner_text().strip().lower()
+                        oval = (opt.get_attribute("value") or "").strip()
+                        if oval and otxt not in ["", "select", "select an option", "please select"]:
+                            if "yes" in otxt:
+                                fallback_val = oval
+                                break
+                            if fallback_val is None:
+                                fallback_val = oval
+                    if fallback_val is not None:
+                        sel.select_option(value=fallback_val)
+                        filled_placeholders.append(prompt)
+                        logger(f"  ℹ️ Selected compliant placeholder dropdown option for '{prompt}' to advance step")
+                        page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting select: {e}")
     except Exception:
         pass
 
-    # 3. Inspect Text, Number, and Textarea Inputs
+    # 3. Inspect Text, Number, Tel, and Textarea Inputs
     try:
         inputs = page.locator(
             ".jobs-easy-apply-modal input[type='text']:visible, "
@@ -501,12 +714,10 @@ def handle_screening_form_step(
 
         for inp in inputs:
             try:
-                # Skip radio or file inputs
                 itype = (inp.get_attribute("type") or "text").lower()
                 if itype in ["radio", "checkbox", "file", "hidden"]:
                     continue
 
-                # Find prompt
                 inp_id = inp.get_attribute("id") or ""
                 prompt = ""
                 if inp_id:
@@ -519,52 +730,85 @@ def handle_screening_form_step(
                 if not prompt or is_skip(prompt):
                     continue
 
-                # If this is basic contact (phone, city), fill_contact_info already handles it, but if still empty:
+                # Attributes for strict validation adherence
+                inputmode = inp.get_attribute("inputmode") or ""
+                maxlength = inp.get_attribute("maxlength") or ""
+                max_attr = inp.get_attribute("max") or ""
+                pattern = inp.get_attribute("pattern") or ""
+
                 curr_val = inp.input_value().strip()
                 if curr_val:
+                    # Check if curr_val exceeds limit or has inline error
+                    if maxlength and len(curr_val) > int(maxlength):
+                        # Fix existing overflow
+                        clean_val = curr_val[:int(maxlength)]
+                        inp.click()
+                        inp.fill("")
+                        inp.press_sequentially(clean_val, delay=15)
                     continue
 
                 ans, qdict = lookup_answer_for_question(prompt)
                 is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
 
                 if is_explicit_empty:
-                    # Intentionally left blank (e.g. Middle Name)
                     inp.click()
                     inp.fill("")
                     answered.append(f"{prompt} -> (empty)")
                     logger(f"  ✓ Left input empty for '{prompt}' as configured")
-                    page.wait_for_timeout(200)
+                    page.wait_for_timeout(150)
                     continue
 
                 if ans:
-                    # Sanitize for number input
-                    if itype == "number" or "in days" in prompt.lower() or "how many" in prompt.lower() or "years" in prompt.lower():
-                        digits = re.findall(r"\d+", ans)
-                        fill_val = digits[0] if digits else ans
-                    else:
-                        fill_val = ans
-
+                    fill_val = resolve_field_value(
+                        prompt,
+                        raw_answer=ans,
+                        itype=itype,
+                        inputmode=inputmode,
+                        maxlength=maxlength,
+                        max_attr=max_attr,
+                        pattern=pattern,
+                        is_dummy_mode=False
+                    )
                     inp.click()
                     inp.fill("")
-                    inp.press_sequentially(fill_val, delay=20)
+                    inp.press_sequentially(fill_val, delay=15)
                     answered.append(f"{prompt} -> {fill_val}")
                     logger(f"  ✓ Filled input for '{prompt}': {fill_val}")
-                    page.wait_for_timeout(300)
+                    page.wait_for_timeout(200)
                 else:
-                    # Check if it's a basic contact term that was skipped
                     is_basic = any(b in prompt.lower() for b in basic_profile_terms)
                     if not is_basic:
                         upsert_screening_question(prompt, sample_job=job_label)
                         unanswered.append(prompt)
+
+                    if fill_dummies_to_advance:
+                        fill_val = resolve_field_value(
+                            prompt,
+                            raw_answer=None,
+                            itype=itype,
+                            inputmode=inputmode,
+                            maxlength=maxlength,
+                            max_attr=max_attr,
+                            pattern=pattern,
+                            is_dummy_mode=True
+                        )
+                        inp.click()
+                        inp.fill("")
+                        inp.press_sequentially(fill_val, delay=15)
+                        filled_placeholders.append(prompt)
+                        logger(f"  ℹ️ Filled placeholder for '{prompt}': {fill_val} to advance step")
+                        page.wait_for_timeout(200)
             except Exception as e:
                 logger(f"  Notice inspecting input: {e}")
     except Exception:
         pass
 
     return {
-        "can_proceed": len(unanswered) == 0,
+        "can_proceed": True,
+        "had_unanswered": len(unanswered) > 0,
         "answered": answered,
         "unanswered": unanswered,
+        "filled_placeholders": filled_placeholders,
     }
 
 
@@ -578,8 +822,10 @@ def execute_easy_apply(
     """
     Attempt to submit an Easy Apply application for a given job URL.
     Auto-fills screening questions from DB Question Bank.
-    If unhandled or unanswered questions appear, saves them to DB screening_questions
-    with status='PENDING' and defers the post for screening.
+    If unhandled or unanswered questions appear, harvests questions across all steps
+    using compliant placeholders to advance without exceeding limits, saves them
+    to DB screening_questions with status='PENDING', and safely dismisses the modal
+    WITHOUT submitting dummy values.
     Returns (status, detail_message) where status is:
       - 'APPLIED': Successfully submitted
       - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
@@ -651,8 +897,11 @@ def execute_easy_apply(
             logger("  ⚠️ Easy Apply dialog did not open.")
             return "FAILED", "Easy Apply dialog did not open"
 
-        # Multi-step wizard loop (up to 7 steps max)
-        for step in range(1, 8):
+        all_unanswered_questions: List[str] = []
+        had_unanswered = False
+
+        # Multi-step wizard loop (up to 8 steps max)
+        for step in range(1, 9):
             # Check rate limit on each step
             rate_limit_msg = check_linkedin_rate_limit(page)
             if rate_limit_msg:
@@ -674,19 +923,35 @@ def execute_easy_apply(
             upload_or_select_resume(page, resume_path)
 
             # Check and auto-fill custom screening questions on this step
-            screening_result = handle_screening_form_step(page, job_label=job_label, logger=logger)
-            if not screening_result["can_proceed"]:
-                unanswered_q = screening_result["unanswered"]
-                q_summary = "; ".join(unanswered_q)
-                logger(f"  📋 Step {step}: Unanswered screening questions ({q_summary}). Saved to DB Question Bank.")
-                dismiss_easy_apply_modal(page)
-                return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
-            elif screening_result.get("answered"):
+            screening_result = handle_screening_form_step(
+                page, job_label=job_label, fill_dummies_to_advance=True, logger=logger
+            )
+            if screening_result.get("unanswered"):
+                for uq in screening_result["unanswered"]:
+                    if uq not in all_unanswered_questions:
+                        all_unanswered_questions.append(uq)
+                had_unanswered = True
+
+            if screening_result.get("answered"):
                 ans_list = screening_result["answered"]
                 logger(f"  ✓ Step {step}: Auto-filled {len(ans_list)} screening question(s) from Question Bank")
 
+            # Check and resolve any inline feedback errors (e.g. exceeded limit or invalid format)
+            try:
+                err_inputs = page.locator(".jobs-easy-apply-modal input.artdeco-inline-feedback--error, .jobs-easy-apply-modal [data-test-form-element-error-messages]").all()
+                for err_el in err_inputs:
+                    try:
+                        inp_box = err_el.locator("xpath=preceding::input[1]").first
+                        if inp_box.count() > 0:
+                            inp_box.click()
+                            inp_box.fill("0")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # Natural human pause before next action
-            page.wait_for_timeout(random.randint(1200, 2200))
+            page.wait_for_timeout(random.randint(1000, 1800))
 
             # Check for Submit application button
             submit_btn = page.locator(
@@ -701,6 +966,15 @@ def execute_easy_apply(
                 except Exception:
                     pass
                 if submit_btn.is_visible():
+                    # CRITICAL SAFETY GUARD: If application contained unanswered questions that were
+                    # filled with placeholders to traverse steps, DO NOT SUBMIT TO RECRUITER.
+                    if had_unanswered or len(all_unanswered_questions) > 0:
+                        q_summary = "; ".join(all_unanswered_questions)
+                        logger(f"  📋 Successfully traversed all steps and cataloged {len(all_unanswered_questions)} screening question(s): {q_summary}")
+                        logger("  🛑 Dismissing modal without submitting to protect applicant integrity. Questions saved to Question Bank.")
+                        dismiss_easy_apply_modal(page)
+                        return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
+
                     logger("  Submitting application...")
                     try:
                         submit_btn.click(timeout=5000)
@@ -762,8 +1036,10 @@ def execute_easy_apply(
             if all_q:
                 for q in all_q:
                     upsert_screening_question(q, sample_job=job_label)
-            q_summary = "; ".join(all_q) if all_q else "Multi-step form required manual input"
-            logger(f"  Step {step}: Unhandled form state, saving for screening ({q_summary}).")
+                    if q not in all_unanswered_questions:
+                        all_unanswered_questions.append(q)
+            q_summary = "; ".join(all_unanswered_questions) if all_unanswered_questions else "Multi-step form required manual input"
+            logger(f"  Step {step}: Multi-step questionnaire saved for screening ({q_summary}).")
             dismiss_easy_apply_modal(page)
             return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
@@ -772,7 +1048,9 @@ def execute_easy_apply(
         if all_q:
             for q in all_q:
                 upsert_screening_question(q, sample_job=job_label)
-        q_summary = "; ".join(all_q) if all_q else "Exceeded step limit, saved for screening"
+                if q not in all_unanswered_questions:
+                    all_unanswered_questions.append(q)
+        q_summary = "; ".join(all_unanswered_questions) if all_unanswered_questions else "Questions: Screening Questionnaire required"
         dismiss_easy_apply_modal(page)
         return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 

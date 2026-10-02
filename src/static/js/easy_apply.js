@@ -70,11 +70,53 @@ function initEasyCyclesPersistence() {
   input.addEventListener('input', onCyclesUpdate);
 }
 
+function updateEasyClearFiltersButton() {
+  const btn = document.getElementById('btnClearEasyFilters');
+  if (!btn) return;
+  const isFiltered = (
+    easyApplyStatusFilter !== 'ALL' ||
+    Boolean(easyTableSearchQuery) ||
+    Boolean(state.fromEasyDate) ||
+    Boolean(state.toEasyDate)
+  );
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
+function clearEasyApplyFilters() {
+  easyApplyStatusFilter = 'ALL';
+  easyTableSearchQuery = '';
+  state.fromEasyDate = '';
+  state.toEasyDate = '';
+
+  const pills = {
+    ALL: document.getElementById('pillEasyAll'),
+    DISCOVERED: document.getElementById('pillEasyDiscovered'),
+    REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
+    APPLIED: document.getElementById('pillEasyApplied'),
+    NOT_FOUND: document.getElementById('pillEasyNotFound'),
+  };
+  Object.entries(pills).forEach(([key, el]) => {
+    if (el) el.classList.toggle('active', key === 'ALL');
+  });
+
+  const searchInput = document.getElementById('easyFilterKeyword');
+  if (searchInput) searchInput.value = '';
+
+  const fromEl = document.getElementById('easyDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('easyDateTo');
+  if (toEl) toEl.value = '';
+
+  updateEasyClearFiltersButton();
+  fetchEasyApplyPosts();
+}
+
 function applyEasyDateFilter() {
   const fromEl = document.getElementById('easyDateFrom');
   const toEl = document.getElementById('easyDateTo');
   state.fromEasyDate = fromEl ? fromEl.value.trim() : '';
   state.toEasyDate = toEl ? toEl.value.trim() : '';
+  updateEasyClearFiltersButton();
   fetchEasyApplyPosts();
 }
 
@@ -140,11 +182,13 @@ function filterEasyApplyStatus(status) {
     if (el) el.classList.toggle('active', key === status);
   });
 
+  updateEasyClearFiltersButton();
   renderEasyApplyTable();
 }
 
 function handleEasyTableSearch(query) {
   easyTableSearchQuery = (query || '').trim().toLowerCase();
+  updateEasyClearFiltersButton();
   renderEasyApplyTable();
 }
 
@@ -1618,6 +1662,7 @@ window.removeBulkKeyword = removeBulkKeyword;
 window.clearBulkKeywords = clearBulkKeywords;
 window.submitBulkEasySearch = submitBulkEasySearch;
 window.applyEasyDateFilter = applyEasyDateFilter;
+window.clearEasyApplyFilters = clearEasyApplyFilters;
 window.openQuestionBankModal = openQuestionBankModal;
 window.closeQuestionBankModal = closeQuestionBankModal;
 window.setQuestionBankCategory = setQuestionBankCategory;

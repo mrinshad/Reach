@@ -19,6 +19,8 @@ const qbankState = {
   categoryFilter: 'all',
   searchQuery: '',
   sortBy: 'occurrences',
+  fromDate: '',
+  toDate: '',
   selectedKeys: new Set(),
   modifiedAnswers: {}, // key -> newAnswer
   isLoading: false,
@@ -29,6 +31,7 @@ const qbankState = {
 async function loadQuestionBankPage() {
   qbankState.isLoading = true;
   updateQuestionBankLoadingUI(true);
+  updateQuestionBankClearFiltersButton();
 
   try {
     const params = new URLSearchParams();
@@ -43,6 +46,12 @@ async function loadQuestionBankPage() {
     }
     if (qbankState.sortBy) {
       params.append('sort_by', qbankState.sortBy);
+    }
+    if (qbankState.fromDate) {
+      params.append('from_date', qbankState.fromDate);
+    }
+    if (qbankState.toDate) {
+      params.append('to_date', qbankState.toDate);
     }
 
     const res = await fetch(`/api/easy-apply/questions?${params.toString()}`);
@@ -760,6 +769,20 @@ async function triggerBatchDeleteQuestions() {
 }
 
 // --- Search & Filtering Handlers ---
+function updateQuestionBankClearFiltersButton() {
+  const btn = document.getElementById('btnClearQbankFilters');
+  if (!btn) return;
+  const isFiltered = (
+    qbankState.statusFilter !== 'all' ||
+    qbankState.categoryFilter !== 'all' ||
+    Boolean(qbankState.searchQuery && qbankState.searchQuery.trim()) ||
+    Boolean(qbankState.fromDate) ||
+    Boolean(qbankState.toDate) ||
+    (qbankState.sortBy && qbankState.sortBy !== 'occurrences')
+  );
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
 function handleQuestionBankSearchInput(value) {
   const clearBtn = document.getElementById('btnQbankSearchClear');
   if (clearBtn) {
@@ -769,6 +792,7 @@ function handleQuestionBankSearchInput(value) {
   qbankState.searchQuery = value;
   clearTimeout(qbankState.searchDebounceTimer);
   qbankState.searchDebounceTimer = setTimeout(() => {
+    updateQuestionBankClearFiltersButton();
     loadQuestionBankPage();
   }, 250);
 }
@@ -779,12 +803,14 @@ function clearQuestionBankSearch() {
   if (input) input.value = '';
   if (clearBtn) clearBtn.classList.add('hidden');
   qbankState.searchQuery = '';
+  updateQuestionBankClearFiltersButton();
   loadQuestionBankPage();
 }
 
 function setQuestionBankStatusFilter(status) {
   if (qbankState.statusFilter === status) return;
   qbankState.statusFilter = status;
+  updateQuestionBankClearFiltersButton();
   loadQuestionBankPage();
 }
 
@@ -792,6 +818,7 @@ function setQuestionBankCategoryFilter(cat) {
   qbankState.categoryFilter = cat;
   const select = document.getElementById('selectQbankCategory');
   if (select) select.value = cat;
+  updateQuestionBankClearFiltersButton();
   loadQuestionBankPage();
 }
 
@@ -799,6 +826,16 @@ function setQuestionBankSort(sortVal) {
   qbankState.sortBy = sortVal;
   const select = document.getElementById('selectQbankSort');
   if (select) select.value = sortVal;
+  updateQuestionBankClearFiltersButton();
+  loadQuestionBankPage();
+}
+
+function applyQuestionBankDateFilter() {
+  const fromEl = document.getElementById('qbankDateFrom');
+  const toEl = document.getElementById('qbankDateTo');
+  qbankState.fromDate = fromEl ? fromEl.value.trim() : '';
+  qbankState.toDate = toEl ? toEl.value.trim() : '';
+  updateQuestionBankClearFiltersButton();
   loadQuestionBankPage();
 }
 
@@ -807,6 +844,8 @@ function resetQuestionBankFilters() {
   qbankState.categoryFilter = 'all';
   qbankState.searchQuery = '';
   qbankState.sortBy = 'occurrences';
+  qbankState.fromDate = '';
+  qbankState.toDate = '';
 
   const searchInput = document.getElementById('qbankPageSearchInput');
   if (searchInput) searchInput.value = '';
@@ -819,6 +858,12 @@ function resetQuestionBankFilters() {
   const sortSelect = document.getElementById('selectQbankSort');
   if (sortSelect) sortSelect.value = 'occurrences';
 
+  const fromEl = document.getElementById('qbankDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('qbankDateTo');
+  if (toEl) toEl.value = '';
+
+  updateQuestionBankClearFiltersButton();
   loadQuestionBankPage();
 }
 
@@ -929,6 +974,7 @@ window.clearQuestionBankSearch = clearQuestionBankSearch;
 window.setQuestionBankStatusFilter = setQuestionBankStatusFilter;
 window.setQuestionBankCategoryFilter = setQuestionBankCategoryFilter;
 window.setQuestionBankSort = setQuestionBankSort;
+window.applyQuestionBankDateFilter = applyQuestionBankDateFilter;
 window.resetQuestionBankFilters = resetQuestionBankFilters;
 window.handleQuestionBankAnswerInput = handleQuestionBankAnswerInput;
 window.saveSingleQuestionAnswer = saveSingleQuestionAnswer;

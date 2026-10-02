@@ -13,10 +13,21 @@
               <span>Bulk Gen</span>
             </button>
           </div>
-          <div class="queue-search">
-            <div class="search-box sm" style="width: 100%;">
-              <svg class="search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="inputSearchReview" placeholder="Search drafts..." oninput="handleSearchReview(this.value)" style="width: 100%;" />
+          <div class="queue-search" style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <div style="display: flex; align-items: center; gap: 0.35rem;">
+              <div class="search-box sm" style="flex: 1;">
+                <svg class="search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="inputSearchReview" placeholder="Search drafts..." oninput="handleSearchReview(this.value)" style="width: 100%;" />
+              </div>
+              <button class="btn-clear-filters hidden" id="btnClearReviewFilters" onclick="clearReviewFilters()" title="Reset search and date range filters back to All" style="padding: 0.22rem 0.45rem; font-size: 0.68rem;">
+                <span>✕ Clear</span>
+              </button>
+            </div>
+            <div class="date-filter-group" style="padding: 0.15rem 0.4rem; justify-content: space-between;" title="Filter drafts by date range">
+              <span class="date-label">From</span>
+              <input type="date" id="reviewDateFrom" class="input-date-clean" onchange="applyReviewDateFilter()" title="Start date" />
+              <span class="date-label">To</span>
+              <input type="date" id="reviewDateTo" class="input-date-clean" onchange="applyReviewDateFilter()" title="End date" />
             </div>
           </div>
           <!-- Multi-Select Batch Actions Toolbar -->

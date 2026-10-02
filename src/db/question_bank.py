@@ -567,10 +567,12 @@ def get_aggregated_question_bank(
     search: Optional[str] = None,
     status: Optional[str] = None,
     sort_by: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Retrieve all screening questions from PostgreSQL screening_questions table.
-    Supports filtering by category, search text, answering status, and flexible sorting.
+    Supports filtering by category, search text, answering status, from/to date ranges, and flexible sorting.
     Includes multi-choice options for dropdowns and radios.
     """
     order_clause = "ORDER BY is_standard DESC, occurrences DESC, question_text ASC"
@@ -587,6 +589,21 @@ def get_aggregated_question_bank(
         elif sb in ("status", "pending_first"):
             order_clause = "ORDER BY (CASE WHEN status = 'ANSWERED' THEN 1 ELSE 0 END) ASC, occurrences DESC"
 
+    where_parts = []
+    params = []
+
+    if from_date and str(from_date).strip():
+        clean_from = str(from_date).strip()
+        where_parts.append("(DATE(updated_at) >= %s::date OR DATE(created_at) >= %s::date)")
+        params.extend([clean_from, clean_from])
+
+    if to_date and str(to_date).strip():
+        clean_to = str(to_date).strip()
+        where_parts.append("(DATE(updated_at) <= %s::date OR DATE(created_at) <= %s::date)")
+        params.extend([clean_to, clean_to])
+
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -595,8 +612,9 @@ def get_aggregated_question_bank(
             id, question_key, question_text, category, answer,
             is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at, options
         FROM screening_questions
+        {where_sql}
         {order_clause};
-    """)
+    """, tuple(params))
     rows = cur.fetchall()
     cur.close()
     conn.close()

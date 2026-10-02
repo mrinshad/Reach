@@ -547,6 +547,41 @@ function openActivityLogsView() {
   switchHistoryView('logs');
 }
 
+function updateActivityLogsClearButton() {
+  const btn = document.getElementById('btnClearActivityLogFilters');
+  if (!btn) return;
+  const isFiltered = (
+    activityLogTypeFilter !== 'ALL' ||
+    activityLogStatusFilter !== 'ALL' ||
+    Boolean(activityLogFromDate) ||
+    Boolean(activityLogToDate)
+  );
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
+function clearActivityLogFilters() {
+  activityLogTypeFilter = 'ALL';
+  activityLogStatusFilter = 'ALL';
+  activityLogFromDate = '';
+  activityLogToDate = '';
+  activityLogsPage = 1;
+
+  document.querySelectorAll('#activityLogPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.actType === 'ALL');
+  });
+
+  const select = document.getElementById('selectActivityLogStatus');
+  if (select) select.value = 'ALL';
+
+  const fromEl = document.getElementById('activityDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('activityDateTo');
+  if (toEl) toEl.value = '';
+
+  updateActivityLogsClearButton();
+  fetchActivityLogs();
+}
+
 function setActivityLogTypeFilter(type) {
   activityLogTypeFilter = type;
   activityLogsPage = 1;
@@ -558,6 +593,7 @@ function setActivityLogTypeFilter(type) {
     const select = document.getElementById('selectActivityLogStatus');
     if (select) select.value = 'ALL';
   }
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -570,6 +606,7 @@ function setActivityLogUncompletedFilter() {
   });
   const select = document.getElementById('selectActivityLogStatus');
   if (select) select.value = 'uncompleted';
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -586,6 +623,7 @@ function applyActivityLogStatusFilter() {
       pill.classList.toggle('active', pill.dataset.actType === activityLogTypeFilter);
     }
   });
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -598,6 +636,7 @@ function applyActivityLogDateFilter() {
   activityLogFromDate = fromEl ? fromEl.value.trim() : '';
   activityLogToDate = toEl ? toEl.value.trim() : '';
   activityLogsPage = 1;
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -1226,6 +1265,7 @@ function copyRunLogs() {
 
 window.applySentDateFilter = applySentDateFilter;
 window.applyActivityLogDateFilter = applyActivityLogDateFilter;
+window.clearActivityLogFilters = clearActivityLogFilters;
 window.setActivityLogUncompletedFilter = setActivityLogUncompletedFilter;
 window.reexecuteTask = reexecuteTask;
 window.reexecuteAllUncompleted = reexecuteAllUncompleted;
