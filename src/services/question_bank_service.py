@@ -177,6 +177,7 @@ def create_or_update_question(
     category: Optional[str] = None,
     answer: Optional[str] = None,
     default_placeholder: Optional[str] = None,
+    options: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Manually insert or update a custom question into the Question Bank."""
     return upsert_screening_question(
@@ -185,6 +186,7 @@ def create_or_update_question(
         answer=answer,
         default_placeholder=default_placeholder,
         sample_job="Manual User Ingestion",
+        options=options,
     )
 
 

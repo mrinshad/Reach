@@ -188,11 +188,14 @@ function renderQuestionBankCards() {
     const isSelected = qbankState.selectedKeys.has(key);
     const hasUnsavedEdit = Object.prototype.hasOwnProperty.call(qbankState.modifiedAnswers, key);
     const currentAnswer = hasUnsavedEdit ? qbankState.modifiedAnswers[key] : (q.answer || '');
-    const isAnswered = Boolean(currentAnswer && currentAnswer.trim());
+    const isBlank = (currentAnswer === '__EMPTY__');
+    const isAnswered = isBlank || Boolean(currentAnswer && currentAnswer.trim());
     const occurrences = q.occurrences || 1;
     const isStandard = Boolean(q.is_standard);
     const category = (q.category || 'profile').toLowerCase();
-    const placeholder = q.default_placeholder || 'Enter your standard answer...';
+    const placeholder = isBlank 
+      ? '(Intentionally left blank / N/A — will submit empty on apply)' 
+      : (q.default_placeholder || 'Enter your standard answer...');
 
     // Sample jobs preview
     let sampleJobsHtml = '';
@@ -206,6 +209,30 @@ function renderQuestionBankCards() {
           <span>Found on:</span>
           ${tags}
           ${moreTag}
+        </div>
+      `;
+    }
+
+    // Status badge
+    let statusBadgeHtml = '';
+    if (isBlank) {
+      statusBadgeHtml = `<span class="qbank-badge badge-blank" title="Configured to leave blank on applications">🚫 Blank / N/A</span>`;
+    } else if (isAnswered) {
+      statusBadgeHtml = `<span class="qbank-badge status-ans">✓ Answered</span>`;
+    } else {
+      statusBadgeHtml = `<span class="qbank-badge status-pend">⚠️ Pending Answer</span>`;
+    }
+
+    // Multi-choice option pills
+    let optionsHtml = '';
+    if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+      optionsHtml = `
+        <div class="qbank-options-pills">
+          <span class="qbank-options-label">Select Option:</span>
+          ${q.options.map(opt => {
+            const isChosen = (!isBlank && currentAnswer.trim().toLowerCase() === String(opt).trim().toLowerCase());
+            return `<button type="button" class="qbank-option-pill ${isChosen ? 'is-selected' : ''}" onclick="selectQuestionOption('${escapeFn(key)}', '${escapeFn(opt)}')">${escapeFn(opt)}</button>`;
+          }).join('')}
         </div>
       `;
     }
@@ -231,9 +258,7 @@ function renderQuestionBankCards() {
               <h4 class="qbank-question-text">${escapeFn(q.question)}</h4>
               <div class="qbank-badges-row">
                 <span class="qbank-badge cat-${escapeFn(category)}">${escapeFn(category)}</span>
-                <span class="qbank-badge ${isAnswered ? 'status-ans' : 'status-pend'}">
-                  ${isAnswered ? '✓ Answered' : '⚠️ Pending Answer'}
-                </span>
+                ${statusBadgeHtml}
                 ${isStandard ? '<span class="qbank-badge badge-standard">⭐ Core Standard</span>' : '<span class="qbank-badge badge-occurrences">Discovered</span>'}
                 ${occurrences > 1 ? `<span class="qbank-badge badge-occurrences" title="Asked across ${occurrences} job applications">🔥 ${occurrences}x</span>` : ''}
               </div>
@@ -242,8 +267,9 @@ function renderQuestionBankCards() {
 
           <div class="card-header-actions">
             <button 
+              type="button"
               class="btn-card-action btn-card-delete" 
-              onclick="deleteSingleQuestion('${escapeFn(key)}', ${JSON.stringify(q.question)})" 
+              onclick="handleCardDeleteClick('${escapeFn(key)}', event)" 
               title="Delete question from Question Bank"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -258,19 +284,32 @@ function renderQuestionBankCards() {
         ${sampleJobsHtml}
 
         <div class="qbank-answer-field-wrap">
+          ${optionsHtml}
+
           <textarea 
             class="qbank-answer-textarea ${dirtyClass}" 
             id="qbankTextarea-${escapeFn(key)}" 
             placeholder="${escapeFn(placeholder)}" 
             rows="2"
             oninput="handleQuestionBankAnswerInput('${escapeFn(key)}', this.value)"
-          >${escapeFn(currentAnswer)}</textarea>
+          >${escapeFn(isBlank ? '__EMPTY__' : currentAnswer)}</textarea>
 
           <div class="qbank-card-footer">
-            <div class="qbank-status-text ${hasUnsavedEdit ? 'modified' : (isAnswered ? 'saved' : '')}" id="qbankFooterStatus-${escapeFn(key)}">
-              ${hasUnsavedEdit ? '⚠️ Modified (Unsaved)' : (isAnswered ? '✓ Auto-fill Ready' : 'Empty response')}
+            <div class="qbank-card-footer-left">
+              <button 
+                type="button" 
+                class="btn-card-blank ${isBlank ? 'is-active' : ''}" 
+                onclick="toggleQuestionBlank('${escapeFn(key)}')"
+                title="Click to intentionally leave this field blank during Easy Apply (e.g. Middle Name)"
+              >
+                ${isBlank ? '✓ Set as Blank / N/A' : '🚫 Leave Blank'}
+              </button>
+              <div class="qbank-status-text ${hasUnsavedEdit ? 'modified' : (isAnswered ? 'saved' : '')}" id="qbankFooterStatus-${escapeFn(key)}">
+                ${hasUnsavedEdit ? '⚠️ Modified (Unsaved)' : (isBlank ? '✓ Auto-cleared on apply' : (isAnswered ? '✓ Auto-fill Ready' : 'Empty response'))}
+              </div>
             </div>
             <button 
+              type="button"
               class="card-save-btn ${hasUnsavedEdit ? '' : 'btn-disabled'}" 
               id="btnCardSave-${escapeFn(key)}" 
               onclick="saveSingleQuestionAnswer('${escapeFn(key)}')"
@@ -299,27 +338,78 @@ function handleQuestionBankAnswerInput(key, value) {
   const textarea = document.getElementById(`qbankTextarea-${key}`);
   const footerStatus = document.getElementById(`qbankFooterStatus-${key}`);
   const saveBtn = document.getElementById(`btnCardSave-${key}`);
+  const blankBtn = card ? card.querySelector('.btn-card-blank') : null;
+
+  const isBlank = (newAnswer === '__EMPTY__');
+
+  // Update pills active state
+  if (card) {
+    const pills = card.querySelectorAll('.qbank-option-pill');
+    pills.forEach(p => {
+      const match = !isBlank && (p.textContent.trim().toLowerCase() === newAnswer.toLowerCase());
+      p.classList.toggle('is-selected', match);
+    });
+  }
+
+  if (blankBtn) {
+    blankBtn.classList.toggle('is-active', isBlank);
+    blankBtn.textContent = isBlank ? '✓ Set as Blank / N/A' : '🚫 Leave Blank';
+  }
 
   if (newAnswer !== originalAnswer) {
     qbankState.modifiedAnswers[key] = value;
     if (textarea) textarea.classList.add('is-dirty');
     if (footerStatus) {
       footerStatus.className = 'qbank-status-text modified';
-      footerStatus.textContent = '⚠️ Modified (Unsaved)';
+      footerStatus.textContent = isBlank ? '⚠️ Set to Blank (Unsaved)' : '⚠️ Modified (Unsaved)';
     }
     if (saveBtn) saveBtn.classList.remove('btn-disabled');
   } else {
     delete qbankState.modifiedAnswers[key];
     if (textarea) textarea.classList.remove('is-dirty');
     if (footerStatus) {
-      const isAns = Boolean(originalAnswer);
+      const isAns = isBlank || Boolean(originalAnswer);
       footerStatus.className = `qbank-status-text ${isAns ? 'saved' : ''}`;
-      footerStatus.textContent = isAns ? '✓ Auto-fill Ready' : 'Empty response';
+      footerStatus.textContent = isBlank ? '✓ Auto-cleared on apply' : (isAns ? '✓ Auto-fill Ready' : 'Empty response');
     }
     if (saveBtn) saveBtn.classList.add('btn-disabled');
   }
 
   updateUnsavedToastUI();
+}
+
+function selectQuestionOption(key, optionText) {
+  const textarea = document.getElementById(`qbankTextarea-${key}`);
+  if (textarea) {
+    textarea.value = optionText;
+    handleQuestionBankAnswerInput(key, optionText);
+  }
+}
+
+function toggleQuestionBlank(key) {
+  const q = (qbankState.questions || []).find(item => (item.key || item.id) === key);
+  const currentVal = qbankState.modifiedAnswers[key] !== undefined ? qbankState.modifiedAnswers[key] : (q ? q.answer : '');
+  const textarea = document.getElementById(`qbankTextarea-${key}`);
+
+  if (currentVal === '__EMPTY__') {
+    // Revert blank to empty string for custom input
+    if (textarea) textarea.value = '';
+    handleQuestionBankAnswerInput(key, '');
+  } else {
+    // Set to __EMPTY__
+    if (textarea) textarea.value = '__EMPTY__';
+    handleQuestionBankAnswerInput(key, '__EMPTY__');
+  }
+}
+
+function handleCardDeleteClick(key, event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const q = (qbankState.questions || []).find(item => (item.key === key || item.id === key));
+  const questionText = q ? q.question : 'this question';
+  deleteSingleQuestion(key, questionText);
 }
 
 function updateUnsavedToastUI() {
@@ -354,7 +444,9 @@ function discardQuestionBankEdits() {
 // --- Save Single Question Answer ---
 async function saveSingleQuestionAnswer(key) {
   const textarea = document.getElementById(`qbankTextarea-${key}`);
-  const newAnswer = textarea ? textarea.value : (qbankState.modifiedAnswers[key] || '');
+  let newAnswer = qbankState.modifiedAnswers[key] !== undefined 
+    ? qbankState.modifiedAnswers[key] 
+    : (textarea ? textarea.value : '');
 
   try {
     const res = await fetch('/api/easy-apply/questions/answers', {
@@ -374,7 +466,7 @@ async function saveSingleQuestionAnswer(key) {
     const targetQ = qbankState.questions.find(q => (q.key || q.id) === key);
     if (targetQ) {
       targetQ.answer = newAnswer;
-      targetQ.status = newAnswer.trim() ? 'ANSWERED' : 'PENDING';
+      targetQ.status = (newAnswer.trim() || newAnswer === '__EMPTY__') ? 'ANSWERED' : 'PENDING';
     }
 
     if (data.answered_count !== undefined) {
@@ -393,7 +485,9 @@ async function saveSingleQuestionAnswer(key) {
     if (typeof showSnackbar === 'function') {
       showSnackbar({
         title: 'Answer Saved',
-        message: 'Screening answer updated and synced for Easy Apply automation.',
+        message: newAnswer === '__EMPTY__' 
+          ? 'Question configured to be submitted blank on applications.' 
+          : 'Screening answer updated and synced for Easy Apply automation.',
         type: 'success',
         duration: 3500,
       });
@@ -755,7 +849,10 @@ async function submitAddQuestion(event) {
   const qText = (document.getElementById('inputAddQuestionText')?.value || '').trim();
   const category = document.getElementById('selectAddQuestionCategory')?.value || 'profile';
   const placeholder = (document.getElementById('inputAddQuestionPlaceholder')?.value || '').trim();
+  const optionsRaw = (document.getElementById('inputAddQuestionOptions')?.value || '').trim();
   const answer = (document.getElementById('inputAddQuestionAnswer')?.value || '').trim();
+
+  const options = optionsRaw ? optionsRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
 
   if (!qText) {
     if (typeof showSnackbar === 'function') {
@@ -783,6 +880,7 @@ async function submitAddQuestion(event) {
         category: category,
         default_placeholder: placeholder || null,
         answer: answer || null,
+        options: options,
       }),
     });
 

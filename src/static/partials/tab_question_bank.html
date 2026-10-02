@@ -285,6 +285,17 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label" for="inputAddQuestionOptions">Multiple Choice Options (Optional, comma-separated)</label>
+          <input 
+            type="text" 
+            id="inputAddQuestionOptions" 
+            class="form-control" 
+            placeholder="e.g. Yes, No  OR  Remote, Hybrid, On-site" 
+          />
+          <span class="form-hint">Provide selectable choices for dropdowns or radio button prompts.</span>
+        </div>
+
+        <div class="form-group">
           <label class="form-label" for="inputAddQuestionAnswer">Your Standard Answer (Optional)</label>
           <textarea 
             id="inputAddQuestionAnswer" 
@@ -292,7 +303,7 @@
             rows="2" 
             placeholder="Your standard response that will auto-fill future Easy Apply applications..."
           ></textarea>
-          <span class="form-hint">You can leave this blank and answer it later.</span>
+          <span class="form-hint">You can leave this blank, enter '__EMPTY__' to leave it blank during application, or answer it later.</span>
         </div>
       </div>
 

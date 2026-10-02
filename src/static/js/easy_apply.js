@@ -755,6 +755,11 @@ function findQuestionBankAnswer(label) {
   if (questionBankAnswers[normKey]) return questionBankAnswers[normKey];
 
   // Smart aliases to standard answers
+  if (/(?:middle name|middle_name)/i.test(label)) {
+    if (questionBankAnswers['std_middle_name']) return questionBankAnswers['std_middle_name'];
+    if (questionBankAnswers['middlename']) return questionBankAnswers['middlename'];
+    return '__EMPTY__';
+  }
   if (/(?:phone|mobile|contact number)/i.test(label)) {
     if (questionBankAnswers['std_phone']) return questionBankAnswers['std_phone'];
     if (questionBankAnswers['phonemobilenumber']) return questionBankAnswers['phonemobilenumber'];
@@ -787,6 +792,14 @@ function findQuestionBankAnswer(label) {
     if (questionBankAnswers['std_english']) return questionBankAnswers['std_english'];
   }
   return '';
+}
+
+function setScreeningInpValue(normKey, val) {
+  const inp = document.getElementById(`screeningAnsInp_${normKey}`);
+  if (inp) {
+    inp.value = val;
+    inp.focus();
+  }
 }
 
 function openScreeningModal(postId) {
@@ -833,14 +846,30 @@ function openScreeningModal(postId) {
         allQuestionsAnswered = false;
       }
 
-      const answerRow = savedAnswer
-        ? `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
-             <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
-           </div>`
-        : `<div class="screening-inline-ans-box" id="screeningAnsBox_${normKey}">
-             <input type="text" class="screening-inline-input" id="screeningAnsInp_${normKey}" placeholder="Type answer for Question Bank (e.g. 3, Immediate, Yes)..." onkeydown="if(event.key==='Enter') saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this.nextElementSibling)" />
-             <button class="btn btn-warning btn-xs screening-inline-save-btn" onclick="saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this)">Save Answer</button>
-           </div>`;
+      let answerRow = '';
+      if (savedAnswer === '__EMPTY__') {
+        answerRow = `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+                       <span>✓ Configured Blank:</span> <strong>(Will leave blank on apply)</strong>
+                     </div>`;
+      } else if (savedAnswer) {
+        answerRow = `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+                       <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
+                     </div>`;
+      } else {
+        answerRow = `
+          <div class="screening-inline-ans-box" id="screeningAnsBox_${normKey}">
+            <div style="display: flex; gap: 0.35rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'Yes')">Yes</button>
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'No')">No</button>
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="setScreeningInpValue('${normKey}', '__EMPTY__')">🚫 Leave Blank</button>
+            </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="text" class="screening-inline-input" id="screeningAnsInp_${normKey}" placeholder="Type answer for Question Bank (e.g. 3, Immediate, Yes)..." onkeydown="if(event.key==='Enter') saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this.nextElementSibling)" />
+              <button type="button" class="btn btn-warning btn-xs screening-inline-save-btn" onclick="saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this)">Save Answer</button>
+            </div>
+          </div>
+        `;
+      }
 
       return `
         <div class="screening-question-card">
@@ -887,7 +916,7 @@ async function saveSingleInlineAnswer(normKey, label, btn) {
   if (!input) return;
   const val = input.value.trim();
   if (!val) {
-    showAlert('Empty Answer', 'Please enter an answer before saving.');
+    showAlert('Empty Answer', 'Please enter an answer or select Leave Blank.');
     return;
   }
 
@@ -904,7 +933,7 @@ async function saveSingleInlineAnswer(normKey, label, btn) {
     });
 
     if (res.ok) {
-      showToast('✓ Answer saved to Question Bank!', 'success');
+      showToast(val === '__EMPTY__' ? '✓ Configured to submit blank!' : '✓ Answer saved to Question Bank!', 'success');
       // Update local dictionary immediately
       if (questionBankAnswers) {
         questionBankAnswers[normKey] = val;
@@ -912,11 +941,19 @@ async function saveSingleInlineAnswer(normKey, label, btn) {
       // Replace inline box with saved pill
       const slot = document.getElementById(`screeningAnsSlot_${normKey}`);
       if (slot) {
-        slot.innerHTML = `
-          <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
-            <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(val)}</strong>
-          </div>
-        `;
+        if (val === '__EMPTY__') {
+          slot.innerHTML = `
+            <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <span>✓ Configured Blank:</span> <strong>(Will leave blank on apply)</strong>
+            </div>
+          `;
+        } else {
+          slot.innerHTML = `
+            <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(val)}</strong>
+            </div>
+          `;
+        }
       }
       // Refresh Question Bank in background
       fetchQuestionBank(false);
@@ -1207,6 +1244,8 @@ async function fetchQuestionBank(renderAfter = true) {
           if (q.id) questionBankAnswers[q.id] = q.answer;
         }
       });
+    }
+
     // Update Question Bank button counter
     const countEl = document.getElementById('totalQuestionsCount');
     if (countEl) countEl.textContent = data.total_count || 0;

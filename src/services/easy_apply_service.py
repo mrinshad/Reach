@@ -344,6 +344,17 @@ def handle_screening_form_step(
                 if not prompt or is_skip(prompt):
                     continue
 
+                # Collect available options from radio group
+                radio_labels = fs.locator("label, .fb-radio-label, .artdeco-radio-button__label").all()
+                extracted_options = []
+                for ro in radio_labels:
+                    try:
+                        txt = ro.inner_text().strip()
+                        if txt and len(txt) < 80 and txt not in extracted_options:
+                            extracted_options.append(txt)
+                    except Exception:
+                        pass
+
                 # Check if an option is already selected
                 checked_count = fs.locator("input[type='radio']:checked").count()
                 if checked_count > 0:
@@ -351,14 +362,20 @@ def handle_screening_form_step(
 
                 # Look up answer in DB
                 ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left radio choice empty for '{prompt}' as configured")
+                    continue
+
                 if ans:
                     # Match radio option
-                    options = fs.locator("label, .fb-radio-label, .artdeco-radio-button__label").all()
                     clicked = False
                     ans_low = ans.lower().strip()
 
                     # Exact text match first
-                    for opt in options:
+                    for opt in radio_labels:
                         opt_txt = opt.inner_text().strip().lower()
                         if opt_txt == ans_low:
                             opt.click()
@@ -367,7 +384,7 @@ def handle_screening_form_step(
 
                     # Substring match if exact didn't match
                     if not clicked:
-                        for opt in options:
+                        for opt in radio_labels:
                             opt_txt = opt.inner_text().strip().lower()
                             if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
                                 opt.click()
@@ -393,11 +410,11 @@ def handle_screening_form_step(
                         page.wait_for_timeout(300)
                     else:
                         # Radio options didn't match answer
-                        upsert_screening_question(prompt, sample_job=job_label)
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
-                    # Unanswered in DB: persist to DB as pending
-                    upsert_screening_question(prompt, sample_job=job_label)
+                    # Unanswered in DB: persist to DB as pending with options
+                    upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                     unanswered.append(prompt)
             except Exception as e:
                 logger(f"  Notice inspecting fieldset: {e}")
@@ -422,6 +439,17 @@ def handle_screening_form_step(
                 if not prompt or is_skip(prompt):
                     continue
 
+                # Collect dropdown options
+                sel_opts = sel.locator("option").all()
+                extracted_options = []
+                for so in sel_opts:
+                    try:
+                        txt = so.inner_text().strip()
+                        if txt and txt.lower() not in ["", "select", "select an option", "please select"] and len(txt) < 80 and txt not in extracted_options:
+                            extracted_options.append(txt)
+                    except Exception:
+                        pass
+
                 # Check if already has a selected non-placeholder option
                 curr_val = sel.input_value()
                 curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
@@ -429,11 +457,17 @@ def handle_screening_form_step(
                     continue
 
                 ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left dropdown empty for '{prompt}' as configured")
+                    continue
+
                 if ans:
                     ans_low = ans.lower().strip()
-                    options = sel.locator("option").all()
                     matched_opt_val = None
-                    for opt in options:
+                    for opt in sel_opts:
                         otxt = opt.inner_text().strip().lower()
                         oval = (opt.get_attribute("value") or "").strip().lower()
                         if otxt == ans_low or oval == ans_low or (otxt and otxt in ans_low):
@@ -446,10 +480,10 @@ def handle_screening_form_step(
                         logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
                         page.wait_for_timeout(300)
                     else:
-                        upsert_screening_question(prompt, sample_job=job_label)
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                 else:
-                    upsert_screening_question(prompt, sample_job=job_label)
+                    upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                     unanswered.append(prompt)
             except Exception as e:
                 logger(f"  Notice inspecting select: {e}")
@@ -491,6 +525,17 @@ def handle_screening_form_step(
                     continue
 
                 ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    # Intentionally left blank (e.g. Middle Name)
+                    inp.click()
+                    inp.fill("")
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left input empty for '{prompt}' as configured")
+                    page.wait_for_timeout(200)
+                    continue
+
                 if ans:
                     # Sanitize for number input
                     if itype == "number" or "in days" in prompt.lower() or "how many" in prompt.lower() or "years" in prompt.lower():

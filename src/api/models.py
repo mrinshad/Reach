@@ -122,6 +122,7 @@ class CreateQuestionPayload(BaseModel):
     category: Optional[str] = None
     answer: Optional[str] = None
     default_placeholder: Optional[str] = None
+    options: Optional[List[str]] = None
 
 
 

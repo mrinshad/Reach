@@ -111,6 +111,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
         default_placeholder TEXT,
         occurrences INT DEFAULT 1,
         sample_jobs TEXT[] DEFAULT '{}',
+        options TEXT[] DEFAULT '{}',
         status VARCHAR(32) DEFAULT 'PENDING',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -126,6 +127,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(128);
     ALTER TABLE posts ALTER COLUMN post_url TYPE TEXT;
     CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
+    ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
     """
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:

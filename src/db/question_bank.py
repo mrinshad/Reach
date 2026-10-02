@@ -21,6 +21,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "contact",
         "default_placeholder": "+91 98956 12423",
         "is_standard": True,
+        "options": [],
     },
     {
         "id": "std_email",
@@ -28,6 +29,16 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "contact",
         "default_placeholder": "rinshadmorayur09@gmail.com",
         "is_standard": True,
+        "options": [],
+    },
+    {
+        "id": "std_middle_name",
+        "question": "Middle Name",
+        "category": "contact",
+        "answer": "__EMPTY__",
+        "default_placeholder": "(Intentionally left blank / N/A)",
+        "is_standard": True,
+        "options": [],
     },
     {
         "id": "std_location",
@@ -35,6 +46,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "contact",
         "default_placeholder": "Malappuram, Kerala, India",
         "is_standard": True,
+        "options": [],
     },
     {
         "id": "std_experience_total",
@@ -42,6 +54,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "experience",
         "default_placeholder": "3+",
         "is_standard": True,
+        "options": ["1", "2", "3", "4", "5", "6", "7", "8+"],
     },
     {
         "id": "std_experience_fullstack",
@@ -49,6 +62,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "experience",
         "default_placeholder": "3+",
         "is_standard": True,
+        "options": ["1", "2", "3", "4", "5", "6", "7", "8+"],
     },
     {
         "id": "std_experience_react",
@@ -56,6 +70,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "experience",
         "default_placeholder": "3",
         "is_standard": True,
+        "options": ["1", "2", "3", "4", "5", "6", "7", "8+"],
     },
     {
         "id": "std_experience_backend",
@@ -63,6 +78,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "experience",
         "default_placeholder": "3",
         "is_standard": True,
+        "options": ["1", "2", "3", "4", "5", "6", "7", "8+"],
     },
     {
         "id": "std_current_ctc",
@@ -70,6 +86,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "compensation",
         "default_placeholder": "e.g. 6 LPA",
         "is_standard": True,
+        "options": [],
     },
     {
         "id": "std_expected_ctc",
@@ -77,6 +94,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "compensation",
         "default_placeholder": "Negotiable / As per company standards",
         "is_standard": True,
+        "options": [],
     },
     {
         "id": "std_notice_period",
@@ -84,6 +102,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "notice",
         "default_placeholder": "Immediate / 15-30 days",
         "is_standard": True,
+        "options": ["Immediate", "15 Days", "30 Days", "45 Days", "60 Days", "90 Days"],
     },
     {
         "id": "std_english",
@@ -91,6 +110,7 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "profile",
         "default_placeholder": "Professional / Fluent (8/10)",
         "is_standard": True,
+        "options": ["Fluent", "Professional", "Conversational", "Basic"],
     },
     {
         "id": "std_work_mode",
@@ -98,8 +118,52 @@ STANDARD_BASIC_QUESTIONS = [
         "category": "profile",
         "default_placeholder": "Yes, open to Remote and Hybrid roles",
         "is_standard": True,
+        "options": ["Yes", "No", "Remote", "Hybrid", "On-site"],
     },
 ]
+
+TOMBSTONE_SETTING_KEY = "deleted_screening_questions"
+
+
+def get_deleted_question_keys() -> set:
+    """Retrieve set of soft-deleted / dismissed question keys from settings."""
+    raw = get_setting(TOMBSTONE_SETTING_KEY, "[]")
+    try:
+        data = json.loads(raw)
+        return set(data) if isinstance(data, list) else set()
+    except Exception:
+        return set()
+
+
+def add_to_deleted_question_keys(keys: List[str]):
+    """Add question keys to tombstone list to prevent resurrection on crawler backfill."""
+    cur_keys = get_deleted_question_keys()
+    for k in keys:
+        if k:
+            cur_keys.add(str(k).strip())
+            norm = normalize_question_key(k)
+            if norm:
+                cur_keys.add(norm)
+    set_setting(TOMBSTONE_SETTING_KEY, json.dumps(list(cur_keys)))
+
+
+def remove_from_deleted_question_keys(keys: List[str]):
+    """Remove keys from tombstone list when user explicitly creates/re-adds question."""
+    cur_keys = get_deleted_question_keys()
+    changed = False
+    for k in keys:
+        if not k:
+            continue
+        ks = str(k).strip()
+        norm = normalize_question_key(ks)
+        if ks in cur_keys:
+            cur_keys.remove(ks)
+            changed = True
+        if norm in cur_keys:
+            cur_keys.remove(norm)
+            changed = True
+    if changed:
+        set_setting(TOMBSTONE_SETTING_KEY, json.dumps(list(cur_keys)))
 
 
 def normalize_question_key(text: str) -> str:
@@ -116,7 +180,7 @@ def infer_question_category(question_text: str) -> str:
         return "compensation"
     if any(k in low for k in ["notice", "days", "immediate", "joiner", "months"]):
         return "notice"
-    if any(k in low for k in ["phone", "mobile", "email", "city", "location", "address", "country", "postal"]):
+    if any(k in low for k in ["phone", "mobile", "email", "city", "location", "address", "country", "postal", "middle name"]):
         return "contact"
     if any(k in low for k in ["year", "experience", "python", "react", "sql", "fastapi", "typescript", "llm", "ai", "javascript", "full-stack", "data", "engineering", "mentor"]):
         return "experience"
@@ -127,11 +191,12 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
     """
     Seed standard questions, migrate legacy answers from settings,
     and backfill questions from historical posts into PostgreSQL screening_questions table.
+    Guards against resurrecting deleted questions using the tombstone blacklist.
     """
     conn = get_connection(db_url)
     cur = conn.cursor()
 
-    # 1. Ensure table exists
+    # 1. Ensure table exists with options column
     cur.execute("""
         CREATE TABLE IF NOT EXISTS screening_questions (
             id VARCHAR(64) PRIMARY KEY,
@@ -143,15 +208,17 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
             default_placeholder TEXT,
             occurrences INT DEFAULT 1,
             sample_jobs TEXT[] DEFAULT '{}',
+            options TEXT[] DEFAULT '{}',
             status VARCHAR(32) DEFAULT 'PENDING',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_screening_questions_key ON screening_questions(question_key);
         CREATE INDEX IF NOT EXISTS idx_screening_questions_status ON screening_questions(status);
+        ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
     """)
 
-    # 2. Read legacy saved answers from settings table if present
+    # 2. Read legacy saved answers and tombstone set
     legacy_answers = {}
     try:
         cur.execute("SELECT value FROM settings WHERE key = 'screening_question_bank';")
@@ -163,24 +230,37 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
     except Exception:
         legacy_answers = {}
 
-    # 3. Seed standard basic questions
+    deleted_keys = get_deleted_question_keys()
+
+    # 3. Seed standard basic questions (skipping tombstoned keys)
     for std in STANDARD_BASIC_QUESTIONS:
         norm_key = normalize_question_key(std["question"])
+        if std["id"] in deleted_keys or norm_key in deleted_keys:
+            continue
+
+        std_ans = std.get("answer", "")
         ans = (
             legacy_answers.get(std["id"])
             or legacy_answers.get(norm_key)
+            or std_ans
             or ""
         ).strip()
-        status = "ANSWERED" if ans else "PENDING"
+        status = "ANSWERED" if (ans or ans == "__EMPTY__") else "PENDING"
+        std_options = std.get("options", [])
 
         cur.execute("""
             INSERT INTO screening_questions (
                 id, question_key, question_text, category, answer,
-                is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, TRUE, %s, 1, ARRAY['Standard Candidate Profile Question'], %s, CURRENT_TIMESTAMP)
+                is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, TRUE, %s, 1, ARRAY['Standard Candidate Profile Question'], %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (question_key) DO UPDATE SET
                 is_standard = TRUE,
                 default_placeholder = EXCLUDED.default_placeholder,
+                options = CASE 
+                    WHEN array_length(EXCLUDED.options, 1) > 0 AND (screening_questions.options IS NULL OR array_length(screening_questions.options, 1) = 0)
+                    THEN EXCLUDED.options
+                    ELSE screening_questions.options
+                END,
                 answer = CASE 
                     WHEN (screening_questions.answer IS NULL OR screening_questions.answer = '') 
                          AND EXCLUDED.answer != '' THEN EXCLUDED.answer
@@ -198,6 +278,7 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
             std["category"],
             ans,
             std.get("default_placeholder", ""),
+            std_options,
             status
         ))
 
@@ -207,7 +288,7 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
             continue
         val = str(v).strip()
         norm_key = normalize_question_key(k)
-        if not norm_key:
+        if not norm_key or norm_key in deleted_keys or k in deleted_keys:
             continue
         cur.execute("""
             UPDATE screening_questions
@@ -247,19 +328,19 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
                 continue
 
             norm_key = normalize_question_key(cleaned)
-            if not norm_key:
+            if not norm_key or norm_key in deleted_keys:
                 continue
 
             ans = legacy_answers.get(norm_key, "").strip()
-            status = "ANSWERED" if ans else "PENDING"
+            status = "ANSWERED" if (ans or ans == "__EMPTY__") else "PENDING"
             qid = f"q_{hashlib.sha256(norm_key.encode()).hexdigest()[:20]}"
             cat = infer_question_category(cleaned)
 
             cur.execute("""
                 INSERT INTO screening_questions (
                     id, question_key, question_text, category, answer,
-                    is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, FALSE, 'Enter your answer...', 1, ARRAY[%s], %s, CURRENT_TIMESTAMP)
+                    is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, FALSE, 'Enter your answer...', 1, ARRAY[%s], '{}', %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
                     occurrences = screening_questions.occurrences + 1,
                     sample_jobs = CASE 
@@ -284,12 +365,14 @@ def upsert_screening_question(
     is_standard: bool = False,
     default_placeholder: Optional[str] = None,
     sample_job: Optional[str] = None,
+    options: Optional[List[str]] = None,
     conn=None,
 ) -> Dict[str, Any]:
     """
     Insert or update a screening question.
-    If the question is new, saves it with status='PENDING' (or 'ANSWERED' if answer given).
-    If it exists, increments occurrence counter and appends sample job.
+    If the question is new, saves it with status='PENDING' (or 'ANSWERED' if answer/empty given).
+    If it exists, increments occurrence counter, updates options, and appends sample job.
+    Removes key from tombstone blacklist if user sets an answer.
     """
     cleaned = (question_text or "").rstrip("*").strip()
     norm_key = normalize_question_key(cleaned)
@@ -297,11 +380,23 @@ def upsert_screening_question(
         return {}
 
     cat = category or infer_question_category(cleaned)
-    ans = (answer or "").strip()
-    status = "ANSWERED" if ans else "PENDING"
+    ans = (answer or "").strip() if answer is not None else ""
+    is_empty_spec = (ans == "__EMPTY__")
+    status = "ANSWERED" if (ans or is_empty_spec) else "PENDING"
     qid = f"q_{hashlib.sha256(norm_key.encode()).hexdigest()[:20]}"
-    placeholder = default_placeholder or "Enter your answer..."
+    placeholder = default_placeholder or ("(Intentionally left blank / N/A)" if is_empty_spec else "Enter your answer...")
     jobs_array = [sample_job] if sample_job else ["Direct Application Flow"]
+
+    # Filter and sanitize options
+    clean_options = []
+    if options and isinstance(options, list):
+        for opt in options:
+            if opt and str(opt).strip():
+                clean_options.append(str(opt).strip())
+
+    # If saving with an answer or empty setting, remove from tombstone blacklist
+    if status == "ANSWERED":
+        remove_from_deleted_question_keys([norm_key, qid, cleaned])
 
     should_close = False
     if conn is None:
@@ -310,15 +405,19 @@ def upsert_screening_question(
 
     try:
         cur = conn.cursor()
-        if ans:
+        if status == "ANSWERED":
             cur.execute("""
                 INSERT INTO screening_questions (
                     id, question_key, question_text, category, answer,
-                    is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, CURRENT_TIMESTAMP)
+                    is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
                     answer = EXCLUDED.answer,
                     status = 'ANSWERED',
+                    options = CASE 
+                        WHEN array_length(EXCLUDED.options, 1) > 0 THEN EXCLUDED.options
+                        ELSE screening_questions.options
+                    END,
                     occurrences = screening_questions.occurrences + 1,
                     sample_jobs = CASE 
                         WHEN %s IS NOT NULL AND NOT (%s = ANY(screening_questions.sample_jobs)) AND array_length(screening_questions.sample_jobs, 1) < 5
@@ -326,18 +425,22 @@ def upsert_screening_question(
                         ELSE screening_questions.sample_jobs 
                     END,
                     updated_at = CURRENT_TIMESTAMP
-                RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, status;
+                RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, options, status;
             """, (
-                qid, norm_key, cleaned, cat, ans, is_standard, placeholder, jobs_array, status,
+                qid, norm_key, cleaned, cat, ans, is_standard, placeholder, jobs_array, clean_options, status,
                 sample_job, sample_job, sample_job
             ))
         else:
             cur.execute("""
                 INSERT INTO screening_questions (
                     id, question_key, question_text, category, answer,
-                    is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
-                ) VALUES (%s, %s, %s, %s, NULL, %s, %s, 1, %s, 'PENDING', CURRENT_TIMESTAMP)
+                    is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
+                ) VALUES (%s, %s, %s, %s, NULL, %s, %s, 1, %s, %s, 'PENDING', CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
+                    options = CASE 
+                        WHEN array_length(EXCLUDED.options, 1) > 0 THEN EXCLUDED.options
+                        ELSE screening_questions.options
+                    END,
                     occurrences = screening_questions.occurrences + 1,
                     sample_jobs = CASE 
                         WHEN %s IS NOT NULL AND NOT (%s = ANY(screening_questions.sample_jobs)) AND array_length(screening_questions.sample_jobs, 1) < 5
@@ -345,9 +448,9 @@ def upsert_screening_question(
                         ELSE screening_questions.sample_jobs 
                     END,
                     updated_at = CURRENT_TIMESTAMP
-                RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, status;
+                RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, options, status;
             """, (
-                qid, norm_key, cleaned, cat, is_standard, placeholder, jobs_array,
+                qid, norm_key, cleaned, cat, is_standard, placeholder, jobs_array, clean_options,
                 sample_job, sample_job, sample_job
             ))
         row = cur.fetchone()
@@ -364,7 +467,8 @@ def upsert_screening_question(
                 "is_standard": row[5],
                 "occurrences": row[6],
                 "sample_jobs": row[7] or [],
-                "status": row[8],
+                "options": list(row[8]) if row[8] else [],
+                "status": row[9],
             }
         return {}
     finally:
@@ -375,7 +479,7 @@ def upsert_screening_question(
 def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
     """
     Persist user answers into PostgreSQL screening_questions table.
-    Updates status to 'ANSWERED' when an answer is provided, or 'PENDING' when empty.
+    Updates status to 'ANSWERED' when an answer or '__EMPTY__' is provided.
     Synchronizes with settings.screening_question_bank for backward compatibility.
     """
     if not isinstance(answers, dict):
@@ -390,8 +494,12 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
             continue
         k_clean = str(key).strip()
         norm_key = normalize_question_key(k_clean)
-        ans_clean = str(val).strip() if val is not None else ""
-        status = "ANSWERED" if ans_clean else "PENDING"
+        ans_raw = str(val).strip() if val is not None else ""
+        is_empty_spec = (ans_raw == "__EMPTY__")
+        status = "ANSWERED" if (ans_raw != "" or is_empty_spec) else "PENDING"
+
+        # Remove from tombstone blacklist since user explicitly saved it
+        remove_from_deleted_question_keys([norm_key, k_clean])
 
         cur.execute("""
             UPDATE screening_questions
@@ -399,15 +507,15 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
                 status = %s,
                 updated_at = CURRENT_TIMESTAMP
             WHERE question_key = %s OR id = %s;
-        """, (ans_clean, status, norm_key, k_clean))
+        """, (ans_raw, status, norm_key, k_clean))
 
         if cur.rowcount > 0:
             saved_count += 1
-        elif ans_clean:
+        elif ans_raw or is_empty_spec:
             # If not in table yet, insert it as a dynamic question
             upsert_screening_question(
                 question_text=k_clean,
-                answer=ans_clean,
+                answer=ans_raw,
                 conn=conn
             )
             saved_count += 1
@@ -418,7 +526,7 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
     cur.execute("""
         SELECT question_key, id, answer 
         FROM screening_questions 
-        WHERE answer IS NOT NULL AND answer != '';
+        WHERE status = 'ANSWERED' AND answer IS NOT NULL;
     """)
     answered_rows = cur.fetchall()
 
@@ -434,8 +542,8 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
     cur.execute("""
         SELECT 
             COUNT(*) as total,
-            COUNT(CASE WHEN status = 'ANSWERED' AND answer IS NOT NULL AND answer != '' THEN 1 END) as answered,
-            COUNT(CASE WHEN status = 'PENDING' OR answer IS NULL OR answer = '' THEN 1 END) as pending
+            COUNT(CASE WHEN status = 'ANSWERED' THEN 1 END) as answered,
+            COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending
         FROM screening_questions;
     """)
     stat_row = cur.fetchone()
@@ -463,6 +571,7 @@ def get_aggregated_question_bank(
     """
     Retrieve all screening questions from PostgreSQL screening_questions table.
     Supports filtering by category, search text, answering status, and flexible sorting.
+    Includes multi-choice options for dropdowns and radios.
     """
     order_clause = "ORDER BY is_standard DESC, occurrences DESC, question_text ASC"
     if sort_by and isinstance(sort_by, str):
@@ -476,7 +585,7 @@ def get_aggregated_question_bank(
         elif sb in ("standard", "std"):
             order_clause = "ORDER BY is_standard DESC, question_text ASC"
         elif sb in ("status", "pending_first"):
-            order_clause = "ORDER BY (CASE WHEN answer IS NULL OR answer = '' THEN 0 ELSE 1 END) ASC, occurrences DESC"
+            order_clause = "ORDER BY (CASE WHEN status = 'ANSWERED' THEN 1 ELSE 0 END) ASC, occurrences DESC"
 
     conn = get_connection()
     cur = conn.cursor()
@@ -484,7 +593,7 @@ def get_aggregated_question_bank(
     cur.execute(f"""
         SELECT 
             id, question_key, question_text, category, answer,
-            is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at
+            is_standard, default_placeholder, occurrences, sample_jobs, status, updated_at, options
         FROM screening_questions
         {order_clause};
     """)
@@ -499,7 +608,10 @@ def get_aggregated_question_bank(
 
     for r in rows:
         ans = (r[4] or "").strip()
-        is_ans = bool(ans)
+        status_val = (r[9] or "PENDING").upper()
+        is_ans = (status_val == "ANSWERED") or bool(ans) or (ans == "__EMPTY__")
+        opts = list(r[11]) if (len(r) > 11 and r[11]) else []
+
         if is_ans:
             answered_count += 1
         else:
@@ -517,6 +629,7 @@ def get_aggregated_question_bank(
             "sample_jobs": r[8] or [],
             "status": "ANSWERED" if is_ans else "PENDING",
             "updated_at": r[10].isoformat() if r[10] else None,
+            "options": opts,
         }
 
         # Apply status filter if requested
@@ -542,7 +655,8 @@ def get_aggregated_question_bank(
             ans_match = s_low in q_item["answer"].lower()
             cat_match = s_low in q_item["category"].lower()
             jobs_match = any(s_low in str(j).lower() for j in q_item["sample_jobs"])
-            if not (text_match or ans_match or cat_match or jobs_match):
+            opts_match = any(s_low in str(o).lower() for o in opts)
+            if not (text_match or ans_match or cat_match or jobs_match or opts_match):
                 continue
 
         questions.append(q_item)
@@ -562,7 +676,7 @@ def get_unanswered_screening_questions_count() -> int:
     cur.execute("""
         SELECT COUNT(*) 
         FROM screening_questions 
-        WHERE status = 'PENDING' OR answer IS NULL OR answer = '';
+        WHERE status = 'PENDING' AND (answer IS NULL OR (answer = '' AND status != 'ANSWERED'));
     """)
     row = cur.fetchone()
     cur.close()
@@ -575,9 +689,10 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
     Search DB Question Bank for an answer to a given question label/prompt.
     Uses multi-tier matching:
     1. Exact normalized alphanumeric key match.
-    2. Smart aliases for standard fields (phone, email, CTC, notice period, experience, English, remote/hybrid).
+    2. Smart aliases for standard fields (phone, email, middle name, CTC, notice period, experience, English, remote/hybrid).
     3. Keyword heuristic match.
     Returns (answer_string_or_None, question_dict_or_None).
+    Supports explicit empty response ('__EMPTY__').
     """
     if not question_text:
         return None, None
@@ -592,36 +707,39 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
 
     # 1. Exact key match
     cur.execute("""
-        SELECT id, question_key, question_text, category, answer, is_standard, status
+        SELECT id, question_key, question_text, category, answer, is_standard, status, options
         FROM screening_questions
         WHERE question_key = %s;
     """, (norm_key,))
     row = cur.fetchone()
 
-    if row and row[4] and row[4].strip():
+    if row and ((row[4] is not None and row[4] != "") or row[6] == "ANSWERED"):
+        ans_val = (row[4] or "").strip()
         cur.close()
         conn.close()
-        return row[4].strip(), {
+        return ans_val, {
             "id": row[0],
             "key": row[1],
             "question": row[2],
             "category": row[3],
-            "answer": row[4].strip(),
+            "answer": ans_val,
             "is_standard": row[5],
+            "status": row[6],
+            "options": list(row[7]) if (len(row) > 7 and row[7]) else [],
         }
 
     # Fetch all standard and answered questions for smart alias matching
     cur.execute("""
-        SELECT id, question_key, question_text, category, answer, is_standard
+        SELECT id, question_key, question_text, category, answer, is_standard, status, options
         FROM screening_questions
-        WHERE answer IS NOT NULL AND answer != '';
+        WHERE status = 'ANSWERED' OR (answer IS NOT NULL AND answer != '');
     """)
     answered_pool = cur.fetchall()
     cur.close()
     conn.close()
 
-    answers_by_id = {r[0]: (r[4].strip(), r) for r in answered_pool}
-    answers_by_key = {r[1]: (r[4].strip(), r) for r in answered_pool}
+    answers_by_id = {r[0]: ((r[4] or "").strip(), r) for r in answered_pool}
+    answers_by_key = {r[1]: ((r[4] or "").strip(), r) for r in answered_pool}
 
     q_low = cleaned.lower()
 
@@ -635,80 +753,87 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
         return default_ans, None
 
     # 2. Smart aliases
+    if "middle name" in q_low or q_low in ["middle_name", "middlename"]:
+        ans, r = check_alias("std_middle_name", "__EMPTY__")
+        return ans, {"id": "std_middle_name", "answer": ans, "status": "ANSWERED"}
+
     if any(k in q_low for k in ["phone", "mobile", "contact number"]):
         ans, r = check_alias("std_phone")
         if ans:
-            return ans, {"id": "std_phone", "answer": ans}
+            return ans, {"id": "std_phone", "answer": ans, "status": "ANSWERED"}
 
     if "email" in q_low and not any(k in q_low for k in ["send", "subject"]):
         ans, r = check_alias("std_email")
         if ans:
-            return ans, {"id": "std_email", "answer": ans}
+            return ans, {"id": "std_email", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["city", "current location", "present location", "residing in"]) and "relocat" not in q_low:
         ans, r = check_alias("std_location")
         if ans:
-            return ans, {"id": "std_location", "answer": ans}
+            return ans, {"id": "std_location", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["current ctc", "current salary", "fixed ctc", "fix ctc", "in-hand salary", "current compensation"]):
         ans, r = check_alias("std_current_ctc")
         if ans:
-            return ans, {"id": "std_current_ctc", "answer": ans}
+            return ans, {"id": "std_current_ctc", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["expected ctc", "expected salary", "desired compensation", "expectation fix ctc", "ectc"]):
         ans, r = check_alias("std_expected_ctc")
         if ans:
-            return ans, {"id": "std_expected_ctc", "answer": ans}
+            return ans, {"id": "std_expected_ctc", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["notice period", "notice days", "days left in your notice", "how many days is your notice", "joining time"]):
         ans, r = check_alias("std_notice_period")
         if ans:
-            return ans, {"id": "std_notice_period", "answer": ans}
+            return ans, {"id": "std_notice_period", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["total years", "total experience", "overall experience", "years of professional experience"]):
         ans, r = check_alias("std_experience_total")
         if ans:
-            return ans, {"id": "std_experience_total", "answer": ans}
+            return ans, {"id": "std_experience_total", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["full stack", "fullstack", "web development"]):
         ans, r = check_alias("std_experience_fullstack")
         if ans:
-            return ans, {"id": "std_experience_fullstack", "answer": ans}
+            return ans, {"id": "std_experience_fullstack", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["react", "next.js", "nextjs", "typescript"]):
         ans, r = check_alias("std_experience_react")
         if ans:
-            return ans, {"id": "std_experience_react", "answer": ans}
+            return ans, {"id": "std_experience_react", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["python", "node", "fastapi", "django", "backend"]):
         ans, r = check_alias("std_experience_backend")
         if ans:
-            return ans, {"id": "std_experience_backend", "answer": ans}
+            return ans, {"id": "std_experience_backend", "answer": ans, "status": "ANSWERED"}
 
     if "english" in q_low:
         ans, r = check_alias("std_english")
         if ans:
-            return ans, {"id": "std_english", "answer": ans}
+            return ans, {"id": "std_english", "answer": ans, "status": "ANSWERED"}
 
     if any(k in q_low for k in ["remote", "hybrid", "on-site", "work from home", "wfh"]):
         ans, r = check_alias("std_work_mode")
         if ans:
-            return ans, {"id": "std_work_mode", "answer": ans}
+            return ans, {"id": "std_work_mode", "answer": ans, "status": "ANSWERED"}
 
     # 3. Fuzzy substring match on question_text of already answered questions
     for r in answered_pool:
         known_q = r[2].lower()
         if (len(known_q) > 10 and known_q in q_low) or (len(q_low) > 10 and q_low in known_q):
-            return r[4].strip(), {
+            ans_val = (r[4] or "").strip()
+            return ans_val, {
                 "id": r[0],
                 "key": r[1],
                 "question": r[2],
                 "category": r[3],
-                "answer": r[4].strip(),
+                "answer": ans_val,
                 "is_standard": r[5],
+                "status": r[6],
+                "options": list(r[7]) if (len(r) > 7 and r[7]) else [],
             }
 
-    # If row was found in exact key match but answer was empty:
+    # If row was found in exact key match but answer was pending:
     if row:
         return None, {
             "id": row[0],
@@ -717,13 +842,19 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
             "category": row[3],
             "answer": "",
             "is_standard": row[5],
+            "status": row[6],
+            "options": list(row[7]) if (len(row) > 7 and row[7]) else [],
         }
 
     return None, None
 
 
 def delete_screening_question(key_or_id: str) -> bool:
-    """Delete a screening question by id or normalized question_key."""
+    """
+    Delete a screening question by id or normalized question_key.
+    Adds key to tombstone blacklist to prevent resurrection during crawler backfills.
+    Cleans reference from historical posts with status='REQUIRES_QUESTIONNAIRE'.
+    """
     if not key_or_id:
         return False
     k_clean = str(key_or_id).strip()
@@ -731,15 +862,23 @@ def delete_screening_question(key_or_id: str) -> bool:
 
     conn = get_connection()
     cur = conn.cursor()
+
+    # Fetch question text before deleting to clean post rejection_reasons
+    cur.execute("SELECT question_text FROM screening_questions WHERE id = %s OR question_key = %s;", (k_clean, norm_key))
+    q_row = cur.fetchone()
+    q_text = q_row[0] if q_row else None
+
     cur.execute("""
         DELETE FROM screening_questions
         WHERE id = %s OR question_key = %s;
     """, (k_clean, norm_key))
     deleted = cur.rowcount > 0
-    conn.commit()
 
     if deleted:
-        # Update settings.screening_question_bank
+        # Add to tombstone blacklist
+        add_to_deleted_question_keys([k_clean, norm_key, q_text])
+
+        # Clean from legacy settings
         try:
             raw = get_setting("screening_question_bank", "{}")
             cur_dict = json.loads(raw) if raw else {}
@@ -751,13 +890,51 @@ def delete_screening_question(key_or_id: str) -> bool:
         except Exception:
             pass
 
+        # Clean from posts with status = 'REQUIRES_QUESTIONNAIRE'
+        try:
+            cur.execute("""
+                SELECT id, rejection_reason FROM posts 
+                WHERE status = 'REQUIRES_QUESTIONNAIRE' AND rejection_reason IS NOT NULL;
+            """)
+            screened_posts = cur.fetchall()
+            all_targets = {k_clean.lower(), norm_key.lower()}
+            if q_text:
+                all_targets.add(q_text.lower())
+                all_targets.add(normalize_question_key(q_text).lower())
+
+            for pid, r_reason in screened_posts:
+                if not r_reason:
+                    continue
+                raw_txt = r_reason.strip()
+                prefix = "Questions: " if raw_txt.lower().startswith("questions:") else ""
+                content = raw_txt[len("questions:"):].strip() if prefix else raw_txt
+                parts = [p.strip() for p in content.split(";") if p.strip()]
+                new_parts = []
+                changed = False
+                for p in parts:
+                    p_norm = normalize_question_key(p).lower()
+                    if p.lower() in all_targets or p_norm in all_targets:
+                        changed = True
+                    else:
+                        new_parts.append(p)
+                if changed:
+                    new_reason = f"Questions: {'; '.join(new_parts)}" if new_parts else "Screening requirements dismissed"
+                    cur.execute("UPDATE posts SET rejection_reason = %s WHERE id = %s;", (new_reason, pid))
+        except Exception:
+            pass
+
+    conn.commit()
     cur.close()
     conn.close()
     return deleted
 
 
 def delete_screening_questions_batch(keys_or_ids: List[str]) -> int:
-    """Delete multiple screening questions by their ids or keys."""
+    """
+    Delete multiple screening questions by their ids or keys.
+    Adds all keys to tombstone blacklist to prevent resurrection during crawler backfills.
+    Cleans references from historical posts with status='REQUIRES_QUESTIONNAIRE'.
+    """
     if not keys_or_ids:
         return 0
 
@@ -767,14 +944,24 @@ def delete_screening_questions_batch(keys_or_ids: List[str]) -> int:
 
     conn = get_connection()
     cur = conn.cursor()
+
+    # Fetch question texts before deleting
+    cur.execute("""
+        SELECT question_text FROM screening_questions
+        WHERE id = ANY(%s) OR question_key = ANY(%s);
+    """, (all_targets, all_targets))
+    q_texts = [r[0] for r in cur.fetchall() if r[0]]
+
     cur.execute("""
         DELETE FROM screening_questions
         WHERE id = ANY(%s) OR question_key = ANY(%s);
     """, (all_targets, all_targets))
     deleted_count = cur.rowcount
-    conn.commit()
 
     if deleted_count > 0:
+        # Add to tombstone blacklist
+        add_to_deleted_question_keys(all_targets + q_texts)
+
         try:
             raw = get_setting("screening_question_bank", "{}")
             cur_dict = json.loads(raw) if raw else {}
@@ -785,7 +972,41 @@ def delete_screening_questions_batch(keys_or_ids: List[str]) -> int:
         except Exception:
             pass
 
+        # Clean from posts with status = 'REQUIRES_QUESTIONNAIRE'
+        try:
+            cur.execute("""
+                SELECT id, rejection_reason FROM posts 
+                WHERE status = 'REQUIRES_QUESTIONNAIRE' AND rejection_reason IS NOT NULL;
+            """)
+            screened_posts = cur.fetchall()
+            target_set = {t.lower() for t in all_targets + q_texts}
+            for q_t in q_texts:
+                target_set.add(normalize_question_key(q_t).lower())
+
+            for pid, r_reason in screened_posts:
+                if not r_reason:
+                    continue
+                raw_txt = r_reason.strip()
+                prefix = "Questions: " if raw_txt.lower().startswith("questions:") else ""
+                content = raw_txt[len("questions:"):].strip() if prefix else raw_txt
+                parts = [p.strip() for p in content.split(";") if p.strip()]
+                new_parts = []
+                changed = False
+                for p in parts:
+                    p_norm = normalize_question_key(p).lower()
+                    if p.lower() in target_set or p_norm in target_set:
+                        changed = True
+                    else:
+                        new_parts.append(p)
+                if changed:
+                    new_reason = f"Questions: {'; '.join(new_parts)}" if new_parts else "Screening requirements dismissed"
+                    cur.execute("UPDATE posts SET rejection_reason = %s WHERE id = %s;", (new_reason, pid))
+        except Exception:
+            pass
+
+    conn.commit()
     cur.close()
     conn.close()
     return deleted_count
+
 

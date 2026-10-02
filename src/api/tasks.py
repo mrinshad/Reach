@@ -575,6 +575,7 @@ def api_create_easy_apply_question(payload: CreateQuestionPayload):
         category=payload.category,
         answer=payload.answer,
         default_placeholder=payload.default_placeholder,
+        options=payload.options,
     )
     return {"success": True, "question": res}
 
