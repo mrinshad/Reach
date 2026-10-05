@@ -19,14 +19,16 @@ function applyReviewDateFilter() {
   const toEl = document.getElementById('reviewDateTo');
   reviewDateFrom = fromEl ? fromEl.value.trim() : '';
   reviewDateTo = toEl ? toEl.value.trim() : '';
+  state.reviewPage = 1;
   updateReviewClearFiltersButton();
-  fetchReviewPosts();
+  fetchReviewPosts(true);
 }
 
 function clearReviewFilters() {
   state.searchReview = '';
   reviewDateFrom = '';
   reviewDateTo = '';
+  state.reviewPage = 1;
 
   const searchInput = document.getElementById('inputSearchReview');
   if (searchInput) searchInput.value = '';
@@ -37,29 +39,81 @@ function clearReviewFilters() {
   if (toEl) toEl.value = '';
 
   updateReviewClearFiltersButton();
-  fetchReviewPosts();
+  fetchReviewPosts(true);
 }
 
 function handleSearchReview(val) {
   clearTimeout(reviewSearchDebounce);
   reviewSearchDebounce = setTimeout(() => {
     state.searchReview = (val || '').trim();
+    state.reviewPage = 1;
     updateReviewClearFiltersButton();
-    fetchReviewPosts();
+    fetchReviewPosts(true);
   }, 250);
 }
 
-async function fetchReviewPosts() {
+function updateReviewPaginationUI() {
+  const infoEl = document.getElementById('reviewPageInfo');
+  const btnPrev = document.getElementById('btnReviewPrevPage');
+  const btnNext = document.getElementById('btnReviewNextPage');
+
+  const total = state.reviewTotal || 0;
+  const limit = state.reviewLimit || 100;
+  const page = state.reviewPage || 1;
+  const maxPage = Math.max(1, Math.ceil(total / limit));
+
+  if (infoEl) {
+    if (total === 0) {
+      infoEl.textContent = '0 of 0';
+    } else {
+      const start = (page - 1) * limit + 1;
+      const end = Math.min(page * limit, total);
+      infoEl.textContent = `${start}–${end} of ${total}`;
+    }
+  }
+
+  if (btnPrev) {
+    btnPrev.disabled = page <= 1;
+  }
+  if (btnNext) {
+    btnNext.disabled = page >= maxPage || total === 0;
+  }
+}
+
+async function changeReviewPage(delta) {
+  const total = state.reviewTotal || 0;
+  const limit = state.reviewLimit || 100;
+  const maxPage = Math.max(1, Math.ceil(total / limit));
+  const newPage = (state.reviewPage || 1) + delta;
+
+  if (newPage < 1 || newPage > maxPage) return;
+
+  state.reviewPage = newPage;
+  state.selectedDraftIds.clear();
+  updateSelectedDraftsUI();
+
+  await fetchReviewPosts(true);
+
+  const container = document.getElementById('reviewQueueList');
+  if (container) container.scrollTop = 0;
+}
+
+async function fetchReviewPosts(forceSelectFirst = false) {
   const container = document.getElementById('reviewQueueList');
   if (!container) return;
   if (!state.reviewPosts || state.reviewPosts.length === 0) {
     container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #64748b;">Loading drafts...</div>';
   }
 
+  const page = Math.max(1, state.reviewPage || 1);
+  const limit = Math.max(1, state.reviewLimit || 100);
+  const offset = (page - 1) * limit;
+
   try {
     const params = new URLSearchParams({
       status: 'EMAIL_GENERATED',
-      limit: '100',
+      limit: String(limit),
+      offset: String(offset),
     });
     if (state.searchReview) {
       params.append('search', state.searchReview);
@@ -74,11 +128,14 @@ async function fetchReviewPosts() {
     const res = await fetch(`/api/posts?${params.toString()}`);
     const data = await res.json();
     state.reviewPosts = data.posts || [];
+    state.reviewTotal = typeof data.total === 'number' ? data.total : (state.reviewPosts.length || 0);
 
     const queueCountEl = document.getElementById('reviewQueueCount');
-    if (queueCountEl) queueCountEl.textContent = String(state.reviewPosts.length);
+    if (queueCountEl) queueCountEl.textContent = String(state.reviewTotal);
     const countReviewEl = document.getElementById('countReview');
-    if (countReviewEl) countReviewEl.textContent = String(state.reviewPosts.length);
+    if (countReviewEl) countReviewEl.textContent = String(state.reviewTotal);
+
+    updateReviewPaginationUI();
     container.innerHTML = '';
 
     if (state.reviewPosts.length === 0) {
@@ -128,17 +185,17 @@ async function fetchReviewPosts() {
 
     updateSelectedDraftsUI();
 
-    if (!state.activeReviewPost && state.reviewPosts.length > 0) {
-      selectReviewPost(state.reviewPosts[0]);
-    } else if (state.activeReviewPost) {
-      const exists = state.reviewPosts.find((p) => p.id === state.activeReviewPost.id);
-      if (exists) {
-        selectReviewPost(exists);
-      } else if (state.reviewPosts.length > 0) {
+    if (forceSelectFirst || !state.activeReviewPost || !state.reviewPosts.some((p) => p.id === state.activeReviewPost.id)) {
+      if (state.reviewPosts.length > 0) {
         selectReviewPost(state.reviewPosts[0]);
       } else {
         state.activeReviewPost = null;
         state.activePostId = null;
+      }
+    } else {
+      const exists = state.reviewPosts.find((p) => p.id === state.activeReviewPost.id);
+      if (exists) {
+        selectReviewPost(exists);
       }
     }
   } catch (err) {
@@ -218,7 +275,10 @@ function selectReviewPost(post) {
 
   document.querySelectorAll('.queue-item').forEach((el) => el.classList.remove('active'));
   const activeCard = document.getElementById(`queue-item-${post.id}`);
-  if (activeCard) activeCard.classList.add('active');
+  if (activeCard) {
+    activeCard.classList.add('active');
+    activeCard.scrollIntoView({ block: 'nearest' });
+  }
 
   const emptyEl = document.getElementById('emptyReviewState');
   if (emptyEl) emptyEl.classList.add('hidden');
@@ -240,7 +300,10 @@ function selectReviewPost(post) {
   if (expEl) expEl.textContent = expLabel;
 
   const fullTextEl = document.getElementById('reviewFullText');
-  if (fullTextEl) fullTextEl.textContent = post.full_text;
+  if (fullTextEl) {
+    fullTextEl.textContent = post.full_text;
+    fullTextEl.scrollTop = 0;
+  }
 
   const postLink = document.getElementById('reviewPostLink');
   if (postLink) {
@@ -262,7 +325,10 @@ function selectReviewPost(post) {
   // Only update textarea content if not actively typing the same post
   if (!isSamePost || (!isDraftDirty && !hasFocus)) {
     if (subjInput) subjInput.value = post.generated_subject || '';
-    if (bodyInput) bodyInput.value = post.generated_body || '';
+    if (bodyInput) {
+      bodyInput.value = post.generated_body || '';
+      bodyInput.scrollTop = 0;
+    }
     isDraftDirty = false;
     updateDraftSaveStatus('saved');
   }
@@ -983,3 +1049,5 @@ window.closeCancelReasonModal = closeCancelReasonModal;
 window.selectPreMadeReason = selectPreMadeReason;
 window.confirmCancelWithReason = confirmCancelWithReason;
 window.rejectActivePost = rejectActivePost;
+window.changeReviewPage = changeReviewPage;
+window.updateReviewPaginationUI = updateReviewPaginationUI;

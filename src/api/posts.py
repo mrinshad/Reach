@@ -95,7 +95,7 @@ def api_get_posts(
     experience_only: bool = Query(False, description="Filter only posts cancelled due to experience requirements"),
     from_date: Optional[str] = Query(None, description="Start date filter YYYY-MM-DD"),
     to_date: Optional[str] = Query(None, description="End date filter YYYY-MM-DD"),
-    limit: int = Query(25, ge=1, le=200),
+    limit: int = Query(25, ge=1, le=5000),
     offset: int = Query(0, ge=0),
 ):
     """Retrieve posts with filtering, search, sorting, location, experience filter, custom date range, and pagination."""

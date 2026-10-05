@@ -148,6 +148,9 @@ function switchTab(tabId) {
   const panelSent = document.getElementById('tabSent');
   if (panelSent) panelSent.classList.toggle('hidden', tabId !== 'tabSent');
 
+  const appMain = document.getElementById('appMain');
+  if (appMain) appMain.classList.toggle('no-scroll', tabId === 'tabReview');
+
   fetchStats();
 
   if (tabId === 'tabCrawlers') {

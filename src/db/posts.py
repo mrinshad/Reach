@@ -657,6 +657,17 @@ def get_post_by_id(post_id: str, db_url: str = DEFAULT_DB_URL) -> Optional[Dict[
             return dict(row) if row else None
 
 
+def get_posts_by_ids(post_ids: List[str], db_url: str = DEFAULT_DB_URL) -> List[Dict[str, Any]]:
+    """Retrieve multiple post records by their IDs in a single batch query."""
+    if not post_ids:
+        return []
+    sql = "SELECT * FROM posts WHERE id = ANY(%s);"
+    with get_connection(db_url) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, (list(post_ids),))
+            return [dict(row) for row in cur.fetchall()]
+
+
 def update_post_status(
     post_id: str,
     new_status: str,

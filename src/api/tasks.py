@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query
 from src.db import (
     upsert_post,
     get_post_by_id,
+    get_posts_by_ids,
     get_recently_sent_recipients,
     SEND_COOLDOWN_DAYS,
     get_activity_logs,
@@ -62,12 +63,7 @@ def check_send_cooldown(post_ids):
     emailed within the cooldown window. Returns (blocked, allowed) lists where
     each blocked entry carries the remaining wait time.
     """
-    posts = []
-    for pid in post_ids:
-        post = get_post_by_id(pid)
-        if post:
-            posts.append(post)
-
+    posts = get_posts_by_ids(post_ids)
     primary_emails = []
     for post in posts:
         emails = post.get("contact_emails") or []

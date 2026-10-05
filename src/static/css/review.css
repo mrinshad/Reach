@@ -2,14 +2,45 @@
    REVIEW.CSS — Review & Drafts Workspace: Queue Sidebar, Candidate Card, Post Scroll Expander, JD Mail Button & Draft Editor
    ========================================================================== */
 
-  /* TAB 2: Review Workspace */
+  .app-main.no-scroll,
+  .app-main:has(#tabReview:not(.hidden)) {
+    overflow: hidden !important;
+  }
+
+  .app-main.no-scroll .content-wrapper,
+  .content-wrapper:has(#tabReview:not(.hidden)) {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0.75rem 1.25rem 0.85rem 1.25rem;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  #tabReview {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+
   .review-split {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
     display: grid;
     grid-template-columns: 320px 1fr;
-    gap: 1.25rem;
-    align-items: start;
-    min-height: 100%;
-    margin-bottom: 2rem;
+    gap: 0.85rem;
+    align-items: stretch;
+    overflow: hidden;
   }
 
   .review-queue {
@@ -18,18 +49,20 @@
     border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
-    position: sticky;
-    top: 1rem;
-    height: calc(100vh - 120px);
-    max-height: calc(100vh - 120px);
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    position: static;
   }
 
   .queue-header {
-    padding: 0.85rem 1rem;
+    padding: 0.75rem 0.85rem;
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .queue-title {
@@ -38,9 +71,10 @@
   }
 
   .queue-search {
-    padding: 0.55rem 0.75rem;
+    padding: 0.45rem 0.65rem;
     border-bottom: 1px solid var(--border-subtle);
     background: var(--bg-surface);
+    flex-shrink: 0;
   }
 
   .search-box.sm {
@@ -58,12 +92,43 @@
   }
 
   .queue-list {
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0.5rem;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  .queue-pagination-bar {
+    padding: 0.45rem 0.65rem;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+
+  .queue-pagination-bar .btn {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    white-space: nowrap;
+  }
+
+  .queue-page-info {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: nowrap;
+    text-align: center;
   }
 
   .queue-item {
@@ -100,10 +165,13 @@
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    padding: 1.25rem;
-    height: auto;
-    min-height: calc(100vh - 120px);
-    overflow: visible;
+    padding: 0.75rem 0.95rem;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .empty-state {
@@ -121,15 +189,25 @@
     margin-bottom: 0.5rem;
   }
 
+  .workspace-panel {
+    flex: 1 1 0;
+    height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .workspace-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border-subtle);
-    padding-bottom: 0.85rem;
-    margin-bottom: 1rem;
-    gap: 1rem;
-    flex-wrap: wrap;
+    padding-bottom: 0.55rem;
+    margin-bottom: 0.55rem;
+    gap: 0.75rem;
+    flex-shrink: 0;
   }
 
   .candidate-header-block {
@@ -237,21 +315,28 @@
   }
 
   .split-grid {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: 0.75rem;
     align-items: stretch;
+    overflow: hidden;
   }
 
   .panel-box {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
-    padding: 0.85rem;
+    padding: 0.65rem 0.75rem;
     display: flex;
     flex-direction: column;
-    min-height: 560px;
     height: 100%;
+    max-height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .box-head {
@@ -259,8 +344,9 @@
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border-subtle);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.65rem;
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.45rem;
+    flex-shrink: 0;
   }
 
   .box-title {
@@ -340,38 +426,50 @@
   }
 
   .post-specs {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     display: flex;
     justify-content: space-between;
-    margin-bottom: 0.65rem;
+    margin-bottom: 0.45rem;
+    flex-shrink: 0;
   }
 
   .post-scroll {
     background: var(--bg-body);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-xs);
-    padding: 0.85rem;
+    padding: 0.75rem 0.85rem;
     font-size: 0.82rem;
     line-height: 1.6;
     white-space: pre-wrap;
-    min-height: 480px;
-    height: auto;
-    flex: 1;
-    overflow: visible;
+    min-height: 0;
+    flex: 1 1 0;
+    overflow-y: auto;
+    overflow-x: hidden;
     word-break: break-word;
   }
 
   .editor-fields {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
-    flex: 1;
+    gap: 0.45rem;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .field-item {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .field-item.field-item-body {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .field-item label {
@@ -385,7 +483,7 @@
     background: var(--bg-input);
     border: 1px solid var(--border-subtle);
     color: var(--text-main);
-    padding: 0.55rem 0.75rem;
+    padding: 0.45rem 0.65rem;
     border-radius: var(--radius-xs);
     font-family: var(--font-sans);
     font-size: 0.84rem;
@@ -393,11 +491,12 @@
   }
 
   .textarea-clean {
-    min-height: 480px;
-    height: auto;
-    flex: 1;
+    min-height: 0;
+    flex: 1 1 0;
     line-height: 1.6;
-    resize: vertical;
+    resize: none;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .input-clean:focus,

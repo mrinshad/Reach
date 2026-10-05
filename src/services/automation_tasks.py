@@ -18,6 +18,7 @@ from playwright.sync_api import sync_playwright
 
 from src.db import (
     get_post_by_id,
+    get_posts_by_ids,
     save_chatgpt_response,
     mark_post_sent,
     update_post_status,
@@ -923,15 +924,13 @@ def run_send_batch_drafts(post_ids: List[str]):
     failed = []
 
     # Final cooldown guard: skip any recipients emailed within the cooldown window.
-    posts_cache = {}
+    batch_posts = get_posts_by_ids(post_ids)
+    posts_cache = {p["id"]: p for p in batch_posts}
     candidate_emails = []
-    for pid in post_ids:
-        post = get_post_by_id(pid)
-        if post:
-            posts_cache[pid] = post
-            post_emails = post.get("contact_emails", [])
-            if post_emails:
-                candidate_emails.append(post_emails[0])
+    for post in batch_posts:
+        post_emails = post.get("contact_emails", [])
+        if post_emails:
+            candidate_emails.append(post_emails[0])
     recent = get_recently_sent_recipients(candidate_emails, cooldown_days=SEND_COOLDOWN_DAYS)
     if recent:
         skipped = []
