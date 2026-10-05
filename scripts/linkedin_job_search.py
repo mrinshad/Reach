@@ -125,6 +125,7 @@ def main():
     discovered_count = 0
     applied_count = 0
     questionnaire_count = 0
+    closed_count = 0
     skipped_count = 0
 
     with sync_playwright() as playwright:
@@ -258,6 +259,10 @@ def main():
                 update_post_status(post_id, "APPLIED")
                 applied_count += 1
                 print("  🎉 Status: APPLIED")
+            elif status == "NOT_FOUND":
+                update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
+                closed_count += 1
+                print(f"  🚫 Status: NOT_FOUND ({detail})")
             elif status == "RATE_LIMITED":
                 from src.db.settings import set_setting
                 set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
@@ -292,6 +297,7 @@ def main():
         print(f"  Total Ingested:             {discovered_count}")
         print(f"  Successfully Applied:       {applied_count}")
         print(f"  Saved for Screening (Q's):  {questionnaire_count}")
+        print(f"  Closed / Not Found:         {closed_count}")
         print(f"  Ready in Queue:             {skipped_count}")
         print("=" * 66)
 
@@ -300,6 +306,7 @@ def main():
             "newly_added": discovered_count,
             "applied": applied_count,
             "requires_questionnaire": questionnaire_count,
+            "closed": closed_count,
             "ready_in_queue": skipped_count,
         }
         print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")

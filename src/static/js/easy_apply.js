@@ -21,7 +21,7 @@ async function fetchEasyApplyPosts() {
     const params = new URLSearchParams({
       category: 'EASY_APPLY',
       status: 'ALL',
-      limit: '200',
+      limit: '1000',
     });
 
     if (state.fromEasyDate) {
@@ -94,6 +94,7 @@ function clearEasyApplyFilters() {
     REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
     APPLIED: document.getElementById('pillEasyApplied'),
     NOT_FOUND: document.getElementById('pillEasyNotFound'),
+    REJECTED: document.getElementById('pillEasyDismissed'),
   };
   Object.entries(pills).forEach(([key, el]) => {
     if (el) el.classList.toggle('active', key === 'ALL');
@@ -127,6 +128,7 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const questionnaire = list.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
   const ready = list.filter((p) => p.status === 'DISCOVERED').length;
   const notFound = list.filter((p) => p.status === 'NOT_FOUND').length;
+  const dismissed = list.filter((p) => p.status === 'REJECTED').length;
 
   const totalEl = document.getElementById('easyKpiTotal');
   if (totalEl) totalEl.textContent = total;
@@ -162,6 +164,9 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const countNF = document.getElementById('countPillNotFound');
   if (countNF) countNF.textContent = notFound;
 
+  const countDismissed = document.getElementById('countPillDismissed');
+  if (countDismissed) countDismissed.textContent = dismissed;
+
   const badgeEl = document.getElementById('countEasyApply');
   if (badgeEl) {
     badgeEl.textContent = ready;
@@ -179,6 +184,7 @@ function filterEasyApplyStatus(status) {
     REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
     APPLIED: document.getElementById('pillEasyApplied'),
     NOT_FOUND: document.getElementById('pillEasyNotFound'),
+    REJECTED: document.getElementById('pillEasyDismissed'),
   };
 
   Object.entries(pills).forEach(([key, el]) => {
@@ -253,9 +259,10 @@ function renderEasyApplyTable() {
       statusBadgeClass = 'not-found';
     }
 
+    const statusTitle = post.rejection_reason ? `${post.status}: ${post.rejection_reason} (Click to change)` : 'Click to change status';
     const statusDropdown = `
       <div class="easy-status-wrap" id="status-wrap-${post.id}">
-        <span class="tag-easy-status ${statusBadgeClass} tag-easy-status-btn" onclick="toggleEasyStatusMenu('${post.id}', event)" title="Click to change status">
+        <span class="tag-easy-status ${statusBadgeClass} tag-easy-status-btn" onclick="toggleEasyStatusMenu('${post.id}', event)" title="${escapeHtml(statusTitle)}">
           <span>${statusBadgeText}</span>
           <span class="status-caret">▾</span>
         </span>
@@ -264,13 +271,16 @@ function renderEasyApplyTable() {
             <span>⚡</span><span>Ready (Queue)</span>
           </button>
           <button class="status-menu-opt opt-screening" onclick="setEasyPostStatus('${post.id}', 'REQUIRES_QUESTIONNAIRE', event)">
-            <span>📋</span><span>Screening Required</span>
+            <span>📋</span><span>Screening (Rerun)</span>
           </button>
           <button class="status-menu-opt opt-applied" onclick="setEasyPostStatus('${post.id}', 'APPLIED', event)">
             <span>✓</span><span>Mark Applied</span>
           </button>
           <button class="status-menu-opt opt-not-found" onclick="setEasyPostStatus('${post.id}', 'NOT_FOUND', event)">
             <span>🚫</span><span>Not Found / Closed</span>
+          </button>
+          <button class="status-menu-opt opt-rejected" onclick="setEasyPostStatus('${post.id}', 'REJECTED', event)">
+            <span>✕</span><span>Dismissed</span>
           </button>
         </div>
       </div>
@@ -291,7 +301,12 @@ function renderEasyApplyTable() {
         <button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>
       `;
     } else if (post.status === 'NOT_FOUND') {
-      actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;">🚫 Closed</span>`;
+      actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;" title="${post.rejection_reason ? escapeHtml(post.rejection_reason) : 'Position closed'}">🚫 Closed</span>`;
+    } else if (post.status === 'REJECTED') {
+      actionBtn = `
+        <button class="btn btn-outline btn-xs" onclick="setEasyPostStatus('${post.id}', 'REQUIRES_QUESTIONNAIRE', event)" title="Restore to Screening (Rerun)" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.45);"><span>📋 Restore</span></button>
+        <button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>
+      `;
     }
 
     tr.innerHTML = `
@@ -303,10 +318,13 @@ function renderEasyApplyTable() {
           <a href="javascript:void(0)" onclick="openEasyDetailsModal('${post.id}')" class="easy-job-title-link" title="Click to view full job details">
             ${escapeHtml(post.author_headline || 'Software Role')}
           </a>
-          <span class="easy-company-name">
-            <span style="opacity: 0.7;">🏢</span>
-            <span>${escapeHtml(post.author_name || 'Company')}</span>
-          </span>
+          <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+            <span class="easy-company-name">
+              <span style="opacity: 0.7;">🏢</span>
+              <span>${escapeHtml(post.author_name || 'Company')}</span>
+            </span>
+            ${post.status === 'NOT_FOUND' && post.rejection_reason ? `<span class="col-closed-reason" style="color: #94a3b8; font-size: 0.68rem; background: rgba(148, 163, 184, 0.12); padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.22); line-height: 1.3;" title="${escapeHtml(post.rejection_reason)}">🚫 ${escapeHtml(post.rejection_reason)}</span>` : ''}
+          </div>
           <span class="easy-role-subline">
             <span class="col-mobile-loc">📍 ${locText}</span>
             <span class="col-mobile-date">⏱ ${escapeHtml(dateText)}</span>
@@ -480,6 +498,16 @@ function openEasyDetailsModal(postId) {
     if (viewQBtn) viewQBtn.classList.add('hidden');
   }
 
+  // Closed Job box
+  const cBox = document.getElementById('easyModalClosedBox');
+  const cNotes = document.getElementById('easyModalClosedNotes');
+  if (post.status === 'NOT_FOUND' && post.rejection_reason) {
+    if (cBox) cBox.classList.remove('hidden');
+    if (cNotes) cNotes.textContent = post.rejection_reason;
+  } else {
+    if (cBox) cBox.classList.add('hidden');
+  }
+
   modal.classList.remove('hidden');
 }
 
@@ -634,8 +662,17 @@ async function batchApplySelectedEasyJobs() {
       if (typeof startTaskPolling === 'function') startTaskPolling();
       fetchEasyApplyPosts();
     } else {
-      const err = await res.json();
-      showAlert('Batch Error', err.detail || 'Failed to enqueue batch Easy Apply.');
+      let errorMsg = `Failed to enqueue batch Easy Apply (${res.status})`;
+      try {
+        const err = await res.json();
+        errorMsg = err.detail || err.message || errorMsg;
+      } catch (_) {
+        try {
+          const txt = await res.text();
+          if (txt) errorMsg = txt;
+        } catch (_) {}
+      }
+      showAlert('Batch Error', errorMsg);
     }
   } catch (err) {
     showAlert('Error', err.message);
@@ -671,8 +708,17 @@ async function triggerRerunScreenedApplications() {
       if (typeof startTaskPolling === 'function') startTaskPolling();
       fetchEasyApplyPosts();
     } else {
-      const err = await res.json();
-      showAlert('Cannot Start Rerun', err.detail || 'Failed to start batch rerun.');
+      let errorMsg = `Failed to start batch rerun (${res.status})`;
+      try {
+        const err = await res.json();
+        errorMsg = err.detail || err.message || errorMsg;
+      } catch (_) {
+        try {
+          const txt = await res.text();
+          if (txt) errorMsg = txt;
+        } catch (_) {}
+      }
+      showAlert('Cannot Start Rerun', errorMsg);
     }
   } catch (err) {
     showAlert('Error', err.message);

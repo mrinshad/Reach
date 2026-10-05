@@ -442,6 +442,10 @@
               <span class="chip-dot slate"></span>
               <span>🚫 Not Found</span>
             </button>
+            <button class="btn-modal-status-chip" onclick="setModalPostStatus('REJECTED')" title="Mark as Dismissed">
+              <span class="chip-dot rose"></span>
+              <span>✕ Dismissed</span>
+            </button>
           </div>
         </div>
 
@@ -460,6 +464,17 @@
               <p style="margin: 0.25rem 0 0; font-size: 0.72rem; color: #94a3b8;">
                 This role requires questionnaire answers. Review questions before manual submission.
               </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Closed Job Alert Banner if applicable -->
+        <div class="questionnaire-screening-alert hidden" id="easyModalClosedBox" style="background: rgba(148, 163, 184, 0.1); border-color: rgba(148, 163, 184, 0.3);">
+          <div style="display: flex; gap: 0.65rem; align-items: flex-start;">
+            <span style="font-size: 1.25rem; line-height: 1;">🚫</span>
+            <div style="flex: 1; min-width: 0;">
+              <strong style="color: #94a3b8; font-size: 0.85rem;">Position Closed on LinkedIn:</strong>
+              <p id="easyModalClosedNotes" style="margin: 0.35rem 0 0; font-size: 0.77rem; color: #cbd5e1; line-height: 1.45;"></p>
             </div>
           </div>
         </div>

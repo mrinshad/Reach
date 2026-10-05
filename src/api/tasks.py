@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 
 from src.db import (
+    get_connection,
     upsert_post,
     get_post_by_id,
     get_posts_by_ids,

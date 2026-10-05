@@ -706,6 +706,11 @@
   background: rgba(148, 163, 184, 0.12);
 }
 
+.status-menu-opt.opt-rejected:hover {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.12);
+}
+
 .tag-easy-status.applied {
   background: rgba(16, 185, 129, 0.12);
   color: #34d399;
@@ -790,6 +795,13 @@
 .pill-dot.slate {
   background: #94a3b8;
   box-shadow: 0 0 6px rgba(148, 163, 184, 0.6);
+}
+
+/* Dismissed filter pill & modal chip dot */
+.pill-dot.rose,
+.chip-dot.rose {
+  background: #f43f5e;
+  box-shadow: 0 0 6px rgba(244, 63, 94, 0.6);
 }
 
 /* =============================================

@@ -1285,7 +1285,26 @@ def run_linkedin_easy_apply_scraper(
 def run_single_easy_apply(post_id: str):
     """Run Easy Apply submission for a single job post in Firefox."""
     from src.services.easy_apply_service import apply_to_single_easy_apply_post
-    apply_to_single_easy_apply_post(post_id, task_manager=task_manager)
+    post = get_post_by_id(post_id)
+    title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
+    company = (post.get("author_name") if post else None) or "Company"
+    task_manager.start_task(f"Easy Apply — {title} @ {company}", total_items=1, short_name="Easy Apply", snippet=company)
+    try:
+        result = apply_to_single_easy_apply_post(post_id, task_manager=task_manager)
+        status = (result or {}).get("status")
+        detail = (result or {}).get("detail", "")
+        if status == "APPLIED":
+            task_manager.finish_task(f"Application successfully submitted for {title} @ {company}!")
+        elif status == "NOT_FOUND":
+            task_manager.finish_task(f"Position closed ({detail}). Marked as Closed / Not Found.")
+        elif status == "REQUIRES_QUESTIONNAIRE":
+            task_manager.finish_task(f"Custom questionnaire detected for {title}. Saved for screening.")
+        elif status == "RATE_LIMITED":
+            task_manager.fail_task(f"LinkedIn safeguard pause: {detail}")
+        else:
+            task_manager.finish_task(f"Easy Apply completed for {title}: {detail}")
+    except Exception as e:
+        task_manager.fail_task(str(e))
 
 
 def run_batch_easy_apply(post_ids: List[str], pacing: str = "safe"):

@@ -118,8 +118,17 @@ async function pollTaskStatus() {
       // Real-time update of all dashboard metrics & active tab view during task execution
       if (typeof fetchStats === 'function') fetchStats();
 
+      // Dynamic table reload during progress (e.g. batch Easy Apply advancing completed items)
+      if (state.lastCompletedItems !== done) {
+        state.lastCompletedItems = done;
+        if (state.activeTab === 'tabEasyApply' && typeof fetchEasyApplyPosts === 'function') {
+          fetchEasyApplyPosts();
+        }
+      }
+
       state.lastHandledTaskKey = null;
-    } else if (task.status === 'completed' || task.status === 'error') {
+    } else if (task.status === 'completed' || task.status === 'error' || task.status === 'stopped') {
+      state.lastCompletedItems = null;
       if (etaPill) etaPill.classList.add('hidden');
       if (task.logs && task.logs.length > 0) {
         renderTaskLogs(task.logs);
@@ -152,6 +161,15 @@ async function pollTaskStatus() {
               type: 'success',
             });
           }
+        } else if (task.status === 'stopped') {
+          subEl.textContent = 'Task stopped';
+          if (typeof sendAppNotification === 'function') {
+            sendAppNotification({
+              title: task.task_name || 'Task Stopped',
+              message: 'Automation task was stopped.',
+              type: 'warning',
+            });
+          }
         } else {
           const firstLine = (task.error || 'Operation failed').split('\n')[0];
           subEl.textContent = `Failed: ${firstLine}`;
@@ -180,6 +198,9 @@ async function pollTaskStatus() {
           }
         }
         if (typeof loadDashboardData === 'function') loadDashboardData();
+        if (state.activeTab === 'tabEasyApply' && typeof fetchEasyApplyPosts === 'function') {
+          fetchEasyApplyPosts();
+        }
         if (typeof fetchHealth === 'function') fetchHealth();
       }
 

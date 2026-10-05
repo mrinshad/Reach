@@ -217,6 +217,66 @@ def check_linkedin_rate_limit(page: Page) -> Optional[str]:
     return None
 
 
+def detect_closed_job_reason(page: Page) -> Optional[str]:
+    """
+    Check if the LinkedIn job page indicates the job is closed or no longer accepting applications.
+    Returns the exact reason string (e.g. 'No longer accepting applications', 'Not currently accepting applications',
+    'This job is no longer available', etc.) if found, or None if the job is open.
+    """
+    # 1. Closed job flavor elements (e.g. figcaption.closed-job__flavor--closed)
+    try:
+        flavor_loc = page.locator('.closed-job__flavor--closed, figcaption.closed-job__flavor--closed, figure.closed-job')
+        if flavor_loc.count() > 0:
+            for i in range(flavor_loc.count()):
+                txt = flavor_loc.nth(i).inner_text().strip()
+                if txt:
+                    return txt
+    except Exception:
+        pass
+
+    # 2. Exact known phrases across visible text
+    phrases = [
+        "Not currently accepting applications",
+        "No longer accepting applications",
+        "This job is no longer available",
+        "This job has expired",
+        "This job is closed",
+        "This posting is closed",
+    ]
+    for p in phrases:
+        try:
+            loc = page.locator(f'text="{p}"')
+            if loc.count() > 0 and loc.first.is_visible():
+                txt = loc.first.inner_text().strip()
+                return txt or p
+        except Exception:
+            pass
+
+    # 3. Top-card header container check
+    try:
+        top_cards = page.locator('.jobs-details__top-card, .topcard, .job-details-jobs-unified-top-card, header, .job-view-layout, .artdeco-inline-feedback--error')
+        if top_cards.count() > 0:
+            top_text = top_cards.first.inner_text()
+            for p in phrases:
+                if p.lower() in top_text.lower():
+                    return p
+    except Exception:
+        pass
+
+    # 4. Check page body text if it explicitly matches closed phrases
+    try:
+        body_text = page.locator("body").inner_text(timeout=1500)
+        for p in phrases:
+            pattern = re.compile(rf"(?:^|\n|[\.\!\?]\s*)({re.escape(p)})(?:[\.\!\?]|[\n\r]|$)", re.IGNORECASE)
+            m = pattern.search(body_text)
+            if m:
+                return m.group(1).strip()
+    except Exception:
+        pass
+
+    return None
+
+
 def dismiss_easy_apply_modal(page: Page):
     """Safely dismiss and discard an open Easy Apply modal without saving partial drafts."""
     try:
@@ -833,6 +893,7 @@ def execute_easy_apply(
     WITHOUT submitting dummy values.
     Returns (status, detail_message) where status is:
       - 'APPLIED': Successfully submitted
+      - 'NOT_FOUND': Position is closed or no longer accepting applications
       - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
       - 'FAILED': Modal failed to open or encountered an unhandled issue
       - 'ALREADY_APPLIED': LinkedIn indicates you've already applied
@@ -858,6 +919,12 @@ def execute_easy_apply(
             logger("  ℹ️ Already applied to this position on LinkedIn.")
             return "APPLIED", "Already applied previously on LinkedIn"
 
+        # Check if job is closed / no longer accepting applications
+        closed_reason = detect_closed_job_reason(page)
+        if closed_reason:
+            logger(f"  🚫 Position is closed: {closed_reason}")
+            return "NOT_FOUND", closed_reason
+
         # Wait for Easy Apply button
         try:
             page.wait_for_selector(
@@ -877,6 +944,11 @@ def execute_easy_apply(
             if page.locator("button:has-text('Applied')").count() > 0:
                 logger("  ℹ️ Already applied to this position on LinkedIn.")
                 return "APPLIED", "Already applied previously on LinkedIn"
+            # Re-check for closed job indicators before declaring failed
+            closed_reason = detect_closed_job_reason(page)
+            if closed_reason:
+                logger(f"  🚫 Position is closed: {closed_reason}")
+                return "NOT_FOUND", closed_reason
             logger("  ⚠️ No Easy Apply button found on page.")
             return "FAILED", "No Easy Apply button visible"
 
@@ -1312,6 +1384,10 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
             update_post_status(post_id, "APPLIED", rejection_reason="")
             logger(f"✓ Application successfully submitted for {title} @ {company}")
             return {"success": True, "status": "APPLIED", "detail": detail}
+        elif status == "NOT_FOUND":
+            update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
+            logger(f"🚫 Position closed ({detail}). Status -> NOT_FOUND")
+            return {"success": False, "status": "NOT_FOUND", "detail": detail}
         elif status == "RATE_LIMITED":
             from src.db.settings import set_setting
             set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
@@ -1327,6 +1403,16 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
             return {"success": False, "status": status, "detail": detail}
 
 
+def is_cooldown_active() -> bool:
+    """Check if LinkedIn safeguard cooldown is currently active."""
+    try:
+        from src.services.question_bank_service import get_rate_limit_safeguard_status
+        status = get_rate_limit_safeguard_status()
+        return bool(status.get("is_paused", False))
+    except Exception:
+        return False
+
+
 def apply_to_batch_easy_apply_posts(
     post_ids: List[str],
     pacing: str = "safe",
@@ -1339,7 +1425,7 @@ def apply_to_batch_easy_apply_posts(
     """
     total = len(post_ids)
     if total == 0:
-        return {"success": True, "total": 0, "applied": 0, "questionnaire": 0, "failed": 0}
+        return {"success": True, "total": 0, "applied": 0, "questionnaire": 0, "closed": 0, "failed": 0}
 
     logger = task_manager.log if task_manager else print
 
@@ -1356,6 +1442,7 @@ def apply_to_batch_easy_apply_posts(
 
     applied_count = 0
     questionnaire_count = 0
+    closed_count = 0
     failed_count = 0
 
     if task_manager:
@@ -1406,6 +1493,10 @@ def apply_to_batch_easy_apply_posts(
                 update_post_status(post_id, "APPLIED", rejection_reason="")
                 applied_count += 1
                 logger(f"  🎉 Application successfully submitted! Status -> APPLIED")
+            elif status == "NOT_FOUND":
+                update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
+                closed_count += 1
+                logger(f"  🚫 Position closed: {detail}. Status -> NOT_FOUND")
             elif status == "RATE_LIMITED":
                 from src.db.settings import set_setting
                 set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
@@ -1423,7 +1514,7 @@ def apply_to_batch_easy_apply_posts(
                 logger(f"  ℹ️ Application did not submit: {detail}")
 
             if task_manager:
-                task_manager.update_progress(idx)
+                task_manager.update_progress(idx, f"Processed {idx}/{total}: {title} ({status})")
 
             # Safe human delay between applications
             if idx < total:
@@ -1440,15 +1531,20 @@ def apply_to_batch_easy_apply_posts(
 
         context.close()
 
+    summary_msg = f"Batch Easy Apply completed: {applied_count} submitted, {questionnaire_count} need questionnaire answers, {closed_count} closed, {failed_count} skipped/failed."
     logger("\n" + "=" * 60)
-    logger(f"✨ Batch Easy Apply completed: {applied_count} submitted, {questionnaire_count} need questionnaire answers, {failed_count} skipped/failed.")
+    logger(f"✨ {summary_msg}")
     logger("=" * 60)
+
+    if task_manager:
+        task_manager.finish_task(summary_msg)
 
     return {
         "success": True,
         "total": total,
         "applied": applied_count,
         "questionnaire": questionnaire_count,
+        "closed": closed_count,
         "failed": failed_count,
     }
 

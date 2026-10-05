@@ -221,6 +221,11 @@
         <span>Not Found</span>
         <span class="pill-badge-count" id="countPillNotFound">0</span>
       </button>
+      <button class="filter-pill" id="pillEasyDismissed" onclick="filterEasyApplyStatus('REJECTED')">
+        <span class="pill-dot rose"></span>
+        <span>Dismissed</span>
+        <span class="pill-badge-count" id="countPillDismissed">0</span>
+      </button>
     </div>
 
     <div style="display: flex; align-items: center; gap: 0.65rem;">
@@ -281,6 +286,10 @@
       <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('NOT_FOUND')"
         title="Mark selected as Not Found / Closed">
         <span>🚫 Not Found</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetEasyStatus('REJECTED')"
+        title="Move selected to Dismissed">
+        <span>✕ Dismiss</span>
       </button>
     </div>
     <div class="batch-banner-right">
