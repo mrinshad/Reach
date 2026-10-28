@@ -50,24 +50,41 @@ async function fetchEasyApplyPosts() {
 
 function initEasyCyclesPersistence() {
   const input = document.getElementById('easyCrawlerCycles');
-  if (!input || input.dataset.persisted) return;
-  input.dataset.persisted = 'true';
+  if (input && !input.dataset.persisted) {
+    input.dataset.persisted = 'true';
+    const saved = localStorage.getItem('reach_easy_apply_cycles');
+    if (saved) input.value = saved;
 
-  const saved = localStorage.getItem('reach_easy_apply_cycles');
-  if (saved) input.value = saved;
-
-  const onCyclesUpdate = (e) => {
-    const val = parseInt(e.target.value, 10);
-    if (!isNaN(val) && val >= 1) {
-      localStorage.setItem('reach_easy_apply_cycles', val);
-      if (typeof persistCyclesSetting === 'function') {
-        persistCyclesSetting('easy_apply_cycles', val);
+    const onCyclesUpdate = (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        localStorage.setItem('reach_easy_apply_cycles', val);
+        if (typeof persistCyclesSetting === 'function') {
+          persistCyclesSetting('easy_apply_cycles', val);
+        }
       }
-    }
-  };
+    };
 
-  input.addEventListener('change', onCyclesUpdate);
-  input.addEventListener('input', onCyclesUpdate);
+    input.addEventListener('change', onCyclesUpdate);
+    input.addEventListener('input', onCyclesUpdate);
+  }
+
+  const maxJobsInput = document.getElementById('easyMaxJobs');
+  if (maxJobsInput && !maxJobsInput.dataset.persisted) {
+    maxJobsInput.dataset.persisted = 'true';
+    const savedMax = localStorage.getItem('reach_easy_apply_max_jobs');
+    if (savedMax) maxJobsInput.value = savedMax;
+
+    const onMaxJobsUpdate = (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        localStorage.setItem('reach_easy_apply_max_jobs', val);
+      }
+    };
+
+    maxJobsInput.addEventListener('change', onMaxJobsUpdate);
+    maxJobsInput.addEventListener('input', onMaxJobsUpdate);
+  }
 }
 
 function updateEasyClearFiltersButton() {
@@ -226,7 +243,7 @@ function renderEasyApplyTable() {
   }
 
   if (filtered.length === 0) {
-    let emptyMsg = 'No LinkedIn Easy Apply jobs scraped yet. Click "Crawl & Auto-Apply" to discover jobs!';
+    let emptyMsg = 'No LinkedIn Easy Apply jobs in queue yet. Click "Collect Jobs" to discover matching roles!';
     if (easyTableSearchQuery) {
       emptyMsg = `No jobs matched search "${escapeHtml(easyTableSearchQuery)}".`;
     } else if (easyApplyStatusFilter !== 'ALL') {
@@ -354,6 +371,7 @@ function renderEasyApplyTable() {
           <a href="${post.post_url}" target="_blank" rel="noopener noreferrer" class="icon-btn sm" title="Open Job on LinkedIn">
             <span style="font-size: 0.72rem; line-height: 1;">↗</span>
           </a>
+          ${post.status !== 'REJECTED' ? `<button class="icon-btn sm btn-dismiss-job" onclick="dismissSingleEasyJob('${post.id}', event)" title="Dismiss / Cancel this job" style="color: #94a3b8;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
           ${actionBtn}
         </div>
       </td>
@@ -370,6 +388,7 @@ async function triggerEasyApplyCrawl() {
   const location = (document.getElementById('easySearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('easyTimeFilter')?.value || '24h';
   const cycles = parseInt(document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const maxJobs = parseInt(document.getElementById('easyMaxJobs')?.value || '25', 10);
   const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
 
   const btn = document.getElementById('btnLaunchEasyApplyCrawl');
@@ -377,7 +396,7 @@ async function triggerEasyApplyCrawl() {
     btn.disabled = true;
     btn.innerHTML = `
       <svg class="spin-fast" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-      <span>Crawling...</span>
+      <span>Collecting...</span>
     `;
   }
 
@@ -390,13 +409,14 @@ async function triggerEasyApplyCrawl() {
         location: location,
         time_filter: timeFilter,
         cycles: isNaN(cycles) ? 8 : cycles,
+        max_jobs: isNaN(maxJobs) ? 25 : maxJobs,
         pacing: pacing,
       }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      showToast(`⚡ Enqueued LinkedIn Easy Apply Crawler (${location})`, 'info');
+      showToast(`🔍 Enqueued LinkedIn Job Collector (${location})`, 'info');
       if (typeof startTaskPolling === 'function') startTaskPolling();
     } else {
       const err = await res.json();
@@ -409,11 +429,38 @@ async function triggerEasyApplyCrawl() {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = `
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Crawl & Auto-Apply</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Collect Jobs</span>
         `;
       }
     }, 2000);
+  }
+}
+
+async function dismissSingleEasyJob(postId, event) {
+  if (event) event.stopPropagation();
+  try {
+    const res = await fetch(`/api/posts/${postId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Dismissed by user' }),
+    });
+    if (res.ok) {
+      const post = easyApplyPosts.find((p) => p.id === postId);
+      if (post) {
+        post.status = 'REJECTED';
+        post.rejection_reason = 'Dismissed by user';
+      }
+      selectedEasyJobIds.delete(postId);
+      updateEasyKPIs();
+      renderEasyApplyTable();
+      showToast('✓ Job dismissed from queue', 'success');
+    } else {
+      const err = await res.json();
+      showAlert('Dismiss Failed', err.detail || 'Could not dismiss job');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
   }
 }
 
@@ -549,6 +596,20 @@ function toggleSelectAllEasyJobs(checked) {
   if (easyApplyStatusFilter !== 'ALL') {
     filtered = easyApplyPosts.filter((p) => p.status === easyApplyStatusFilter);
   }
+  if (easyTableSearchQuery) {
+    filtered = filtered.filter((p) => {
+      const headline = (p.author_headline || '').toLowerCase();
+      const company = (p.author_name || '').toLowerCase();
+      const location = (p.location || '').toLowerCase();
+      const text = (p.full_text || '').toLowerCase();
+      return (
+        headline.includes(easyTableSearchQuery) ||
+        company.includes(easyTableSearchQuery) ||
+        location.includes(easyTableSearchQuery) ||
+        text.includes(easyTableSearchQuery)
+      );
+    });
+  }
 
   if (checked) {
     filtered.forEach((p) => selectedEasyJobIds.add(p.id));
@@ -620,19 +681,32 @@ async function batchDismissEasyJobs() {
   const confirmed = await showConfirm('Dismiss Selected', `Dismiss ${size} selected jobs from queue?`);
   if (!confirmed) return;
 
-  for (const id of selectedEasyJobIds) {
-    try {
-      await fetch(`/api/posts/${id}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Dismissed by user' }),
+  const ids = Array.from(selectedEasyJobIds);
+  try {
+    const res = await fetch('/api/posts/reject-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, reason: 'Dismissed by user' }),
+    });
+    if (res.ok) {
+      ids.forEach((id) => {
+        const post = easyApplyPosts.find((p) => p.id === id);
+        if (post) {
+          post.status = 'REJECTED';
+          post.rejection_reason = 'Dismissed by user';
+        }
       });
-    } catch (_) {}
+      selectedEasyJobIds.clear();
+      updateEasyKPIs();
+      renderEasyApplyTable();
+      showToast(`✓ Dismissed ${size} jobs from queue`, 'success');
+    } else {
+      const err = await res.json();
+      showAlert('Dismiss Failed', err.detail || 'Could not dismiss selected jobs');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
   }
-
-  selectedEasyJobIds.clear();
-  showToast(`✓ Dismissed ${size} jobs`, 'success');
-  fetchEasyApplyPosts();
 }
 
 async function batchApplySelectedEasyJobs() {
@@ -1742,6 +1816,7 @@ window.toggleSelectEasyJob = toggleSelectEasyJob;
 window.toggleSelectAllEasyJobs = toggleSelectAllEasyJobs;
 window.batchCopyEasyLinks = batchCopyEasyLinks;
 window.batchDismissEasyJobs = batchDismissEasyJobs;
+window.dismissSingleEasyJob = dismissSingleEasyJob;
 window.batchApplySelectedEasyJobs = batchApplySelectedEasyJobs;
 window.toggleEasyStatusMenu = toggleEasyStatusMenu;
 window.closeAllEasyStatusMenus = closeAllEasyStatusMenus;

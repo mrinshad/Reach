@@ -480,6 +480,7 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
     time_filter = (payload.time_filter or "24h") if payload else "24h"
     cycles = payload.cycles if payload else None
     pacing = payload.pacing if payload else None
+    max_jobs = (payload.max_jobs or payload.limit) if payload else None
 
     full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -488,8 +489,8 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
         short_name=short_name,
         snippet=snippet,
         runner_func=run_linkedin_easy_apply_scraper,
-        args=(query, loc, time_filter, cycles, pacing),
-        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing},
+        args=(query, loc, time_filter, cycles, pacing, max_jobs),
+        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
     return {"success": True, "message": msg, **res}
@@ -508,6 +509,7 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
     time_filter = payload.time_filter or "24h"
     cycles = payload.cycles
     pacing = payload.pacing
+    max_jobs = payload.max_jobs
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
@@ -517,8 +519,8 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=run_linkedin_easy_apply_scraper,
-            args=(kw, loc, time_filter, cycles, pacing),
-            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing},
+            args=(kw, loc, time_filter, cycles, pacing, max_jobs),
+            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
         )
         queued.append({"keyword": kw, **res})
 

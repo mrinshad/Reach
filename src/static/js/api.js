@@ -226,39 +226,39 @@ async function fetchStats() {
     if (elSent) elSent.textContent = othersCount;
 
     // Sidebar Navigation Badges:
-    // 1. Discovered Jobs: count of yet to generate JDs
+    // 1. Discovered Jobs: All source + yet to generate + Direct email outreach
     const countDiscEl = document.getElementById('countDiscovered');
     if (countDiscEl) {
       countDiscEl.textContent = pendingCount;
       countDiscEl.title = `${pendingCount} direct email outreach jobs yet to generate`;
     }
 
-    // 2. Review & Drafts: count of drafts ready for review
-    const countRevEl = document.getElementById('countReview');
-    if (countRevEl) {
-      countRevEl.textContent = draftsReady;
-      countRevEl.title = `${draftsReady} drafts ready for review`;
-    }
-    const reviewQueueBadge = document.getElementById('reviewQueueCount');
-    if (reviewQueueBadge) {
-      reviewQueueBadge.textContent = draftsReady;
-    }
-
-    // 2b. LinkedIn Easy Apply badge
+    // 2. LinkedIn Job Portal & Easy Apply: ready to apply count
     const countEasyApplyEl = document.getElementById('countEasyApply');
     if (countEasyApplyEl) {
-      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : (stats.easy_apply_total || 0);
+      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : 0;
       countEasyApplyEl.textContent = eaPending;
-      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready`;
+      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready to apply`;
     }
 
-    // 2c. Screening Question Bank badge
+    // 3. Question Bank: unanswered screening questions count
     const countQBankEl = document.getElementById('countSidebarQuestionBank');
     if (countQBankEl) {
       const qbPending = stats.question_bank_pending !== undefined ? stats.question_bank_pending : 0;
       countQBankEl.textContent = qbPending;
-      countQBankEl.title = `${qbPending} screening questions pending answers`;
-      countQBankEl.style.display = qbPending > 0 ? 'inline-flex' : 'none';
+      countQBankEl.title = `${qbPending} screening questions unanswered`;
+      countQBankEl.style.display = '';
+    }
+
+    // 4. Review & Drafts: drafted count ready for review
+    const countRevEl = document.getElementById('countReview');
+    if (countRevEl) {
+      countRevEl.textContent = draftsReady;
+      countRevEl.title = `${draftsReady} drafted emails ready for review`;
+    }
+    const reviewQueueBadge = document.getElementById('reviewQueueCount');
+    if (reviewQueueBadge) {
+      reviewQueueBadge.textContent = draftsReady;
     }
 
     // 3. Sent & History: Others tab counters

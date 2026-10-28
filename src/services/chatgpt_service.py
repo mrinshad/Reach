@@ -10,7 +10,7 @@ Interacts with the user's dedicated custom GPT conversation:
 
 import re
 import time
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from playwright.sync_api import Page
 
 def get_default_chatgpt_url() -> str:
@@ -32,12 +32,123 @@ def get_default_chatgpt_url() -> str:
     return "https://chatgpt.com"
 
 
+DEFAULT_CHATGPT_QUESTION_URL = (
+    "https://chatgpt.com/g/g-p-6a6af7de9a388191ba79d3cb135d6bc6-important/c/6a8fb276-b04c-83ee-92e1-89ef66d86bcd"
+)
+
+
+def get_chatgpt_question_url() -> str:
+    """Retrieve custom GPT URL for question answering from database settings or default."""
+    try:
+        from src.db import get_setting
+        val = get_setting("chatgpt_question_url")
+        if val and val.strip():
+            return val.strip()
+    except Exception:
+        pass
+    try:
+        from src.config import load_config
+        val = load_config().get("chatgpt_question_url")
+        if val and val.strip():
+            return val.strip()
+    except Exception:
+        pass
+    return DEFAULT_CHATGPT_QUESTION_URL
+
+
+def clean_chatgpt_answer(raw_text: str) -> str:
+    """Clean and sanitize ChatGPT's raw response to extract only the answer."""
+    if not raw_text:
+        return ""
+    ans = raw_text.strip()
+    # Strip markdown code fences if wrapped
+    ans = re.sub(r"^```[a-zA-Z]*\n?", "", ans)
+    ans = re.sub(r"\n?```$", "", ans)
+    # Strip leading blockquotes
+    ans = re.sub(r"^>\s*", "", ans)
+    # Strip quotes, backticks, asterisks, spaces
+    ans = ans.strip("`'\"* \t\n")
+    # Strip "Answer: " or "Ans: " prefix
+    ans = re.sub(r"^(?:answer|ans)\s*:\s*", "", ans, flags=re.IGNORECASE).strip()
+    ans = ans.strip("`'\"* \t\n")
+    # Strip trailing period if it is a short answer (e.g. "Yes." -> "Yes", "5." -> "5")
+    if len(ans.split()) <= 4 and ans.endswith(".") and not ans.endswith(".."):
+        ans = ans[:-1].strip()
+    return ans
+
+
+def is_dont_know_response(text: str) -> bool:
+    """Check if ChatGPT returned DONT_KNOW or user_response_needed indicating manual screening is required."""
+    if not text:
+        return False
+    norm = text.lower().strip()
+    norm = re.sub(r"[`'*_]", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return (
+        "dont_know" in norm
+        or "dont know" in norm
+        or "don't know" in norm
+        or "user_response_needed" in norm
+        or "user response needed" in norm
+        or norm == "dont_know"
+        or norm == "dont know"
+        or norm == "user_response_needed"
+    )
+
+
+def is_unreasonable_response(text: str) -> bool:
+    """Check if ChatGPT returned WTF indicating the question is unreasonable/spam/abusive."""
+    if not text:
+        return False
+    norm = text.lower().strip()
+    norm = re.sub(r"[`'*_]", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    tokens = norm.split()
+    return (
+        "wtf" in tokens
+        or norm == "wtf"
+        or norm.startswith("wtf")
+        or "unreasonable" in norm
+    )
+
+
+def is_user_response_needed(text: str) -> bool:
+    """Check if ChatGPT returned user_response_needed or DONT_KNOW."""
+    return is_dont_know_response(text)
+
+
+def dismiss_chatgpt_overlays(page: Page):
+    """Dismiss any onboarding modals, banners, or dialogs blocking the ChatGPT composer."""
+    dismiss_selectors = [
+        "button:has-text('Okay, let\\'s go')",
+        "button:has-text('Got it')",
+        "button:has-text('Next')",
+        "button:has-text('Done')",
+        "button:has-text('Accept all')",
+        "button:has-text('Accept')",
+        "button:has-text('Stay logged out')",
+        "button:has-text('Continue without logging in')",
+        "button[aria-label='Close dialog']",
+        "button[aria-label='Close']",
+        "div[role='dialog'] button:has-text('Close')",
+    ]
+    for sel in dismiss_selectors:
+        try:
+            btn = page.locator(sel).first
+            if btn.count() > 0 and btn.is_visible():
+                btn.click(timeout=800)
+                page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+
 PROMPT_BOX_SELECTOR = (
+    "div.ProseMirror[role='textbox'][aria-label*='Ask' i], "
+    "div.ProseMirror[role='textbox'], "
+    "div[contenteditable='true'][role='textbox'], "
+    "div[contenteditable='true'], "
     "#prompt-textarea, "
-    "div[data-composer-markdown], "
-    "form[data-chatgpt-composer] div.ProseMirror, "
-    "div.ProseMirror[aria-label*='ChatGPT'], "
-    "form[data-chatgpt-composer] div[contenteditable='true']"
+    "[data-testid='prompt-textarea']"
 )
 
 SEND_BTN_SELECTOR = (
@@ -732,3 +843,280 @@ def send_followup_and_get_email(
         raise ValueError("Cannot send empty follow-up text to ChatGPT.")
 
     return _send_prompt_and_wait_response(page, followup_text.strip(), max_wait=max_wait, poll_interval=poll_interval)
+
+
+def send_question_and_get_answer(
+    page: Page,
+    question_text: str,
+    options: Optional[List[str]] = None,
+    max_wait: int = 45,
+    poll_interval: float = 1.0,
+    logger=print,
+) -> Tuple[Optional[str], bool]:
+    """
+    Submit a raw question to the custom GPT chat and wait for the single clean answer.
+    No extra system prompts are appended, adhering strictly to pre-configured chat behavior.
+    Returns:
+        (answer_string, is_user_response_needed)
+    """
+    if not question_text or not question_text.strip():
+        return None, False
+
+    prompt_to_send = question_text.strip()
+    if options and len(options) > 0:
+        clean_opts = [str(o).strip() for o in options if str(o).strip()]
+        if clean_opts:
+            prompt_to_send += f"\nOptions: {', '.join(clean_opts)}"
+
+    ASSISTANT_MSG_SELECTOR = (
+        "[data-markdown-text-style='assistant-message'], "
+        "[data-message-author-role='assistant'], "
+        "div[data-dil-message-id], "
+        "article"
+    )
+
+    existing_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+    initial_count = existing_msgs.count()
+    last_msg_id = ""
+    initial_last_text = ""
+    if initial_count > 0:
+        try:
+            last_msg = existing_msgs.last
+            last_msg_id = last_msg.evaluate(
+                "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
+            )
+        except Exception:
+            pass
+        try:
+            initial_last_text = existing_msgs.last.inner_text().strip()
+        except Exception:
+            pass
+
+    try:
+        dismiss_chatgpt_overlays(page)
+        page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=12000)
+    except Exception:
+        logger(f"  ⚠️ Prompt box not found on ChatGPT page (url: {page.url}, title: {page.title()})")
+        return None, "FAILED"
+
+    prompt_box = page.locator(PROMPT_BOX_SELECTOR).last
+    try:
+        prompt_box.click(force=True, timeout=5000)
+    except Exception:
+        pass
+    page.wait_for_timeout(250)
+
+    # Insert into ProseMirror composer
+    inserted = False
+    try:
+        inserted = page.evaluate("""({sel, text}) => {
+            const els = document.querySelectorAll(sel);
+            if (!els.length) return false;
+            const el = els[els.length - 1];
+            el.focus();
+            document.execCommand('selectAll', false, null);
+            const ok = document.execCommand('insertText', false, text);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return ok;
+        }""", {"sel": PROMPT_BOX_SELECTOR, "text": prompt_to_send})
+    except Exception:
+        inserted = False
+
+    current_prompt_text = ""
+    try:
+        current_prompt_text = prompt_box.inner_text().strip()
+    except Exception:
+        pass
+
+    if not inserted or not current_prompt_text:
+        try:
+            prompt_box.click()
+            lines = prompt_to_send.split("\n")
+            for i, line in enumerate(lines):
+                if i > 0:
+                    page.keyboard.press("Shift+Enter")
+                if line:
+                    page.keyboard.type(line, delay=2)
+            current_prompt_text = prompt_box.inner_text().strip()
+        except Exception:
+            pass
+
+    page.wait_for_timeout(400)
+
+    # Click send button or press Enter
+    sent = False
+    start_btn = time.time()
+    while time.time() - start_btn < 3:
+        btn = page.locator(SEND_BTN_SELECTOR).first
+        if btn.count() > 0 and btn.is_visible():
+            try:
+                is_disabled = btn.evaluate("el => el.disabled || el.getAttribute('aria-disabled') === 'true' || el.classList.contains('opacity-50')")
+            except Exception:
+                is_disabled = False
+            if not is_disabled:
+                try:
+                    btn.click(timeout=2000)
+                    sent = True
+                    break
+                except Exception:
+                    pass
+        time.sleep(0.3)
+
+    if not sent:
+        try:
+            prompt_box.focus()
+            page.keyboard.press("Enter")
+            sent = True
+        except Exception:
+            pass
+
+    page.wait_for_timeout(800)
+
+    # Wait for completion
+    elapsed = 0.0
+    has_streamed = False
+    response_text = ""
+
+    while elapsed < max_wait:
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+        # Check transient retry button
+        retry_btn = page.locator("button:has-text('Retry')")
+        if retry_btn.count() > 0 and retry_btn.last.is_visible():
+            try:
+                retry_btn.last.click(timeout=1000)
+                time.sleep(1.0)
+            except Exception:
+                pass
+
+        # Check streaming
+        stop_btn = page.locator(
+            "button[aria-label*='Stop' i], button[data-testid='stop-button'], button[aria-label*='stop' i]"
+        )
+        is_streaming = stop_btn.count() > 0 and stop_btn.first.is_visible()
+        if is_streaming:
+            has_streamed = True
+            continue
+
+        current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+        current_count = current_msgs.count()
+        if current_count > 0:
+            last_msg = current_msgs.last
+            try:
+                new_last_id = last_msg.evaluate(
+                    "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
+                )
+            except Exception:
+                new_last_id = ""
+
+            try:
+                current_last_text = last_msg.inner_text().strip()
+            except Exception:
+                current_last_text = ""
+
+            is_new = (
+                (new_last_id and last_msg_id and new_last_id != last_msg_id)
+                or current_count > initial_count
+                or (has_streamed and current_last_text != initial_last_text)
+                or (current_last_text and current_last_text != initial_last_text and not is_streaming)
+            )
+
+            if is_new and current_last_text:
+                md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
+                if md_el.count() > 0:
+                    response_text = md_el.first.inner_text().strip()
+                else:
+                    response_text = current_last_text
+
+                if response_text and response_text != initial_last_text:
+                    break
+
+    if not response_text:
+        current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+        if current_msgs.count() > initial_count:
+            last_msg = current_msgs.last
+            md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
+            response_text = md_el.first.inner_text().strip() if md_el.count() > 0 else last_msg.inner_text().strip()
+
+    clean_ans = clean_chatgpt_answer(response_text)
+    if is_unreasonable_response(clean_ans):
+        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF'): {clean_ans}")
+        return None, "WTF"
+
+    if is_dont_know_response(clean_ans):
+        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW': {clean_ans}")
+        return None, "DONT_KNOW"
+
+    if clean_ans:
+        return clean_ans, "OK"
+
+    return None, "FAILED"
+
+
+def ask_chatgpt_for_question_answer(
+    context,
+    question_text: str,
+    options: Optional[List[str]] = None,
+    logger=print,
+) -> Tuple[Optional[str], str]:
+    """
+    High-level automation helper to query the dedicated ChatGPT question answering conversation.
+    Reuses an open ChatGPT tab or creates one in the current Playwright Firefox context.
+    Returns:
+        (answer_string, status_code) where status_code in ('OK', 'DONT_KNOW', 'WTF', 'FAILED')
+    """
+    if not context:
+        logger("  ⚠️ No browser context provided for ChatGPT question answering.")
+        return None, "FAILED"
+
+    target_url = get_chatgpt_question_url()
+    chat_page = None
+
+    try:
+        # Extract unique chat ID from question URL (e.g. 6a8fb276-b04c-83ee-92e1-89ef66d86bcd)
+        chat_id = ""
+        if "/c/" in target_url:
+            chat_id = target_url.split("/c/")[-1].split("?")[0].strip("/")
+
+        # 1. Reuse existing ChatGPT question page if open in context
+        for p in context.pages:
+            try:
+                p_url = p.url or ""
+                if chat_id and chat_id in p_url:
+                    chat_page = p
+                    break
+                elif "6a8fb276-b04c-83ee-92e1-89ef66d86bcd" in p_url:
+                    chat_page = p
+                    break
+            except Exception:
+                pass
+
+        if not chat_page:
+            logger("  Opening dedicated ChatGPT question answering chat...")
+            chat_page = context.new_page()
+            navigate_to_conversation(chat_page, url=target_url)
+        else:
+            try:
+                dismiss_chatgpt_overlays(chat_page)
+                # Ensure the page is ready and prompt box is available
+                chat_page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=4000)
+            except Exception:
+                try:
+                    chat_page.goto(target_url, wait_until="commit", timeout=20000)
+                    chat_page.wait_for_timeout(3000)
+                    dismiss_chatgpt_overlays(chat_page)
+                    chat_page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=15000)
+                except Exception:
+                    pass
+
+        return send_question_and_get_answer(
+            chat_page,
+            question_text=question_text,
+            options=options,
+            logger=logger,
+        )
+    except Exception as e:
+        logger(f"  Notice querying ChatGPT for question: {e}")
+        return None, "FAILED"

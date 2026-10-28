@@ -80,7 +80,7 @@
               </svg>
             </span>
             <span class="nav-label">Question Bank</span>
-            <span class="badge-count" id="countSidebarQuestionBank" style="display: none;">0</span>
+            <span class="badge-count" id="countSidebarQuestionBank">0</span>
           </button>
           <button class="nav-item" id="btnTabReview" onclick="switchTab('tabReview')" title="Review & Drafts">
             <span class="nav-icon">
@@ -904,7 +904,7 @@
           <span class="tag-status live">Operational</span>
         </div>
         <p class="easy-apply-subtitle">
-          Autonomous direct job crawling, auto-apply submissions, and link screening for custom questionnaire roles.
+          Autonomous job discovery, relevance filtering, and sequential batch applications with Question Bank answers.
         </p>
       </div>
     </div>
@@ -973,11 +973,43 @@
             </span>
           </span>
         </div>
-        <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()">
+        <div class="cycles-control-wrap" title="Maximum jobs to discover & collect (automatically saved permanently)">
+          <label for="easyMaxJobs" class="cycles-label">Max Jobs:</label>
+          <div class="cycles-stepper-box">
+            <input type="number" id="easyMaxJobs" class="input-cycles-num" min="5" max="200" step="5" value="25" />
+            <div class="cycles-stepper-btns">
+              <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyMaxJobs', 5)"
+                title="Increase max jobs" aria-label="Increase max jobs">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </svg>
+              </button>
+              <button type="button" class="btn-cycle-stepper btn-cycle-down"
+                onclick="stepCycles('easyMaxJobs', -5)" title="Decrease max jobs" aria-label="Decrease max jobs">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <span class="tooltip-trigger" tabindex="0" aria-label="Max jobs information">
+            <span class="tooltip-icon-circle">?</span>
+            <span class="tooltip-popover">
+              <strong>Maximum Jobs to Collect</strong><br>
+              Controls the maximum number of job cards the crawler discovers and saves in one crawl run.<br>
+              <em>Setting is automatically saved permanently.</em>
+            </span>
+          </span>
+        </div>
+        <button class="btn btn-primary btn-easy-crawl" id="btnLaunchEasyApplyCrawl" onclick="triggerEasyApplyCrawl()"
+          title="Collect matching Easy Apply jobs and save as Ready to Apply for review">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          <span>Crawl &amp; Auto-Apply</span>
+          <span>Collect Jobs</span>
         </button>
         <button class="btn btn-outline btn-easy-answers" id="btnOpenQuestionBankModal"
           onclick="switchTab('tabQuestionBank')"
@@ -2515,6 +2547,17 @@
             </span>
           </label>
           <input type="text" id="settingChatGptUrl" class="input-clean" placeholder="https://chatgpt.com/g/..." />
+        </div>
+
+        <div class="form-block">
+          <label style="display: flex; align-items: center; justify-content: space-between;">
+            <span>ChatGPT Easy Apply Question Answering Chat Link:</span>
+            <span class="badge-db-indicator" title="Persisted in PostgreSQL database">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+              Database
+            </span>
+          </label>
+          <input type="text" id="settingChatGptQuestionUrl" class="input-clean" placeholder="https://chatgpt.com/g/g-p-.../c/..." />
         </div>
 
         <div class="form-block">

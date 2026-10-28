@@ -267,6 +267,9 @@ function openSettingsModal() {
   const gptUrlInput = document.getElementById('settingChatGptUrl');
   if (gptUrlInput) gptUrlInput.value = state.config.chatgpt_url || '';
 
+  const gptQuestionUrlInput = document.getElementById('settingChatGptQuestionUrl');
+  if (gptQuestionUrlInput) gptQuestionUrlInput.value = state.config.chatgpt_question_url || '';
+
   updateHeadlessUI(state.config ? state.config.headless_mode : false);
   document.getElementById('settingsModal')?.classList.remove('hidden');
 }
@@ -359,6 +362,7 @@ async function saveSettings() {
     search_query: (document.getElementById('settingSearchQuery')?.value || '').trim(),
     search_location: (document.getElementById('settingSearchLocation')?.value || '').trim(),
     chatgpt_url: (document.getElementById('settingChatGptUrl')?.value || '').trim(),
+    chatgpt_question_url: (document.getElementById('settingChatGptQuestionUrl')?.value || '').trim(),
     headless_mode: !!(document.getElementById('settingHeadlessToggle') && document.getElementById('settingHeadlessToggle').checked),
   };
 

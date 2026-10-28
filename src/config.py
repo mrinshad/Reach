@@ -17,6 +17,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "search_location": "",
     "headless": False,
     "chatgpt_url": "https://chatgpt.com/g/g-p-example/c/example-chat-id",
+    "chatgpt_question_url": "https://chatgpt.com/g/g-p-6a6af7de9a388191ba79d3cb135d6bc6-important/c/6a8fb276-b04c-83ee-92e1-89ef66d86bcd",
     "pacing_min_seconds": 6,
     "pacing_max_seconds": 12,
     "easy_apply_cycles": 8,
@@ -46,6 +47,8 @@ def load_config() -> Dict[str, Any]:
             merged["search_location"] = db_settings["search_location"]
         if "chatgpt_url" in db_settings and db_settings["chatgpt_url"]:
             merged["chatgpt_url"] = db_settings["chatgpt_url"]
+        if "chatgpt_question_url" in db_settings and db_settings["chatgpt_question_url"]:
+            merged["chatgpt_question_url"] = db_settings["chatgpt_question_url"]
         if "headless_mode" in db_settings and db_settings["headless_mode"] is not None:
             val_bool = str(db_settings["headless_mode"]).lower() in ("true", "1", "yes")
             merged["headless_mode"] = val_bool
@@ -80,6 +83,8 @@ def save_config(new_config: Dict[str, Any]) -> Dict[str, Any]:
             set_setting("search_location", str(new_config["search_location"]))
         if "chatgpt_url" in new_config and new_config["chatgpt_url"] is not None:
             set_setting("chatgpt_url", str(new_config["chatgpt_url"]))
+        if "chatgpt_question_url" in new_config and new_config["chatgpt_question_url"] is not None:
+            set_setting("chatgpt_question_url", str(new_config["chatgpt_question_url"]))
         if "headless_mode" in new_config and new_config["headless_mode"] is not None:
             val_bool = bool(new_config["headless_mode"])
             set_setting("headless_mode", "true" if val_bool else "false")

@@ -103,7 +103,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
 
     CREATE TABLE IF NOT EXISTS screening_questions (
         id VARCHAR(64) PRIMARY KEY,
-        question_key VARCHAR(128) UNIQUE NOT NULL,
+        question_key VARCHAR(512) UNIQUE NOT NULL,
         question_text TEXT NOT NULL,
         category VARCHAR(64) DEFAULT 'profile',
         answer TEXT,
@@ -128,6 +128,7 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ALTER COLUMN post_url TYPE TEXT;
     CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
     ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
+    ALTER TABLE screening_questions ALTER COLUMN question_key TYPE VARCHAR(512);
     """
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:

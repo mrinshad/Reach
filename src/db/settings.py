@@ -54,6 +54,7 @@ def seed_default_settings(db_url: str = DEFAULT_DB_URL) -> None:
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     config_file = os.path.join(root_dir, "config.json")
     chatgpt_val = ""
+    chatgpt_question_val = "https://chatgpt.com/g/g-p-6a6af7de9a388191ba79d3cb135d6bc6-important/c/6a8fb276-b04c-83ee-92e1-89ef66d86bcd"
     search_val = "Full stack developer"
 
     if os.path.exists(config_file):
@@ -62,6 +63,8 @@ def seed_default_settings(db_url: str = DEFAULT_DB_URL) -> None:
                 cfg = json.load(f)
                 if cfg.get("chatgpt_url"):
                     chatgpt_val = cfg["chatgpt_url"]
+                if cfg.get("chatgpt_question_url"):
+                    chatgpt_question_val = cfg["chatgpt_question_url"]
                 if cfg.get("search_query"):
                     search_val = cfg["search_query"]
         except Exception:
@@ -79,6 +82,11 @@ def seed_default_settings(db_url: str = DEFAULT_DB_URL) -> None:
                     cur.execute(
                         "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING;",
                         ("chatgpt_url", chatgpt_val)
+                    )
+                if chatgpt_question_val:
+                    cur.execute(
+                        "INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING;",
+                        ("chatgpt_question_url", chatgpt_question_val)
                     )
             conn.commit()
     except Exception as e:

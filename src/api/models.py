@@ -65,6 +65,7 @@ class SettingsPayload(BaseModel):
     search_query: Optional[str] = None
     search_location: Optional[str] = None
     chatgpt_url: Optional[str] = None
+    chatgpt_question_url: Optional[str] = None
     pacing_min_seconds: Optional[float] = None
     pacing_max_seconds: Optional[float] = None
     headless_mode: Optional[bool] = None
@@ -84,6 +85,8 @@ class ScrapePayload(BaseModel):
     time_filter: Optional[str] = "24h"
     cycles: Optional[int] = None
     pacing: Optional[str] = None
+    max_jobs: Optional[int] = None
+    limit: Optional[int] = None
 
 
 class EasyApplyBatchScrapePayload(BaseModel):

@@ -18,16 +18,56 @@ from urllib.parse import quote
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 from src.services.firefox_connector import launch_firefox_context
 from src.services.experience_extractor import extract_experience
-from src.db.posts import upsert_post, get_post_by_id, update_post_status
+from src.db.posts import (
+    upsert_post,
+    get_post_by_id,
+    update_post_status,
+    get_dismissed_role_titles,
+    check_title_previously_dismissed,
+)
 from src.db.settings import get_setting
 from src.db.question_bank import lookup_answer_for_question, upsert_screening_question
+from src.services.chatgpt_service import ask_chatgpt_for_question_answer
 from src.config import load_config
 
 LINKEDIN_BASE = "https://www.linkedin.com"
 
+# Known LinkedIn geoId mapping to preserve location filters across redirects
+COMMON_GEO_IDS: Dict[str, str] = {
+    "dubai": "106204383",
+    "united arab emirates": "104305787",
+    "uae": "104305787",
+    "abu dhabi": "104117822",
+    "india": "102713980",
+    "kochi": "106155005",
+    "cochin": "106155005",
+    "kerala": "104301646",
+    "bangalore": "105214831",
+    "bengaluru": "105214831",
+    "hyderabad": "105556968",
+    "delhi": "103644278",
+    "mumbai": "102856477",
+    "chennai": "104621916",
+    "pune": "103671728",
+    "singapore": "102454443",
+    "united states": "103644278",
+    "usa": "103644278",
+    "united kingdom": "101165590",
+    "uk": "101165590",
+    "london": "102257491",
+    "germany": "101282230",
+    "berlin": "106967730",
+    "canada": "101174742",
+    "toronto": "100025096",
+    "remote": "108411089",
+    "qatar": "104170880",
+    "saudi arabia": "100459316",
+    "riyadh": "104769905",
+}
+
 
 def build_easy_apply_search_url(keywords: str, location: str = "India", time_filter: str = "24h") -> str:
-    """Build a LinkedIn job search URL with Easy Apply (f_AL=true) filter."""
+    """Build a LinkedIn job search URL with Easy Apply (f_AL=true) filter and geoId."""
     kw = (keywords or "").strip()
     loc = (location or "India").strip()
 
@@ -40,10 +80,31 @@ def build_easy_apply_search_url(keywords: str, location: str = "India", time_fil
     }
     tpr = time_map.get(time_filter.lower(), "r86400")
 
-    url = f"{LINKEDIN_BASE}/jobs/search/?keywords={quote(kw)}&location={quote(loc)}&f_AL=true"
+    # Use raw keywords without quotes so LinkedIn searches all relevant openings
+    kw_query = kw.strip()
+
+    url = f"{LINKEDIN_BASE}/jobs/search-results/?keywords={quote(kw_query)}&location={quote(loc)}&f_AL=true"
+    
+    # Append geoId if known to prevent LinkedIn stripping location parameter
+    loc_lower = loc.lower()
+    geo_id = None
+    for k, gid in COMMON_GEO_IDS.items():
+        if k in loc_lower or loc_lower in k:
+            geo_id = gid
+            break
+    if geo_id:
+        url += f"&geoId={geo_id}"
+
     if tpr:
         url += f"&f_TPR={tpr}"
     return url
+
+
+def is_job_title_relevant(title: str, query: str) -> Tuple[bool, str]:
+    """
+    Relevance check disabled per user preference — all jobs accepted for review in dashboard.
+    """
+    return True, "Relevance filter disabled (all jobs accepted for user review)"
 
 
 def human_sleep(min_s: float = 1.5, max_s: float = 3.0, cancel_check=None):
@@ -61,34 +122,245 @@ def human_sleep(min_s: float = 1.5, max_s: float = 3.0, cancel_check=None):
             elapsed += step
 
 
+def ensure_search_location(page: Page, target_location: str, logger=print):
+    """
+    Verify that the active LinkedIn search page reflects the requested location.
+    If LinkedIn redirected or stripped the location param (defaulting to user profile country),
+    interactively open the location filter popover and update it.
+    """
+    if not target_location or target_location.lower() in ["all", "any"]:
+        return
+
+    target_low = target_location.lower().strip()
+    try:
+        # Check current location pill text
+        loc_btn = page.locator("button[aria-label*='Location filter'], button[aria-label*='location filter']").first
+        if loc_btn.count() > 0:
+            btn_txt = loc_btn.inner_text().lower().strip()
+            # If target location is in button text, we're good
+            if target_low in btn_txt:
+                return
+
+            logger(f"  📍 Location filter shows '{btn_txt}'. Updating to target '{target_location}'...")
+            loc_btn.click()
+            page.wait_for_timeout(800)
+
+            # Find input in dropdown/popover
+            loc_input = page.locator(
+                "div[role='dialog'] input[type='text'], "
+                "div[role='dialog'] div[role='textbox'], "
+                "input[role='combobox'][aria-label*='Location'], "
+                "input[aria-label*='City, state, or zip code'], "
+                "input[placeholder*='City, state, or zip code']"
+            ).first
+
+            if loc_input.count() > 0:
+                loc_input.click()
+                page.wait_for_timeout(200)
+                # Clear existing text
+                loc_input.press("Meta+a")
+                loc_input.press("Backspace")
+                loc_input.press("Control+a")
+                loc_input.press("Backspace")
+                loc_input.press_sequentially(target_location, delay=40)
+                page.wait_for_timeout(1000)
+
+                # Select first autocomplete suggestion if available
+                suggestions = page.locator("[role='listbox'] [role='option'], .basic-typeahead__selectable-list li").all()
+                if suggestions:
+                    try:
+                        suggestions[0].click()
+                    except Exception:
+                        loc_input.press("ArrowDown")
+                        loc_input.press("Enter")
+                else:
+                    loc_input.press("Enter")
+                page.wait_for_timeout(500)
+
+                # Click apply or show results button
+                apply_btn = page.locator(
+                    "div[role='dialog'] button[data-test-apply-button], "
+                    "div[role='dialog'] button:has-text('Apply'), "
+                    "div[role='dialog'] button:has-text('Show results')"
+                ).first
+                if apply_btn.count() > 0 and apply_btn.is_visible():
+                    apply_btn.click()
+                    page.wait_for_timeout(2500)
+    except Exception as e:
+        logger(f"  Notice verifying location filter: {e}")
+
+
+def wait_for_job_cards_loaded(page: Page, timeout_ms: int = 15000, logger=print) -> bool:
+    """
+    Wait for LinkedIn job cards to finish loading, replacing asynchronous skeleton loaders.
+    """
+    start = time.time()
+    max_s = timeout_ms / 1000.0
+    while time.time() - start < max_s:
+        # Check if real cards / links are visible
+        cards_count = page.evaluate("""() => {
+            const ckeys = document.querySelectorAll('[componentkey*="job-card-component-ref-"]');
+            if (ckeys.length > 0) return ckeys.length;
+            const links = document.querySelectorAll('a[href*="/jobs/view/"]');
+            return links.length;
+        }""")
+        if cards_count > 0:
+            return True
+
+        # Check legacy selectors (actual card containers only, not empty column shells)
+        if page.locator("[data-occludable-job-id], li.jobs-search-results__list-item, div.job-card-container").count() > 0:
+            return True
+
+        page.wait_for_timeout(500)
+    return False
+
+
+def extract_all_search_job_cards(page: Page, max_jobs: int = 20) -> List[Dict[str, Any]]:
+    """
+    Extract job card metadata from search results using 2026 atomic componentkey layout,
+    legacy links, and container fallback selectors. Deduplicates by job_id.
+    """
+    jobs = page.evaluate("""() => {
+        const results = [];
+        const seen = new Set();
+
+        // Method 1: Modern 2026 ComponentKey cards
+        const cardEls = Array.from(document.querySelectorAll('[componentkey*="job-card-component-ref-"]'));
+        for (const c of cardEls) {
+            const ckey = c.getAttribute('componentkey') || '';
+            const jid = ckey.replace('job-card-component-ref-', '').trim();
+            if (!jid || seen.has(jid)) continue;
+            seen.add(jid);
+
+            const lines = (c.innerText || '').split('\\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) continue;
+
+            let title = lines[0].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            if (title.toLowerCase().startsWith('selected') && lines.length > 1) {
+                title = lines[1].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            } else if (lines.length > 1 && lines[1].toLowerCase().includes(title.toLowerCase().slice(0, 8))) {
+                title = lines[1].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            }
+
+            let company = 'Company';
+            let loc = '';
+            for (let i = 1; i < Math.min(lines.length, 6); i++) {
+                const line = lines[i];
+                if (line === title || line.toLowerCase().includes('(verified job)') || line === '·') continue;
+                if (!company || company === 'Company') {
+                    company = line;
+                } else if (!loc) {
+                    loc = line;
+                    break;
+                }
+            }
+
+            results.push({
+                job_id: jid,
+                title: title,
+                company: company || 'Company',
+                location: loc || '',
+                url: `https://www.linkedin.com/jobs/view/${jid}/`
+            });
+        }
+
+        // Method 2: Find all links pointing to /jobs/view/ (if Method 1 returned fewer than expected)
+        if (results.length === 0) {
+            const links = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'));
+            for (const l of links) {
+                const href = l.getAttribute('href') || '';
+                const match = href.match(/\\/jobs\\/view\\/(\\d+)/);
+                if (!match) continue;
+                const jid = match[1];
+                if (seen.has(jid)) continue;
+
+                const title = (l.innerText || '').split('\\n')[0].trim();
+                if (!title || title.length < 2) continue;
+
+                seen.add(jid);
+
+                // Find containing card element for company & location
+                const container = l.closest('li') || l.closest('[data-view-name*="job-card"]') || l.parentElement;
+                let company = '';
+                let loc = '';
+                if (container) {
+                    const compEl = container.querySelector('[class*="company"], .artdeco-entity-lockup__subtitle, h4, .job-card-container__company-name');
+                    if (compEl) company = compEl.innerText.split('\\n')[0].trim();
+
+                    const locEl = container.querySelector('[class*="location"], [class*="caption"], .artdeco-entity-lockup__caption, .job-card-container__metadata-item');
+                    if (locEl) loc = locEl.innerText.split('\\n')[0].trim();
+                }
+
+                results.push({
+                    job_id: jid,
+                    title: title,
+                    company: company || 'Company',
+                    location: loc || '',
+                    url: `https://www.linkedin.com/jobs/view/${jid}/`
+                });
+            }
+        }
+
+        // Method 3: Legacy fallback if still 0
+        if (results.length === 0) {
+            const legacyCards = Array.from(document.querySelectorAll('[data-occludable-job-id], [data-job-id], li.jobs-search-results__list-item'));
+            for (const c of legacyCards) {
+                const jid = c.getAttribute('data-occludable-job-id') || c.getAttribute('data-job-id') || '';
+                const a = c.querySelector('a.job-card-container__link, a.job-card-list__title--link, a[href*="/view/"]');
+                if (!a) continue;
+                const title = (a.innerText || '').split('\\n')[0].trim();
+                const href = a.getAttribute('href') || '';
+                const idFromHref = (href.match(/\\/view\\/(\\d+)/) || [])[1] || jid;
+                if (!idFromHref || seen.has(idFromHref)) continue;
+                seen.add(idFromHref);
+
+                const compEl = c.querySelector('.artdeco-entity-lockup__subtitle, .job-card-container__company-name');
+                const locEl = c.querySelector('.artdeco-entity-lockup__caption, .job-card-container__metadata-item');
+
+                results.push({
+                    job_id: idFromHref,
+                    title: title,
+                    company: compEl ? compEl.innerText.split('\\n')[0].trim() : 'Company',
+                    location: locEl ? locEl.innerText.split('\\n')[0].trim() : '',
+                    url: `https://www.linkedin.com/jobs/view/${idFromHref}/`
+                });
+            }
+        }
+
+        return results;
+    }""")
+
+    return jobs[:max_jobs] if jobs else []
+
+
 def extract_job_card_metadata(card) -> Dict[str, Any]:
-    """Extract summary metadata from a visible job card."""
+    """Extract summary metadata from a visible job card (supports both legacy and modern layouts)."""
     job_id = card.evaluate("el => el.getAttribute('data-occludable-job-id') || el.getAttribute('data-job-id') || ''")
 
     # Title & Link
-    title_link = card.locator("a.job-card-container__link, a.job-card-list__title--link")
+    title_link = card.locator("a.job-card-container__link, a.job-card-list__title--link, a[href*='/jobs/view/'], a[href*='/view/']").first
     title = ""
     href = ""
     if title_link.count() > 0:
-        raw_title = title_link.first.inner_text().strip()
+        raw_title = title_link.inner_text().strip()
         title = raw_title.split("\n")[0].strip()
-        href = title_link.first.get_attribute("href") or ""
+        href = title_link.get_attribute("href") or ""
         if href.startswith("/"):
             href = LINKEDIN_BASE + href
         elif href and not href.startswith("http"):
             href = f"{LINKEDIN_BASE}/{href}"
 
     # Company
-    company_el = card.locator(".artdeco-entity-lockup__subtitle, .job-card-container__company-name")
+    company_el = card.locator(".artdeco-entity-lockup__subtitle, .job-card-container__company-name, [class*='company-name']").first
     company = ""
     if company_el.count() > 0:
-        company = company_el.first.inner_text().strip()
+        company = company_el.inner_text().strip().split("\n")[0].strip()
 
     # Location
-    location_el = card.locator(".artdeco-entity-lockup__caption, .job-card-container__metadata-item")
+    location_el = card.locator(".artdeco-entity-lockup__caption, .job-card-container__metadata-item, [class*='metadata-item']").first
     location = ""
     if location_el.count() > 0:
-        location = location_el.first.inner_text().strip().split("\n")[0].strip()
+        location = location_el.inner_text().strip().split("\n")[0].strip()
 
     # Fallback job_id from href
     if not job_id and "/view/" in href:
@@ -128,7 +400,8 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
     # Common standard profile items that LinkedIn usually auto-fills from user account
     basic_profile_terms = [
         "first name", "last name", "phone", "mobile", "email", "resume",
-        "country code", "contact info", "headline", "summary"
+        "country code", "contact info", "headline", "summary",
+        "city", "location", "address", "state", "postal", "zip"
     ]
 
     def add_question(raw_label: str):
@@ -136,7 +409,12 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
         if not cleaned or len(cleaned) < 2:
             return
         cleaned_low = cleaned.lower()
+        # NEVER treat resume files or documents as questions
+        if any(ext in cleaned_low for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt", ".txt"]):
+            return
         if any(skip in cleaned_low for skip in standard_skip):
+            return
+        if any(r in cleaned_low for r in ["choose a resume", "select a resume", "uploaded resume", "choose resume"]):
             return
         if cleaned not in questions:
             questions.append(cleaned)
@@ -162,7 +440,11 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
         inputs = page.locator("input:visible, select:visible, textarea:visible").all()
         for inp in inputs:
             try:
-                aria = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
+                inp_id = inp.get_attribute("id") or ""
+                placeholder = inp.get_attribute("placeholder") or ""
+                if inp_id == "_r_3_" or "search" in placeholder.lower() or "search" in inp_id.lower() or "global-nav" in inp_id.lower():
+                    continue
+                aria = inp.get_attribute("aria-label") or placeholder or ""
                 add_question(aria)
             except Exception:
                 pass
@@ -171,12 +453,29 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
 
     # Check fieldsets / radio groups
     try:
-        radio_groups = page.locator("fieldset:visible").all()
+        radio_groups = page.locator("fieldset:visible, [role='radiogroup']:visible").all()
         for rg in radio_groups:
             try:
+                # If radio labels contain document files, skip (resume picker)
+                radio_labels = rg.locator("div[role='radio']:visible, label:visible, p:visible").all()
+                if any(any(ext in (ro.inner_text() or "").lower() for ext in [".pdf", ".docx", ".doc"]) for ro in radio_labels):
+                    continue
+
+                ltxt = ""
                 legend = rg.locator("legend")
                 if legend.count() > 0:
                     ltxt = legend.first.inner_text().strip()
+                if not ltxt:
+                    ltxt = rg.get_attribute("aria-label") or ""
+                if not ltxt:
+                    r = rg.locator("div[role='radio'][aria-label], input[type='radio'][aria-label]").first
+                    if r.count() > 0:
+                        ltxt = r.get_attribute("aria-label") or ""
+                if not ltxt:
+                    pre_el = rg.locator("xpath=preceding::p[1] | preceding::h3[1] | preceding::label[1]").first
+                    if pre_el.count() > 0:
+                        ltxt = pre_el.inner_text().strip()
+                if ltxt:
                     add_question(ltxt)
             except Exception:
                 pass
@@ -277,12 +576,82 @@ def detect_closed_job_reason(page: Page) -> Optional[str]:
     return None
 
 
+def detect_already_applied(page: Page) -> Optional[str]:
+    """
+    Check if the LinkedIn job page indicates the application has already been submitted.
+    Returns detail string (e.g. 'Application submitted', 'Already applied previously on LinkedIn') if found, or None.
+    """
+    # 1. Classic button or badge indicators
+    try:
+        badge_loc = page.locator(
+            ".jobs-s-apply__status--applied, "
+            ".jobs-applied-internally, "
+            ".jobs-apply-button--disabled, "
+            "button:has-text('Applied'), "
+            "[aria-label*='Applied to this job'], "
+            "[aria-label*='Application submitted']"
+        )
+        if badge_loc.count() > 0:
+            for i in range(badge_loc.count()):
+                el = badge_loc.nth(i)
+                if el.is_visible():
+                    txt = el.inner_text().strip()
+                    return txt or "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 2. Semantic Application status elements / headings / links
+    try:
+        app_sub_loc = page.locator(
+            "p:has-text('Application submitted'), "
+            "span:has-text('Application submitted'), "
+            "h2:has-text('Application status'), "
+            "h3:has-text('Application status'), "
+            "a:has-text('View resume')"
+        )
+        if app_sub_loc.count() > 0 and app_sub_loc.first.is_visible():
+            return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 3. Target top-card or application status cards
+    try:
+        top_cards = page.locator(
+            '.jobs-details__top-card, .topcard, .job-details-jobs-unified-top-card, '
+            '.jobs-s-apply, .jobs-apply-button--top-card, header, .job-view-layout'
+        )
+        if top_cards.count() > 0:
+            top_text = top_cards.first.inner_text()
+            if "application submitted" in top_text.lower() or "application status" in top_text.lower() or "view resume" in top_text.lower():
+                return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 4. Regex search in body text for explicit application submitted sentences
+    try:
+        body_text = page.locator("body").inner_text(timeout=1500)
+        patterns = [
+            r"(?:^|\n|[\.\!\?]\s*)(Application submitted)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(Application status)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(You applied to this job)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(Already applied)(?:[\.\!\?]|[\n\r]|$)"
+        ]
+        for pat in patterns:
+            m = re.search(pat, body_text, re.IGNORECASE)
+            if m:
+                return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    return None
+
+
 def dismiss_easy_apply_modal(page: Page):
     """Safely dismiss and discard an open Easy Apply modal without saving partial drafts."""
     try:
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
+        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
         if dismiss_btn.count() > 0 and dismiss_btn.is_visible():
-            dismiss_btn.click()
+            dismiss_btn.click(force=True)
             page.wait_for_timeout(800)
 
             # Confirm discard dialog if it appears
@@ -291,7 +660,7 @@ def dismiss_easy_apply_modal(page: Page):
                 "button:has-text('Discard')"
             ).first
             if discard_btn.count() > 0 and discard_btn.is_visible():
-                discard_btn.click()
+                discard_btn.click(force=True)
                 page.wait_for_timeout(600)
     except Exception:
         pass
@@ -569,35 +938,62 @@ def handle_screening_form_step(
     # Basic items already handled by fill_contact_info
     basic_profile_terms = [
         "first name", "last name", "phone", "mobile", "email", "resume",
-        "country code", "contact info", "headline", "summary"
+        "country code", "contact info", "headline", "summary",
+        "city", "location", "address", "state", "postal", "zip"
     ]
 
     def is_skip(text: str) -> bool:
         t = (text or "").lower().strip()
         if not t or len(t) < 2:
             return True
-        return any(s in t for s in standard_skip)
+        # NEVER treat resume files, documents, or uploads as questions
+        if any(ext in t for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt", ".txt"]):
+            return True
+        if any(s in t for s in standard_skip):
+            return True
+        if any(s in t for s in ["resume", "choose a resume", "select a resume", "uploaded resume", "choose resume", "cv"]):
+            return True
+        return False
 
     # 1. Inspect Fieldsets (Radio Groups)
     try:
-        fieldsets = page.locator(".jobs-easy-apply-modal fieldset:visible, div[role='dialog'] fieldset:visible").all()
+        fieldsets = page.locator("fieldset:visible, [role='radiogroup']:visible").all()
         for fs in fieldsets:
             try:
                 legend_el = fs.locator("legend").first
                 prompt = legend_el.inner_text().strip() if legend_el.count() > 0 else ""
+                if not prompt:
+                    prompt = fs.get_attribute("aria-label") or ""
+                if not prompt:
+                    r = fs.locator("div[role='radio'][aria-label], input[type='radio'][aria-label]").first
+                    if r.count() > 0:
+                        prompt = r.get_attribute("aria-label") or ""
+                if not prompt:
+                    pre_el = fs.locator("xpath=preceding::p[1] | preceding::h3[1] | preceding::label[1]").first
+                    if pre_el.count() > 0:
+                        prompt = pre_el.inner_text().strip()
                 if not prompt or is_skip(prompt):
                     continue
 
+                # If prompt is a document file, skip entire fieldset
+                if any(ext in prompt.lower() for ext in [".pdf", ".docx", ".doc"]):
+                    continue
+
                 # Collect available options from radio group
-                radio_labels = fs.locator("label, .fb-radio-label, .artdeco-radio-button__label").all()
+                radio_labels = fs.locator("div[role='radio']:visible, label:visible, .fb-radio-label:visible, .artdeco-radio-button__label:visible").all()
                 extracted_options = []
                 for ro in radio_labels:
                     try:
-                        txt = ro.inner_text().strip()
+                        p_el = ro.locator("p").first
+                        txt = p_el.inner_text().strip() if p_el.count() > 0 else ro.inner_text().strip()
                         if txt and len(txt) < 80 and txt not in extracted_options:
                             extracted_options.append(txt)
                     except Exception:
                         pass
+
+                # If options contain document files, skip fieldset (it's the resume picker)
+                if any(any(ext in o.lower() for ext in [".pdf", ".docx", ".doc"]) for o in extracted_options):
+                    continue
 
                 # Check DB Question Bank for answer first
                 ans, qdict = lookup_answer_for_question(prompt)
@@ -608,69 +1004,116 @@ def handle_screening_form_step(
                     logger(f"  ✓ Left radio choice empty for '{prompt}' as configured")
                     continue
 
+                if not ans and not is_explicit_empty:
+                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                    chat_ans, status = ask_chatgpt_for_question_answer(
+                        page.context, prompt, options=extracted_options, logger=logger
+                    )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans)
+                        ans = chat_ans
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
                 clicked = False
                 if ans:
                     ans_low = ans.lower().strip()
 
                     # Exact text match first
                     for opt in radio_labels:
-                        opt_txt = opt.inner_text().strip().lower()
+                        p_el = opt.locator("p").first
+                        opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
                         if opt_txt == ans_low:
-                            if opt.locator("input[type='radio']:checked").count() == 0:
-                                opt.click()
+                            is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
+                            if not is_checked:
+                                opt.click(force=True)
                             clicked = True
                             break
 
                     # Substring match if exact didn't match
                     if not clicked:
                         for opt in radio_labels:
-                            opt_txt = opt.inner_text().strip().lower()
+                            p_el = opt.locator("p").first
+                            opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
                             if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
-                                if opt.locator("input[type='radio']:checked").count() == 0:
-                                    opt.click()
+                                is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
+                                if not is_checked:
+                                    opt.click(force=True)
                                 clicked = True
                                 break
 
                     # Keyword match for Yes / No
                     if not clicked:
-                        if any(w in ans_low for w in ["yes", "true", "comfortable", "immediate", "open"]):
-                            yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
+                        if any(w in ans_low for w in ["yes", "true", "comfortable", "immediate", "open"]) or (ans_low.isdigit() and int(ans_low) > 0):
+                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
                             if yes_opt.count() > 0:
-                                yes_opt.click()
+                                yes_opt.click(force=True)
                                 clicked = True
-                        elif any(w in ans_low for w in ["no", "false", "not comfortable"]):
-                            no_opt = fs.locator("label:has-text('No'), input[value='No']").first
+                        elif any(w in ans_low for w in ["no", "false", "not comfortable"]) or (ans_low.isdigit() and int(ans_low) == 0):
+                            no_opt = fs.locator("div[role='radio']:has-text('No'), label:has-text('No'), input[value='No'], div[role='radio'][aria-label*='No']").first
                             if no_opt.count() > 0:
-                                no_opt.click()
+                                no_opt.click(force=True)
                                 clicked = True
 
                     if clicked:
                         answered.append(f"{prompt} -> {ans}")
-                        logger(f"  ✓ Radio selected for '{prompt}': {ans}")
+                        logger(f"  ✓ Radio selected for '{prompt[:60]}': {ans}")
                         page.wait_for_timeout(250)
                     else:
-                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
-                        unanswered.append(prompt)
+                        if prompt not in unanswered:
+                            upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                            unanswered.append(prompt)
+                        if fill_dummies_to_advance:
+                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                            if yes_opt.count() > 0:
+                                yes_opt.click(force=True)
+                                clicked = True
+                            elif radio_labels:
+                                radio_labels[0].click(force=True)
+                                clicked = True
+                            if clicked:
+                                filled_placeholders.append(prompt)
+                                logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
+                                page.wait_for_timeout(250)
                 else:
-                    # No answer in Question Bank
-                    checked_count = fs.locator("input[type='radio']:checked").count()
+                    # Neither DB nor ChatGPT had an answer (or user_response_needed)
+                    checked_count = fs.locator("input[type='radio']:checked, div[role='radio'][aria-checked='true']").count()
                     is_basic = any(b in prompt.lower() for b in basic_profile_terms)
-                    if not is_basic:
+                    if not is_basic and prompt not in unanswered:
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
 
                     # If still not clicked and dummy mode enabled to advance step
                     if checked_count == 0 and fill_dummies_to_advance:
-                        yes_opt = fs.locator("label:has-text('Yes'), input[value='Yes']").first
+                        yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
                         if yes_opt.count() > 0:
-                            yes_opt.click()
+                            yes_opt.click(force=True)
                             clicked = True
                         elif radio_labels:
-                            radio_labels[0].click()
+                            radio_labels[0].click(force=True)
                             clicked = True
                         if clicked:
                             filled_placeholders.append(prompt)
-                            logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt}' to advance step")
+                            logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
                             page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting fieldset: {e}")
@@ -679,7 +1122,7 @@ def handle_screening_form_step(
 
     # 2. Inspect Dropdowns (<select>)
     try:
-        selects = page.locator(".jobs-easy-apply-modal select:visible, div[role='dialog'] select:visible").all()
+        selects = page.locator("select:visible").all()
         for sel in selects:
             try:
                 # Find prompt
@@ -715,13 +1158,49 @@ def handle_screening_form_step(
                     logger(f"  ✓ Left dropdown empty for '{prompt}' as configured")
                     continue
 
+                if not ans and not is_explicit_empty:
+                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                    chat_ans, status = ask_chatgpt_for_question_answer(
+                        page.context, prompt, options=extracted_options, logger=logger
+                    )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans)
+                        ans = chat_ans
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
                 matched_opt_val = None
                 if ans:
                     ans_low = ans.lower().strip()
                     for opt in sel_opts:
                         otxt = opt.inner_text().strip().lower()
                         oval = (opt.get_attribute("value") or "").strip().lower()
-                        if otxt == ans_low or oval == ans_low or (otxt and otxt in ans_low):
+                        if (
+                            otxt == ans_low
+                            or oval == ans_low
+                            or (ans_low and ans_low in otxt)
+                            or (otxt and otxt in ans_low)
+                            or (ans_low.replace("+", "") and ans_low.replace("+", "") in otxt)
+                        ):
                             matched_opt_val = opt.get_attribute("value")
                             break
 
@@ -732,18 +1211,25 @@ def handle_screening_form_step(
                         logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
                         page.wait_for_timeout(250)
                     else:
-                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
-                        unanswered.append(prompt)
+                        curr_val = sel.input_value()
+                        curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
+                        has_selection = curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]
+                        is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+                        if not has_selection and not is_basic:
+                            if prompt not in unanswered:
+                                upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                                unanswered.append(prompt)
                 else:
-                    # No answer in Question Bank
+                    # Neither DB nor ChatGPT had an answer (or user_response_needed)
                     curr_val = sel.input_value()
                     curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
                     has_selection = curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]
                     is_basic = any(b in prompt.lower() for b in basic_profile_terms)
 
-                    if not is_basic:
-                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
-                        unanswered.append(prompt)
+                    if not has_selection and not is_basic:
+                        if prompt not in unanswered:
+                            upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                            unanswered.append(prompt)
 
                     # Fallback to advance step if unselected
                     if not has_selection and fill_dummies_to_advance:
@@ -770,10 +1256,10 @@ def handle_screening_form_step(
     # 3. Inspect Text, Number, Tel, and Textarea Inputs
     try:
         inputs = page.locator(
-            ".jobs-easy-apply-modal input[type='text']:visible, "
-            ".jobs-easy-apply-modal input[type='number']:visible, "
-            ".jobs-easy-apply-modal input[type='tel']:visible, "
-            ".jobs-easy-apply-modal textarea:visible"
+            "input[type='text']:visible, "
+            "input[type='number']:visible, "
+            "input[type='tel']:visible, "
+            "textarea:visible"
         ).all()
 
         for inp in inputs:
@@ -783,13 +1269,17 @@ def handle_screening_form_step(
                     continue
 
                 inp_id = inp.get_attribute("id") or ""
+                placeholder = inp.get_attribute("placeholder") or ""
+                if inp_id == "_r_3_" or "search" in placeholder.lower() or "search" in inp_id.lower() or "global-nav" in inp_id.lower():
+                    continue
+
                 prompt = ""
                 if inp_id:
                     lbl = page.locator(f"label[for='{inp_id}']").first
                     if lbl.count() > 0:
                         prompt = lbl.inner_text().strip()
                 if not prompt:
-                    prompt = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
+                    prompt = inp.get_attribute("aria-label") or placeholder
 
                 if not prompt or is_skip(prompt):
                     continue
@@ -805,12 +1295,45 @@ def handle_screening_form_step(
 
                 if is_explicit_empty:
                     if inp.input_value().strip():
-                        inp.click()
+                        inp.click(force=True)
                         inp.fill("")
                     answered.append(f"{prompt} -> (empty)")
                     logger(f"  ✓ Left input empty for '{prompt}' as configured")
                     page.wait_for_timeout(150)
                     continue
+
+                curr_val = inp.input_value().strip()
+                is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+
+                if not ans and not is_explicit_empty and not curr_val and not is_basic:
+                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                    chat_ans, status = ask_chatgpt_for_question_answer(
+                        page.context, prompt, options=None, logger=logger
+                    )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None, answer=chat_ans)
+                        ans = chat_ans
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None)
+                        unanswered.append(prompt)
 
                 if ans:
                     fill_val = resolve_field_value(
@@ -825,7 +1348,7 @@ def handle_screening_form_step(
                     )
                     curr_val = inp.input_value().strip()
                     if curr_val != fill_val:
-                        inp.click()
+                        inp.click(force=True)
                         inp.fill("")
                         inp.press_sequentially(fill_val, delay=15)
                     answered.append(f"{prompt} -> {fill_val}")
@@ -833,16 +1356,15 @@ def handle_screening_form_step(
                     page.wait_for_timeout(200)
                 else:
                     curr_val = inp.input_value().strip()
-                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
 
                     # Fix existing overflow if any
                     if curr_val and maxlength and len(curr_val) > int(maxlength):
                         clean_val = curr_val[:int(maxlength)]
-                        inp.click()
+                        inp.click(force=True)
                         inp.fill("")
                         inp.press_sequentially(clean_val, delay=15)
 
-                    if not is_basic:
+                    if not is_basic and not curr_val and prompt not in unanswered:
                         upsert_screening_question(prompt, sample_job=job_label)
                         unanswered.append(prompt)
 
@@ -857,7 +1379,7 @@ def handle_screening_form_step(
                             pattern=pattern,
                             is_dummy_mode=True
                         )
-                        inp.click()
+                        inp.click(force=True)
                         inp.fill("")
                         inp.press_sequentially(fill_val, delay=15)
                         filled_placeholders.append(prompt)
@@ -909,15 +1431,10 @@ def execute_easy_apply(
             return "RATE_LIMITED", rate_limit_msg
         
         # Check if already applied
-        applied_badge = page.locator(
-            ".jobs-s-apply__status--applied, "
-            ".artdeco-inline-feedback--success, "
-            ".jobs-apply-button--disabled, "
-            "button:has-text('Applied')"
-        )
-        if applied_badge.count() > 0:
-            logger("  ℹ️ Already applied to this position on LinkedIn.")
-            return "APPLIED", "Already applied previously on LinkedIn"
+        applied_reason = detect_already_applied(page)
+        if applied_reason:
+            logger(f"  ℹ️ {applied_reason}")
+            return "APPLIED", applied_reason
 
         # Check if job is closed / no longer accepting applications
         closed_reason = detect_closed_job_reason(page)
@@ -926,24 +1443,25 @@ def execute_easy_apply(
             return "NOT_FOUND", closed_reason
 
         # Wait for Easy Apply button
+        apply_btn_selector = (
+            "button[aria-label*='Easy Apply to']:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "button.jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            ".jobs-s-apply button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "div.jobs-apply-button--top-card button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "button:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search'])"
+        )
         try:
-            page.wait_for_selector(
-                "button:has-text('Easy Apply'), [aria-label*='Easy Apply'], button.jobs-apply-button",
-                timeout=7000
-            )
+            page.wait_for_selector(apply_btn_selector, timeout=7000)
         except Exception:
             pass
 
-        apply_btn = page.locator(
-            "button:has-text('Easy Apply'), "
-            "[aria-label*='Easy Apply'], "
-            "button.jobs-apply-button"
-        ).first
+        apply_btn = page.locator(apply_btn_selector).first
 
         if apply_btn.count() == 0 or not apply_btn.is_visible():
-            if page.locator("button:has-text('Applied')").count() > 0:
-                logger("  ℹ️ Already applied to this position on LinkedIn.")
-                return "APPLIED", "Already applied previously on LinkedIn"
+            applied_reason = detect_already_applied(page)
+            if applied_reason:
+                logger(f"  ℹ️ {applied_reason}")
+                return "APPLIED", applied_reason
             # Re-check for closed job indicators before declaring failed
             closed_reason = detect_closed_job_reason(page)
             if closed_reason:
@@ -953,10 +1471,14 @@ def execute_easy_apply(
             return "FAILED", "No Easy Apply button visible"
 
         logger("  Clicking 'Easy Apply' button...")
-        apply_btn.click()
+        try:
+            apply_btn.click(timeout=4000)
+        except Exception:
+            apply_btn.click(force=True, timeout=4000)
+
         try:
             page.wait_for_selector(
-                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text']",
+                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text'], button[aria-label='Dismiss']",
                 timeout=9000
             )
         except Exception:
@@ -969,7 +1491,7 @@ def execute_easy_apply(
             dismiss_easy_apply_modal(page)
             return "RATE_LIMITED", rate_limit_msg
 
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
+        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
         if dismiss_btn.count() == 0:
             logger("  ⚠️ Easy Apply dialog did not open.")
             return "FAILED", "Easy Apply dialog did not open"
@@ -1003,6 +1525,12 @@ def execute_easy_apply(
             screening_result = handle_screening_form_step(
                 page, job_label=job_label, fill_dummies_to_advance=True, logger=logger
             )
+            if screening_result.get("is_unreasonable"):
+                unreasonable_prompt = screening_result.get("unreasonable_prompt") or "Unreasonable question"
+                logger(f"  🚫 Application halted immediately: Unreasonable question detected ('{unreasonable_prompt}'). Dismissing modal.")
+                dismiss_easy_apply_modal(page)
+                return "UNREASONABLE_QUESTION", f"Unreasonable screening question: {unreasonable_prompt}"
+
             if screening_result.get("unanswered"):
                 for uq in screening_result["unanswered"]:
                     if uq not in all_unanswered_questions:
@@ -1015,7 +1543,7 @@ def execute_easy_apply(
 
             # Check and resolve any inline feedback errors (e.g. exceeded limit or invalid format)
             try:
-                err_inputs = page.locator(".jobs-easy-apply-modal input.artdeco-inline-feedback--error, .jobs-easy-apply-modal [data-test-form-element-error-messages]").all()
+                err_inputs = page.locator("input.artdeco-inline-feedback--error, [data-test-form-element-error-messages]").all()
                 for err_el in err_inputs:
                     try:
                         inp_box = err_el.locator("xpath=preceding::input[1]").first
@@ -1144,15 +1672,16 @@ def run_easy_apply_crawler(
     max_jobs: int = 20,
     cycles: Optional[int] = 8,
     pacing: Optional[str] = "safe",
+    auto_apply: bool = False,
     task_manager=None,
 ) -> Dict[str, Any]:
     """
     Main background crawler entrypoint:
     1. Searches LinkedIn jobs with Easy Apply filter (f_AL=true).
     2. Extracts job cards and full specifications with dynamic scroll cycles.
-    3. Saves jobs to database with category='EASY_APPLY'.
-    4. Submits Easy Apply with human safe pacing or saves for screening when questionnaires are detected.
-    5. Aborts immediately if LinkedIn displays fast pace safeguard warnings.
+    3. Strictly filters job titles for relevance to search keywords.
+    4. Saves matching jobs to database with category='EASY_APPLY', status='DISCOVERED' (Ready to Apply).
+    5. If auto_apply=True, immediately submits applications; otherwise saves for user review.
     """
     logger = task_manager.log if task_manager else print
     config = load_config()
@@ -1163,15 +1692,21 @@ def run_easy_apply_crawler(
 
     search_url = build_easy_apply_search_url(keywords, location, time_filter)
     logger("=" * 60)
-    logger(f"🚀 Starting LinkedIn Easy Apply Autonomous Crawler")
+    if auto_apply:
+        logger(f"🚀 Starting LinkedIn Easy Apply Autonomous Crawler")
+    else:
+        logger(f"🚀 Starting LinkedIn Easy Apply Job Collector")
     logger(f"  Keywords: '{keywords}' | Location: '{location}' | Filter: {time_filter}")
-    logger(f"  Discovery Cycles: {scroll_cycles} | Pacing Mode: {pacing_mode}")
+    logger(f"  Discovery Cycles: {scroll_cycles} | Mode: {'Auto-Apply' if auto_apply else 'Collect Only (Ready to Apply)'}")
+    if auto_apply:
+        logger(f"  Pacing Mode: {pacing_mode}")
     logger(f"  URL: {search_url}")
     logger("=" * 60)
 
     applied_count = 0
     questionnaire_count = 0
     discovered_count = 0
+    filtered_unrelated_count = 0
     failed_count = 0
 
     with sync_playwright() as playwright:
@@ -1184,8 +1719,8 @@ def run_easy_apply_crawler(
         page = context.pages[0] if context.pages else context.new_page()
 
         logger("[2/4] Navigating to LinkedIn Job Portal search...")
-        page.goto(search_url, wait_until="commit", timeout=35000)
-        page.wait_for_timeout(5000)
+        page.goto(search_url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3000)
 
         # Check login
         if page.locator("form.login__form, input[name='session_key']").count() > 0:
@@ -1196,33 +1731,55 @@ def run_easy_apply_crawler(
             context.close()
             return {"success": False, "error": msg}
 
-        # Scroll to load job cards based on manual/dynamic cycles
-        logger(f"[3/4] Scanning job listings ({scroll_cycles} discovery cycles)...")
-        for cycle_idx in range(scroll_cycles):
-            logger(f"  [Cycle {cycle_idx + 1}/{scroll_cycles}] Scrolling job listings container...")
-            page.evaluate("""() => {
-                const el = document.querySelector('.scaffold-layout__list-container') ||
-                           document.querySelector('.jobs-search-results-list');
-                if (el) el.scrollTop += 700;
-                else window.scrollBy(0, 700);
-            }""")
-            page.wait_for_timeout(950)
+        # Verify and lock in requested location
+        ensure_search_location(page, location, logger=logger)
 
-        job_cards = page.locator("[data-occludable-job-id], li.jobs-search-results__list-item")
-        total_cards = min(job_cards.count(), max_jobs)
-        logger(f"  Found {job_cards.count()} job cards across {scroll_cycles} cycles. Processing up to {total_cards}...")
+        # Wait for job cards to load (replacing skeleton placeholder)
+        logger("  Waiting for job cards to load...")
+        wait_for_job_cards_loaded(page, timeout_ms=15000, logger=logger)
+
+        # Cumulative discovery across cycles
+        logger(f"[3/4] Scanning job listings ({scroll_cycles} discovery cycles)...")
+        collected_jobs_map = {}
+        for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+            collected_jobs_map[c["job_id"]] = c
+
+        actual_cycles = min(scroll_cycles, 15) if max_jobs > len(collected_jobs_map) else 0
+        no_new_cycles = 0
+        for cycle_idx in range(actual_cycles):
+            if len(collected_jobs_map) >= max_jobs:
+                break
+            logger(f"  [Cycle {cycle_idx + 1}/{actual_cycles}] Scrolling to discover more cards ({len(collected_jobs_map)}/{max_jobs} collected)...")
+            page.evaluate("""() => {
+                const el = document.querySelector('div[data-testid="lazy-column"]') ||
+                           document.querySelector('.scaffold-layout__list-container') ||
+                           document.querySelector('.jobs-search-results-list');
+                if (el) el.scrollTop += 500;
+                else window.scrollBy(0, 500);
+            }""")
+            page.wait_for_timeout(800)
+
+            prev_count = len(collected_jobs_map)
+            for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+                collected_jobs_map[c["job_id"]] = c
+
+            if len(collected_jobs_map) == prev_count:
+                no_new_cycles += 1
+                if no_new_cycles >= 3:
+                    break
+            else:
+                no_new_cycles = 0
+
+        extracted_jobs = list(collected_jobs_map.values())[:max_jobs]
+        total_cards = len(extracted_jobs)
+        logger(f"  Found {total_cards} job cards. Processing up to {total_cards}...")
 
         if task_manager and hasattr(task_manager, "set_total_posts"):
             task_manager.set_total_posts(total_cards)
 
-        extracted_jobs = []
-        for i in range(total_cards):
-            card = job_cards.nth(i)
-            meta = extract_job_card_metadata(card)
-            if meta["title"] and meta["url"]:
-                extracted_jobs.append(meta)
-
-        logger(f"[4/4] Processing {len(extracted_jobs)} Easy Apply opportunities...")
+        logger(f"[4/4] Processing {len(extracted_jobs)} Easy Apply listings...")
+        dismissed_titles = get_dismissed_role_titles()
+        auto_dismissed_count = 0
 
         for idx, job in enumerate(extracted_jobs, start=1):
             if task_manager and task_manager.is_cancel_requested():
@@ -1234,21 +1791,51 @@ def run_easy_apply_crawler(
             loc = job["location"] or location
             job_url = job["url"]
 
-            logger(f"\n[{idx}/{len(extracted_jobs)}] Processing: {title} @ {company}")
+            logger(f"\n[{idx}/{len(extracted_jobs)}] {title} @ {company}")
             if task_manager:
                 task_manager.update_progress(idx - 1, f"[{idx}/{len(extracted_jobs)}] {title} @ {company}")
+
+            # Check if this role was previously dismissed by the user
+            is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(title, dismissed_titles)
+            if is_prev_dismissed:
+                logger(f"  ✕ {dismiss_reason}")
+                post_id_seed = f"easy_apply_{job.get('job_id') or hashlib.sha256(job_url.encode()).hexdigest()[:12]}"
+                post_record = {
+                    "id": post_id_seed,
+                    "post_url": job_url,
+                    "author_name": company,
+                    "author_headline": title,
+                    "location": loc,
+                    "full_text": f"Role: {title}\nCompany: {company}\nLocation: {loc}\nDirect Application Link: {job_url}",
+                    "category": "EASY_APPLY",
+                    "status": "REJECTED",
+                    "rejection_reason": dismiss_reason,
+                }
+                upsert_post(post_record)
+                auto_dismissed_count += 1
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
 
             # Click job card or navigate to load full details
             full_text = ""
             try:
-                card_link = page.locator(f"a[href*='{job['job_id']}']").first if job.get("job_id") else None
+                card_link = page.locator(f"[componentkey*='{job['job_id']}'], a[href*='{job['job_id']}']").first if job.get("job_id") else None
                 if card_link and card_link.count() > 0:
-                    card_link.click()
-                    page.wait_for_timeout(2000)
+                    card_link.click(force=True)
+                    page.wait_for_timeout(1800)
 
-                desc_el = page.locator(".jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container").first
-                if desc_el.count() > 0:
-                    full_text = desc_el.inner_text().strip()
+                desc_text = page.evaluate("""() => {
+                    const all = Array.from(document.querySelectorAll('div, h2, h3, section'));
+                    const aboutHeader = all.find(el => (el.innerText || '').trim() === 'About the job');
+                    if (aboutHeader && aboutHeader.parentElement) {
+                        return aboutHeader.parentElement.innerText.replace(/^About the job\\s*/i, '').trim();
+                    }
+                    const descEl = document.querySelector('.jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container, .jobs-description__content');
+                    return descEl ? descEl.innerText.trim() : '';
+                }""")
+                if desc_text:
+                    full_text = desc_text
             except Exception:
                 pass
 
@@ -1284,7 +1871,14 @@ def run_easy_apply_crawler(
             upsert_post(post_record)
             discovered_count += 1
 
-            # Attempt Easy Apply
+            if not auto_apply:
+                logger(f"  ✓ Saved to queue as Ready to Apply (DISCOVERED)")
+                page.wait_for_timeout(random.randint(600, 1200))
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
+
+            # Auto-Apply mode requested: attempt Easy Apply
             status, detail = execute_easy_apply(
                 page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
             )
@@ -1307,6 +1901,10 @@ def run_easy_apply_crawler(
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
                 questionnaire_count += 1
                 logger(f"  📌 Saved for screening under REQUIRES_QUESTIONNAIRE: {detail}")
+            elif status == "UNREASONABLE_QUESTION":
+                update_post_status(post_id, "REJECTED", rejection_reason=detail)
+                failed_count += 1
+                logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
             else:
                 update_post_status(post_id, "DISCOVERED", rejection_reason=detail)
                 failed_count += 1
@@ -1330,16 +1928,27 @@ def run_easy_apply_crawler(
 
         context.close()
         logger("\n" + "=" * 60)
-        logger(f"✓ Easy Apply Crawler Finished:")
-        logger(f"  • Total Discovered: {discovered_count}")
-        logger(f"  • Successfully Applied: {applied_count}")
-        logger(f"  • Saved for Screening (Questionnaire): {questionnaire_count}")
-        logger(f"  • Other in Queue: {failed_count}")
+        if auto_apply:
+            logger(f"✓ Easy Apply Crawler Finished:")
+            logger(f"  • Total Cards Processed: {len(extracted_jobs)}")
+            logger(f"  • Total Discovered: {discovered_count}")
+            logger(f"  • Auto-Dismissed (Dismissed): {auto_dismissed_count}")
+            logger(f"  • Successfully Applied: {applied_count}")
+            logger(f"  • Saved for Screening (Questionnaire): {questionnaire_count}")
+            logger(f"  • Other in Queue: {failed_count}")
+        else:
+            logger(f"✓ Easy Apply Job Collection Finished:")
+            logger(f"  • Total Cards Processed: {len(extracted_jobs)}")
+            logger(f"  • Saved to Ready Queue: {discovered_count}")
+            logger(f"  • Auto-Dismissed (Dismissed): {auto_dismissed_count}")
         logger("=" * 60)
 
         return {
             "success": True,
+            "total_crawled": len(extracted_jobs),
             "discovered": discovered_count,
+            "ready_in_queue": discovered_count,
+            "auto_dismissed": auto_dismissed_count,
             "applied": applied_count,
             "requires_questionnaire": questionnaire_count,
         }
@@ -1381,8 +1990,8 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
         context.close()
 
         if status == "APPLIED":
-            update_post_status(post_id, "APPLIED", rejection_reason="")
-            logger(f"✓ Application successfully submitted for {title} @ {company}")
+            update_post_status(post_id, "APPLIED", rejection_reason=detail if ("previously" in detail.lower() or "submitted" in detail.lower() or "already" in detail.lower()) else "")
+            logger(f"✓ Application successfully submitted for {title} @ {company}" if ("previously" not in detail.lower() and "submitted" not in detail.lower()) else f"✓ {detail} for {title} @ {company}")
             return {"success": True, "status": "APPLIED", "detail": detail}
         elif status == "NOT_FOUND":
             update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
@@ -1398,6 +2007,10 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
             update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
             logger(f"📌 Custom questionnaire detected. Direct link saved for screening: {detail}")
             return {"success": True, "status": "REQUIRES_QUESTIONNAIRE", "detail": detail}
+        elif status == "UNREASONABLE_QUESTION":
+            update_post_status(post_id, "REJECTED", rejection_reason=detail)
+            logger(f"🚫 Unreasonable screening question detected ({detail}). Status -> REJECTED")
+            return {"success": False, "status": "REJECTED", "detail": detail}
         else:
             logger(f"ℹ️ Easy Apply did not submit: {detail}")
             return {"success": False, "status": status, "detail": detail}
@@ -1490,9 +2103,9 @@ def apply_to_batch_easy_apply_posts(
             )
 
             if status == "APPLIED":
-                update_post_status(post_id, "APPLIED", rejection_reason="")
+                update_post_status(post_id, "APPLIED", rejection_reason=detail if ("previously" in detail.lower() or "submitted" in detail.lower() or "already" in detail.lower()) else "")
                 applied_count += 1
-                logger(f"  🎉 Application successfully submitted! Status -> APPLIED")
+                logger(f"  🎉 Application successfully submitted! Status -> APPLIED" if ("previously" not in detail.lower() and "submitted" not in detail.lower()) else f"  🎉 Application marked APPLIED: {detail}")
             elif status == "NOT_FOUND":
                 update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
                 closed_count += 1
@@ -1509,6 +2122,10 @@ def apply_to_batch_easy_apply_posts(
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
                 questionnaire_count += 1
                 logger(f"  📌 Saved for screening under REQUIRES_QUESTIONNAIRE: {detail}")
+            elif status == "UNREASONABLE_QUESTION":
+                update_post_status(post_id, "REJECTED", rejection_reason=detail)
+                failed_count += 1
+                logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
             else:
                 failed_count += 1
                 logger(f"  ℹ️ Application did not submit: {detail}")

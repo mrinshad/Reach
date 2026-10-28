@@ -26,10 +26,13 @@ from src.services.experience_extractor import extract_experience
 from src.services.easy_apply_service import (
     build_easy_apply_search_url,
     extract_job_card_metadata,
+    extract_all_search_job_cards,
+    ensure_search_location,
+    wait_for_job_cards_loaded,
     execute_easy_apply,
     human_sleep,
 )
-from src.db.posts import upsert_post, update_post_status
+from src.db.posts import upsert_post, update_post_status, get_dismissed_role_titles, check_title_previously_dismissed
 from src.db.settings import get_setting
 from src.config import load_config
 
@@ -38,7 +41,7 @@ LINKEDIN_BASE = "https://www.linkedin.com"
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Job Crawler")
+    parser = argparse.ArgumentParser(description="LinkedIn Easy Apply Job Crawler & Collector")
     parser.add_argument("--query", "-q", default=None, help="Job title or keywords")
     parser.add_argument("--location", "-l", default=None, help="Target location")
     parser.add_argument("--time-filter", "-t", default=None, help="Time filter: 24h, week, month, all")
@@ -47,6 +50,7 @@ def parse_args():
     parser.add_argument("--pacing", "-p", default="safe", choices=["safe", "slow", "standard"], help="Delay between job submissions")
     parser.add_argument("--headless", action="store_true", default=None, help="Run headless")
     parser.add_argument("--headed", dest="headless", action="store_false", help="Run headed")
+    parser.add_argument("--auto-apply", action="store_true", default=False, help="Automatically submit applications during crawl (default: False, collect only for review)")
     parser.add_argument("--dry-run", action="store_true", help="Scrape without submitting applications")
     return parser.parse_args()
 
@@ -56,10 +60,11 @@ def scroll_job_list(page, cycles: int = 8):
     for c in range(cycles):
         print(f"  [Cycle {c+1}/{cycles}] Scrolling job listings container...")
         page.evaluate("""() => {
-            const el = document.querySelector('.scaffold-layout__list-container') ||
+            const el = document.querySelector('div[data-testid="lazy-column"]') ||
+                       document.querySelector('.scaffold-layout__list-container') ||
                        document.querySelector('.jobs-search-results-list');
-            if (el) el.scrollTop += 650;
-            else window.scrollBy(0, 650);
+            if (el) el.scrollTop += 500;
+            else window.scrollBy(0, 500);
         }""")
         page.wait_for_timeout(800)
 
@@ -103,20 +108,26 @@ def main():
 
     pacing = (args.pacing or os.environ.get("SCRAPER_PACING") or "safe").lower()
 
+    auto_apply = args.auto_apply or (os.environ.get("SCRAPER_AUTO_APPLY", "").lower() in ("true", "1", "yes"))
     is_headless = args.headless if args.headless is not None else config.get("headless", True)
     resume_path = config.get("resume_path", "")
 
     search_url = build_easy_apply_search_url(query, location, time_filter)
 
     print("=" * 66)
-    print("  LinkedIn Job Portal — Easy Apply Autonomous Crawler")
+    if auto_apply:
+        print("  LinkedIn Job Portal — Easy Apply Autonomous Crawler")
+    else:
+        print("  LinkedIn Job Portal — Easy Apply Discovery & Collector")
     print("=" * 66)
     print(f"  Keywords:    {query}")
     print(f"  Location:    {location}")
     print(f"  Filter:      {time_filter}")
     print(f"  Max Jobs:    {max_jobs}")
     print(f"  Cycles:      {cycles}")
-    print(f"  Pacing:      {pacing}")
+    print(f"  Mode:        {'Auto-Apply' if auto_apply else 'Collect Only (Ready to Apply)'}")
+    if auto_apply:
+        print(f"  Pacing:      {pacing}")
     print(f"  Headless:    {is_headless}")
     print(f"  Search URL:  {search_url}")
     print("=" * 66)
@@ -138,8 +149,8 @@ def main():
         page = context.pages[0] if context.pages else context.new_page()
 
         print("[2/4] Navigating to LinkedIn Job Portal search...")
-        page.goto(search_url, wait_until="commit", timeout=35000)
-        page.wait_for_timeout(5000)
+        page.goto(search_url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3000)
 
         # Login check
         if page.locator("form.login__form, input[name='session_key']").count() > 0:
@@ -148,26 +159,47 @@ def main():
             sys.exit(1)
         print("  ✓ Logged in to LinkedIn")
 
-        print(f"[3/4] Scrolling and extracting Easy Apply job cards ({cycles} cycles)...")
-        card_selectors = [
-            "[data-occludable-job-id]",
-            "li.jobs-search-results__list-item",
-            "div.job-card-container",
-            "div.base-card",
-            "div[data-job-id]",
-        ]
-        combined_selector = ", ".join(card_selectors)
+        # Verify and lock in requested location
+        ensure_search_location(page, location, logger=print)
 
-        try:
-            page.wait_for_selector(combined_selector, timeout=12000)
-        except Exception:
-            pass
+        # Wait for job cards to load (replacing skeleton placeholder)
+        print("  Waiting for job cards to load...")
+        wait_for_job_cards_loaded(page, timeout_ms=15000, logger=print)
 
-        scroll_job_list(page, cycles=cycles)
-        page.wait_for_timeout(2000)
+        # Cumulative discovery across cycles
+        print(f"[3/4] Discovering Easy Apply job cards ({cycles} cycles requested)...")
+        collected_jobs_map = {}
+        for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+            collected_jobs_map[c["job_id"]] = c
 
-        cards = page.locator(combined_selector)
-        total_found = cards.count()
+        actual_cycles = min(cycles, 15) if max_jobs > len(collected_jobs_map) else 0
+        no_new_cycles = 0
+        for cycle_idx in range(actual_cycles):
+            if len(collected_jobs_map) >= max_jobs:
+                break
+            print(f"  [Cycle {cycle_idx + 1}/{actual_cycles}] Scrolling to discover more cards ({len(collected_jobs_map)}/{max_jobs} collected)...")
+            page.evaluate("""() => {
+                const el = document.querySelector('div[data-testid="lazy-column"]') ||
+                           document.querySelector('.scaffold-layout__list-container') ||
+                           document.querySelector('.jobs-search-results-list');
+                if (el) el.scrollTop += 500;
+                else window.scrollBy(0, 500);
+            }""")
+            page.wait_for_timeout(800)
+
+            prev_count = len(collected_jobs_map)
+            for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+                collected_jobs_map[c["job_id"]] = c
+
+            if len(collected_jobs_map) == prev_count:
+                no_new_cycles += 1
+                if no_new_cycles >= 3:
+                    break
+            else:
+                no_new_cycles = 0
+
+        extracted_jobs = list(collected_jobs_map.values())[:max_jobs]
+        total_found = len(extracted_jobs)
         print(f"  ✓ Found {total_found} visible job cards.")
 
         if total_found == 0:
@@ -178,21 +210,9 @@ def main():
             context.close()
             sys.exit(0)
 
-        seen_job_ids = set()
-        extracted_jobs = []
-        for i in range(total_found):
-            if len(extracted_jobs) >= max_jobs:
-                break
-            card = cards.nth(i)
-            meta = extract_job_card_metadata(card)
-            jid = meta.get("job_id") or meta.get("url")
-            if not jid or jid in seen_job_ids:
-                continue
-            if meta["title"] and meta["url"]:
-                seen_job_ids.add(jid)
-                extracted_jobs.append(meta)
-
-        print(f"\n[4/4] Processing {len(extracted_jobs)} unique Easy Apply listings...")
+        print(f"\n[4/4] Processing {len(extracted_jobs)} Easy Apply listings...")
+        dismissed_titles = get_dismissed_role_titles()
+        auto_dismissed_count = 0
 
         for idx, job in enumerate(extracted_jobs, start=1):
             title = job["title"]
@@ -204,17 +224,45 @@ def main():
             print(f"\n[{idx}/{len(extracted_jobs)}] {title} @ {company}")
             print(f"  Location: {loc} | URL: {job_url}")
 
+            # Check if this role was previously dismissed by the user
+            is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(title, dismissed_titles)
+            if is_prev_dismissed:
+                post_id = f"easy_apply_{job_id}"
+                post_record = {
+                    "id": post_id,
+                    "post_url": job_url,
+                    "author_name": company,
+                    "author_headline": title,
+                    "location": loc,
+                    "full_text": f"Role: {title}\nCompany: {company}\nLocation: {loc}\nDirect Application Link: {job_url}",
+                    "category": "EASY_APPLY",
+                    "status": "REJECTED",
+                    "rejection_reason": dismiss_reason,
+                }
+                upsert_post(post_record)
+                auto_dismissed_count += 1
+                print(f"  ✕ {dismiss_reason}")
+                continue
+
             # Click card or navigate to load full details
             full_text = ""
             try:
-                card_link = page.locator(f"a[href*='{job_id}']").first if job_id else None
+                card_link = page.locator(f"[componentkey*='{job_id}'], a[href*='{job_id}']").first if job_id else None
                 if card_link and card_link.count() > 0:
-                    card_link.click()
+                    card_link.click(force=True)
                     page.wait_for_timeout(1800)
 
-                desc_el = page.locator(".jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container").first
-                if desc_el.count() > 0:
-                    full_text = desc_el.inner_text().strip()
+                desc_text = page.evaluate("""() => {
+                    const all = Array.from(document.querySelectorAll('div, h2, h3, section'));
+                    const aboutHeader = all.find(el => (el.innerText || '').trim() === 'About the job');
+                    if (aboutHeader && aboutHeader.parentElement) {
+                        return aboutHeader.parentElement.innerText.replace(/^About the job\\s*/i, '').trim();
+                    }
+                    const descEl = document.querySelector('.jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container, .jobs-description__content');
+                    return descEl ? descEl.innerText.trim() : '';
+                }""")
+                if desc_text:
+                    full_text = desc_text
             except Exception:
                 pass
 
@@ -246,13 +294,15 @@ def main():
             db_post_id, was_created = upsert_post(post_record)
             if db_post_id:
                 post_id = db_post_id
-            discovered_count += 1
 
-            if args.dry_run:
-                print("  ℹ️ [Dry Run] Ingested job as DISCOVERED without applying.")
+            if not auto_apply or args.dry_run:
+                discovered_count += 1
+                print(f"  ✓ Saved to queue as Ready to Apply (DISCOVERED)")
+                page.wait_for_timeout(random.randint(600, 1200))
                 continue
 
-            # Attempt Easy Apply submission
+            # Auto-Apply mode requested: attempt Easy Apply submission
+            discovered_count += 1
             status, detail = execute_easy_apply(page, job_url, resume_path, logger=print)
 
             if status == "APPLIED":
@@ -292,23 +342,36 @@ def main():
 
         # Print summary
         print("\n" + "=" * 66)
-        print("  CRAWLER SUMMARY:")
-        print("=" * 66)
-        print(f"  Total Ingested:             {discovered_count}")
-        print(f"  Successfully Applied:       {applied_count}")
-        print(f"  Saved for Screening (Q's):  {questionnaire_count}")
-        print(f"  Closed / Not Found:         {closed_count}")
-        print(f"  Ready in Queue:             {skipped_count}")
+        if auto_apply:
+            print("  CRAWLER SUMMARY:")
+            print("=" * 66)
+            print(f"  Total Cards Processed:      {len(extracted_jobs)}")
+            print(f"  Discovered & Ingested:      {discovered_count}")
+            print(f"  Auto-Dismissed (Dismissed): {auto_dismissed_count}")
+            print(f"  Successfully Applied:       {applied_count}")
+            print(f"  Saved for Screening (Q's):  {questionnaire_count}")
+            print(f"  Closed / Not Found:         {closed_count}")
+            print(f"  Ready in Queue:             {skipped_count}")
+        else:
+            print("  JOB COLLECTOR SUMMARY:")
+            print("=" * 66)
+            print(f"  Total Cards Processed:      {len(extracted_jobs)}")
+            print(f"  Saved to Ready Queue:       {discovered_count}")
+            print(f"  Auto-Dismissed (Dismissed): {auto_dismissed_count}")
         print("=" * 66)
 
         crawl_stats = {
-            "total_crawled": discovered_count,
+            "total_crawled": len(extracted_jobs),
             "newly_added": discovered_count,
-            "applied": applied_count,
-            "requires_questionnaire": questionnaire_count,
-            "closed": closed_count,
-            "ready_in_queue": skipped_count,
+            "ready_in_queue": discovered_count,
+            "auto_dismissed": auto_dismissed_count,
         }
+        if auto_apply:
+            crawl_stats.update({
+                "applied": applied_count,
+                "requires_questionnaire": questionnaire_count,
+                "closed": closed_count,
+            })
         print(f"__CRAWL_STATS__: {json.dumps(crawl_stats)}")
 
         context.close()

@@ -1166,13 +1166,15 @@ def run_scraper_subprocess_with_timeout(
             )
         elif proc.returncode == 0:
             if parsed_stats:
-                if "applied" in parsed_stats:
+                if parsed_stats.get("applied", 0) > 0:
                     custom_msg = (
                         f"Finished: {parsed_stats.get('total_crawled', 0)} jobs found — "
                         f"{parsed_stats.get('applied', 0)} applied, "
                         f"{parsed_stats.get('requires_questionnaire', 0)} screening questions, "
                         f"{parsed_stats.get('ready_in_queue', 0)} ready in queue."
                     )
+                elif "ready_in_queue" in parsed_stats:
+                    custom_msg = f"Collection complete: {parsed_stats.get('ready_in_queue', 0)} jobs collected & ready to apply."
                 else:
                     custom_msg = (
                         f"Crawling complete: {parsed_stats.get('total_crawled', 0)} crawled, "
@@ -1247,6 +1249,7 @@ def run_linkedin_easy_apply_scraper(
     time_filter: Optional[str] = None,
     cycles: Optional[int] = None,
     pacing: Optional[str] = None,
+    max_jobs: Optional[int] = None,
 ):
     """
     Run the LinkedIn Job Portal & Easy Apply crawler in persistent Firefox context.
@@ -1254,13 +1257,14 @@ def run_linkedin_easy_apply_scraper(
     with 180-second inactivity watchdog and real-time terminal streaming.
     """
     script_path = os.path.join(PROJECT_ROOT, "scripts", "linkedin_job_search.py")
-    task_label = "LinkedIn Easy Apply Crawler"
+    task_label = "LinkedIn Easy Apply Collector"
     if location and location.strip():
-        task_label = f"LinkedIn Easy Apply Crawler ({location.strip()})"
+        task_label = f"LinkedIn Easy Apply Collector ({location.strip()})"
 
+    limit_val = max_jobs if (max_jobs and max_jobs > 0) else 25
     extra_env = {
         "SCRAPER_SOURCE": "dashboard",
-        "SCRAPER_LIMIT": "20",
+        "SCRAPER_LIMIT": str(limit_val),
     }
     if query:
         extra_env["SCRAPER_SEARCH_QUERY"] = query.strip()

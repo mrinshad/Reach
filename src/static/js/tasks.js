@@ -306,6 +306,7 @@ function showCrawlSummaryModal(taskName, stats) {
   const draftPortal = stats.new_draft_portal !== undefined ? stats.new_draft_portal : 0;
   const skippedInDb = stats.skipped_already_added !== undefined ? stats.skipped_already_added : 0;
   const skippedOther = stats.skipped_other !== undefined ? stats.skipped_other : 0;
+  const spamScam = stats.new_spam_scam !== undefined ? stats.new_spam_scam : 0;
 
   grid.innerHTML = `
     <div class="crawl-stat-card" style="border-left: 3px solid #38bdf8;">
@@ -324,6 +325,11 @@ function showCrawlSummaryModal(taskName, stats) {
       <div class="crawl-stat-val" style="color: #f59e0b;">${draftPortal}</div>
       <div class="crawl-stat-lbl">Drafts & Portals</div>
     </div>
+    ${spamScam > 0 ? `
+    <div class="crawl-stat-card" style="border-left: 3px solid #fda4af;">
+      <div class="crawl-stat-val" style="color: #fda4af;">${spamScam}</div>
+      <div class="crawl-stat-lbl">Spam / Scam Flagged</div>
+    </div>` : ''}
     <div class="crawl-stat-card" style="border-left: 3px solid #94a3b8;">
       <div class="crawl-stat-val" style="color: #94a3b8;">${skippedInDb}</div>
       <div class="crawl-stat-lbl">Skipped (Already in DB)</div>

@@ -169,8 +169,11 @@ def remove_from_deleted_question_keys(keys: List[str]):
 def normalize_question_key(text: str) -> str:
     """Produce a deterministic, lowercase alphanumeric slug for deduplication."""
     cleaned = (text or "").strip().lower()
+    # Reject files, documents, and resumes from being treated as questions
+    if any(ext in cleaned for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt"]):
+        return ""
     cleaned = re.sub(r'[^a-z0-9]', '', cleaned)
-    return cleaned
+    return cleaned[:255]
 
 
 def infer_question_category(question_text: str) -> str:
@@ -200,7 +203,7 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS screening_questions (
             id VARCHAR(64) PRIMARY KEY,
-            question_key VARCHAR(128) UNIQUE NOT NULL,
+            question_key VARCHAR(512) UNIQUE NOT NULL,
             question_text TEXT NOT NULL,
             category VARCHAR(64) DEFAULT 'profile',
             answer TEXT,
@@ -216,6 +219,7 @@ def init_question_bank(db_url: str = DEFAULT_DB_URL):
         CREATE INDEX IF NOT EXISTS idx_screening_questions_key ON screening_questions(question_key);
         CREATE INDEX IF NOT EXISTS idx_screening_questions_status ON screening_questions(status);
         ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
+        ALTER TABLE screening_questions ALTER COLUMN question_key TYPE VARCHAR(512);
     """)
 
     # 2. Read legacy saved answers and tombstone set
@@ -366,11 +370,12 @@ def upsert_screening_question(
     default_placeholder: Optional[str] = None,
     sample_job: Optional[str] = None,
     options: Optional[List[str]] = None,
+    status: Optional[str] = None,
     conn=None,
 ) -> Dict[str, Any]:
     """
     Insert or update a screening question.
-    If the question is new, saves it with status='PENDING' (or 'ANSWERED' if answer/empty given).
+    If the question is new, saves it with status='PENDING' (or 'ANSWERED' if answer/empty given, or custom status).
     If it exists, increments occurrence counter, updates options, and appends sample job.
     Removes key from tombstone blacklist if user sets an answer.
     """
@@ -382,7 +387,7 @@ def upsert_screening_question(
     cat = category or infer_question_category(cleaned)
     ans = (answer or "").strip() if answer is not None else ""
     is_empty_spec = (ans == "__EMPTY__")
-    status = "ANSWERED" if (ans or is_empty_spec) else "PENDING"
+    final_status = status or ("ANSWERED" if (ans or is_empty_spec) else "PENDING")
     qid = f"q_{hashlib.sha256(norm_key.encode()).hexdigest()[:20]}"
     placeholder = default_placeholder or ("(Intentionally left blank / N/A)" if is_empty_spec else "Enter your answer...")
     jobs_array = [sample_job] if sample_job else ["Direct Application Flow"]
@@ -395,7 +400,7 @@ def upsert_screening_question(
                 clean_options.append(str(opt).strip())
 
     # If saving with an answer or empty setting, remove from tombstone blacklist
-    if status == "ANSWERED":
+    if final_status == "ANSWERED":
         remove_from_deleted_question_keys([norm_key, qid, cleaned])
 
     should_close = False
@@ -405,7 +410,7 @@ def upsert_screening_question(
 
     try:
         cur = conn.cursor()
-        if status == "ANSWERED":
+        if final_status == "ANSWERED":
             cur.execute("""
                 INSERT INTO screening_questions (
                     id, question_key, question_text, category, answer,
@@ -427,7 +432,7 @@ def upsert_screening_question(
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, options, status;
             """, (
-                qid, norm_key, cleaned, cat, ans, is_standard, placeholder, jobs_array, clean_options, status,
+                qid, norm_key, cleaned, cat, ans, is_standard, placeholder, jobs_array, clean_options, final_status,
                 sample_job, sample_job, sample_job
             ))
         else:
@@ -435,8 +440,9 @@ def upsert_screening_question(
                 INSERT INTO screening_questions (
                     id, question_key, question_text, category, answer,
                     is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
-                ) VALUES (%s, %s, %s, %s, NULL, %s, %s, 1, %s, %s, 'PENDING', CURRENT_TIMESTAMP)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
+                    status = EXCLUDED.status,
                     options = CASE 
                         WHEN array_length(EXCLUDED.options, 1) > 0 THEN EXCLUDED.options
                         ELSE screening_questions.options
@@ -450,7 +456,7 @@ def upsert_screening_question(
                     updated_at = CURRENT_TIMESTAMP
                 RETURNING id, question_key, question_text, category, answer, is_standard, occurrences, sample_jobs, options, status;
             """, (
-                qid, norm_key, cleaned, cat, is_standard, placeholder, jobs_array, clean_options,
+                qid, norm_key, cleaned, cat, (ans or None), is_standard, placeholder, jobs_array, clean_options, final_status,
                 sample_job, sample_job, sample_job
             ))
         row = cur.fetchone()

@@ -69,8 +69,8 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
     sql = """
     SELECT
         COUNT(*) AS total_posts,
-        COUNT(*) FILTER (WHERE category = 'EMAIL_OUTREACH') AS email_outreach_total,
-        COUNT(*) FILTER (WHERE category = 'EMAIL_OUTREACH' AND status IN ('DISCOVERED', 'SELECTED') AND (generated_body IS NULL OR generated_body = '')) AS pending_generation,
+        COUNT(*) FILTER (WHERE category = 'EMAIL_OUTREACH' OR array_length(contact_emails, 1) > 0) AS email_outreach_total,
+        COUNT(*) FILTER (WHERE (category = 'EMAIL_OUTREACH' OR array_length(contact_emails, 1) > 0) AND status IN ('DISCOVERED', 'SELECTED') AND (generated_body IS NULL OR generated_body = '')) AS pending_generation,
         COUNT(*) FILTER (WHERE status = 'EMAIL_GENERATED') AS emails_generated,
         COUNT(*) FILTER (WHERE status = 'SENT') AS applications_sent,
         COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS discovered_total,
