@@ -26,6 +26,11 @@
               <span id="taskEtaText">--</span>
             </span>
             <span class="task-counter-pill" id="taskCounterPill">0 / 0</span>
+            <button class="btn-pause-active-task" id="btnPauseActiveTask" onclick="togglePauseActiveTask()" title="Pause or resume task">
+              <svg id="iconPauseTask" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+              <svg id="iconResumeTask" class="hidden" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span id="labelPauseTask">Pause</span>
+            </button>
             <button class="btn-cancel-active-task" id="btnCancelActiveTask" onclick="cancelActiveTask()" title="Stop ongoing task">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
               <span>Stop</span>
@@ -54,6 +59,9 @@
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span>Run History</span>
               </button>
+              <button class="logs-pause-btn" id="logsPauseBtn" onclick="togglePauseActiveTask()" title="Pause or resume task">
+                <span id="logsPauseLabel">Pause</span>
+              </button>
               <button class="logs-cancel-btn" onclick="cancelActiveTask()" title="Stop ongoing task">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
                 <span>Stop Task</span>
@@ -61,6 +69,20 @@
             </div>
           </div>
           <div class="logs-stream" id="logsStream"></div>
+        </div>
+
+        <!-- Paused Tasks Section -->
+        <div class="task-paused-section hidden" id="taskPausedSection">
+          <div class="task-paused-header">
+            <div class="task-paused-title-group">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4" height="16" rx="1"/><rect x="15" y="4" width="4" height="16" rx="1"/></svg>
+              <span class="task-paused-title">Paused Tasks</span>
+              <span class="paused-counter-badge" id="taskPausedCountBadge">0</span>
+            </div>
+          </div>
+          <div class="task-paused-list" id="taskPausedList">
+            <!-- Populated dynamically with paused tasks -->
+          </div>
         </div>
 
         <!-- Centralized Automation Task Queue Drawer -->

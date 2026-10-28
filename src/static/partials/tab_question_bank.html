@@ -55,7 +55,7 @@
     </div>
   </div>
 
-  <!-- KPI Metrics Ribbon (4 Cards) -->
+  <!-- KPI Metrics Ribbon (5 Cards) -->
   <div class="qbank-kpi-ribbon">
     <div class="qbank-kpi-card accent-indigo" onclick="setQuestionBankCategoryFilter('all')" title="Total cataloged questions">
       <div class="kpi-card-header">
@@ -76,6 +76,17 @@
       <div class="kpi-card-body">
         <div class="kpi-title">Ready for Auto-Apply</div>
         <div class="kpi-meta">Saved answers auto-filled in forms</div>
+      </div>
+    </div>
+
+    <div class="qbank-kpi-card accent-purple" onclick="setQuestionBankStatusFilter('ai_suggested')" title="Filter to AI-suggested answers awaiting review and approval">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="qbankKpiAiSuggested">0</span>
+        <span class="kpi-trend review" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; font-weight: 600;">Review</span>
+      </div>
+      <div class="kpi-card-body">
+        <div class="kpi-title">AI Suggested</div>
+        <div class="kpi-meta">Awaiting review &amp; approval</div>
       </div>
     </div>
 
@@ -128,6 +139,10 @@
         <button class="status-segment-btn active" id="btnQbankStatAll" onclick="setQuestionBankStatusFilter('all')">
           All (<span id="qbankCountStatAll">0</span>)
         </button>
+        <button class="status-segment-btn stat-ai" id="btnQbankStatAi" onclick="setQuestionBankStatusFilter('ai_suggested')">
+          <span class="dot-indicator purple" style="background: #a855f7;"></span>
+          AI Suggested (<span id="qbankCountStatAi">0</span>)
+        </button>
         <button class="status-segment-btn stat-pending" id="btnQbankStatPending" onclick="setQuestionBankStatusFilter('pending')">
           <span class="dot-indicator amber"></span>
           Pending (<span id="qbankCountStatPending">0</span>)
@@ -135,6 +150,10 @@
         <button class="status-segment-btn stat-answered" id="btnQbankStatAnswered" onclick="setQuestionBankStatusFilter('answered')">
           <span class="dot-indicator green"></span>
           Answered (<span id="qbankCountStatAnswered">0</span>)
+        </button>
+        <button class="status-segment-btn stat-unreasonable" id="btnQbankStatUnreasonable" onclick="setQuestionBankStatusFilter('unreasonable')">
+          <span class="dot-indicator red"></span>
+          Unreasonable (<span id="qbankCountStatUnreasonable">0</span>)
         </button>
       </div>
 
@@ -190,6 +209,10 @@
       <div class="batch-bar-actions">
         <button class="btn btn-xs btn-outline" onclick="clearQuestionBankSelection()">
           Clear Selection
+        </button>
+        <button class="btn btn-xs btn-success btn-batch-approve" id="btnBatchApproveQuestions" onclick="triggerBatchApproveQuestions()" title="Approve all selected questions and promote to Answered">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>Approve Selected</span>
         </button>
         <button class="btn btn-xs btn-danger btn-batch-delete" id="btnBatchDeleteQuestions" onclick="triggerBatchDeleteQuestions()">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">

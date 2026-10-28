@@ -133,6 +133,7 @@ class CreateQuestionPayload(BaseModel):
 class EasyApplyBatchApplyPayload(BaseModel):
     post_ids: Optional[List[str]] = None
     all_screened: bool = False
+    all_ready: bool = False
     pacing: Optional[str] = "safe"
 
 

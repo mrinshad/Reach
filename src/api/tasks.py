@@ -542,7 +542,21 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
     """
     target_ids: List[str] = []
 
-    if payload.all_screened:
+    if payload.all_ready:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No ready-to-apply jobs found in DISCOVERED/READY status."
+            )
+    elif payload.all_screened:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -566,17 +580,20 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
     else:
         raise HTTPException(
             status_code=400,
-            detail="Must specify either post_ids or all_screened=True for batch Easy Apply."
+            detail="Must specify post_ids, all_ready=True, or all_screened=True for batch Easy Apply."
         )
 
     count = len(target_ids)
     pacing = payload.pacing or "safe"
-    task_name = (
-        f"Batch Easy Apply — Rerun Screened ({count} applications)"
-        if payload.all_screened
-        else f"Batch Easy Apply ({count} applications)"
-    )
-    snippet = f"{count} screened jobs" if payload.all_screened else f"{count} jobs"
+    if payload.all_screened:
+        task_name = f"Batch Easy Apply — Rerun Screened ({count} applications)"
+        snippet = f"{count} screened jobs"
+    elif payload.all_ready:
+        task_name = f"Batch Easy Apply — All Ready Jobs ({count} applications)"
+        snippet = f"{count} ready jobs"
+    else:
+        task_name = f"Batch Easy Apply ({count} applications)"
+        snippet = f"{count} jobs"
 
     res = task_manager.enqueue_task(
         task_type="easy_apply_batch",
@@ -588,6 +605,7 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
         metadata={
             "count": count,
             "all_screened": payload.all_screened,
+            "all_ready": payload.all_ready,
             "pacing": pacing,
             "post_ids": target_ids[:50],
         },
@@ -602,6 +620,7 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
         "message": msg,
         "count": count,
         "all_screened": payload.all_screened,
+        "all_ready": payload.all_ready,
         **res,
     }
 
@@ -762,6 +781,33 @@ def api_clear_task():
     """Reset task state to idle."""
     task_manager.clear_task()
     return {"success": True, "message": "Task state cleared."}
+
+
+@router.post("/tasks/pause")
+def api_pause_active_task():
+    """Pause the currently executing automation task."""
+    paused = task_manager.pause_active_task()
+    if not paused:
+        return {"success": False, "message": "No automation task is currently running to pause."}
+    return {"success": True, "message": "Ongoing task has been paused."}
+
+
+@router.post("/tasks/resume")
+def api_resume_task(task_id: Optional[str] = None):
+    """Resume a paused automation task."""
+    resumed = task_manager.resume_task(task_id=task_id)
+    if not resumed:
+        return {"success": False, "message": "No paused automation task found to resume."}
+    return {"success": True, "message": "Task has been resumed."}
+
+
+@router.post("/tasks/paused/cancel/{task_id}")
+def api_cancel_paused_task(task_id: str):
+    """Cancel and cleanup a paused automation task."""
+    cancelled = task_manager.cancel_paused_task(task_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Paused task not found or already terminated.")
+    return {"success": True, "message": f"Paused task {task_id} cancelled."}
 
 
 @router.post("/tasks/cancel")

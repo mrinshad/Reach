@@ -33,7 +33,7 @@ function openPostModal(postId) {
   if (metaEl) {
     const email = (post.contact_emails && post.contact_emails[0]) ? `Email: ${post.contact_emails[0]}` : 'No email detected';
     const exp = post.raw_experience ? ` • Exp: ${post.raw_experience}` : '';
-    const loc = post.location ? ` • 📍 Location: ${post.location}` : '';
+    const loc = ` • 📍 Location: ${post.location || 'Not Specified'}`;
     metaEl.textContent = `${email}${exp}${loc}`;
   }
 

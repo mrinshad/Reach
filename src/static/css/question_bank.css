@@ -64,7 +64,7 @@
 /* KPI Ribbon */
 .qbank-kpi-ribbon {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1rem;
   margin-bottom: 1.25rem;
 }
@@ -89,6 +89,7 @@
 
 .qbank-kpi-card.accent-indigo { border-left: 3.5px solid var(--accent-indigo); }
 .qbank-kpi-card.accent-emerald { border-left: 3.5px solid var(--accent-emerald); }
+.qbank-kpi-card.accent-purple { border-left: 3.5px solid #a855f7; }
 .qbank-kpi-card.accent-amber { border-left: 3.5px solid var(--accent-amber); }
 .qbank-kpi-card.accent-blue { border-left: 3.5px solid #38bdf8; }
 
@@ -265,12 +266,20 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
+.status-segment-btn.stat-ai.active {
+  border-bottom: 2px solid #a855f7;
+}
+
 .status-segment-btn.stat-pending.active {
   border-bottom: 2px solid var(--accent-amber);
 }
 
 .status-segment-btn.stat-answered.active {
   border-bottom: 2px solid var(--accent-emerald);
+}
+
+.status-segment-btn.stat-unreasonable.active {
+  border-bottom: 2px solid #ef4444;
 }
 
 .dot-indicator {
@@ -280,8 +289,10 @@
   display: inline-block;
 }
 
+.dot-indicator.purple { background: #a855f7; box-shadow: 0 0 6px #a855f7; }
 .dot-indicator.amber { background: var(--accent-amber); box-shadow: 0 0 6px var(--accent-amber); }
 .dot-indicator.green { background: var(--accent-emerald); box-shadow: 0 0 6px var(--accent-emerald); }
+.dot-indicator.red { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
 
 /* Filter Group */
 .qbank-filter-group {
@@ -489,12 +500,21 @@
   box-shadow: 0 0 0 1px var(--accent-indigo), var(--shadow-md);
 }
 
+.qbank-card.status-ai {
+  border-left: 4px solid #a855f7;
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.03) 0%, var(--bg-card) 100%);
+}
+
 .qbank-card.status-pending {
   border-left: 4px solid var(--accent-amber);
 }
 
 .qbank-card.status-answered {
   border-left: 4px solid var(--accent-emerald);
+}
+
+.qbank-card.status-unreasonable {
+  border-left: 4px solid #ef4444;
 }
 
 /* Card Header */
@@ -561,6 +581,12 @@
   background: rgba(245, 158, 11, 0.16);
   color: #fcd34d;
   border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.qbank-badge.status-unreasonable {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
 }
 
 .qbank-badge.badge-standard {
@@ -634,15 +660,99 @@
 .sample-job-tag {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 0.12rem 0.48rem;
+  border-radius: 6px;
+  padding: 0.18rem 0.55rem;
   color: var(--text-dim);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
-  max-width: 320px;
+  font-size: 0.72rem;
+  max-width: 540px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  line-height: 1.35;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sample-job-location-badge {
+  font-size: 0.68rem;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 9999px;
+  padding: 0.06rem 0.42rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 500;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.sample-job-tag:hover .sample-job-location-badge {
+  background: rgba(56, 189, 248, 0.24);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+}
+
+.sample-job-tag.is-clickable {
+  cursor: pointer;
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.25);
+  color: #7dd3fc;
+  text-align: left;
+}
+
+.sample-job-tag.is-clickable:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #38bdf8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px rgba(56, 189, 248, 0.2);
+}
+
+.sample-job-tag.is-clickable:active {
+  transform: translateY(0);
+}
+
+.sample-job-tag.is-clickable .sample-job-arrow {
+  opacity: 0.65;
+  font-size: 0.7rem;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.sample-job-tag.is-clickable:hover .sample-job-arrow {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+
+.sample-job-tag.is-generic {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sample-job-more-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.sample-job-tag.is-more-toggle {
+  cursor: pointer;
+  color: var(--accent-cyan);
+  border-color: rgba(6, 182, 212, 0.3);
+  background: rgba(6, 182, 212, 0.08);
+}
+
+.sample-job-tag.is-more-toggle:hover {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: rgba(6, 182, 212, 0.6);
 }
 
 /* Answer Input Field Area & Multi-Option Pills */
@@ -814,6 +924,53 @@
   cursor: default;
   pointer-events: none;
   background: var(--border-medium);
+}
+
+.btn-approve-answer {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: 0.35rem 0.85rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+  transition: all 0.18s ease;
+}
+
+.btn-approve-answer:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.5);
+}
+
+.btn-approve-answer.is-modified {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.35);
+}
+
+.btn-approve-answer.is-modified:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.5);
+}
+
+.btn-batch-approve {
+  background: rgba(16, 185, 129, 0.18);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-batch-approve:hover {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
 }
 
 /* Skeleton Loading State */

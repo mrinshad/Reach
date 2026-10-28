@@ -93,6 +93,9 @@ class TaskManager:
         self.queue: List[Dict[str, Any]] = []
         self._worker_thread: Optional[threading.Thread] = None
         self._cancel_requested = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set()
+        self._paused_tasks: Dict[str, Dict[str, Any]] = {}
         self._active_proc: Optional[Any] = None
         self._active_context: Optional[Any] = None
         self._current_task: Optional[Dict[str, Any]] = None
@@ -133,12 +136,173 @@ class TaskManager:
     def is_cancel_requested(self) -> bool:
         return self._cancel_requested.is_set()
 
-    def cancel_active_task(self) -> bool:
-        """Cancel the currently executing automation task and stop underlying processes/browser."""
+    def is_paused(self) -> bool:
+        with self._lock:
+            return self.state.get("status") == "paused" or not self._pause_event.is_set()
+
+    def check_pause(self):
+        """Block loop execution safely while task is paused."""
+        while not self._pause_event.is_set():
+            if self._cancel_requested.is_set():
+                break
+            time.sleep(0.5)
+
+    def pause_active_task(self, task_id: Optional[str] = None) -> bool:
+        """Pause the currently executing automation task without terminating it."""
+        import signal
+        import subprocess
         with self._lock:
             if self.state["status"] != "running":
                 return False
+
+            self._pause_event.clear()
+            self.state["status"] = "paused"
+            now = time.time()
+            self.state["paused_at"] = now
+            task_name = self.state.get("task_name") or "Task"
+            entry = f"[{time.strftime('%H:%M:%S')}] ⏸️ Task paused by user: {task_name}"
+            self.state["logs"].append(entry)
+            print(entry)
+
+            # If there's an active subprocess, pause it and its children via SIGSTOP
+            if self._active_proc:
+                try:
+                    c_res = subprocess.run(["pgrep", "-P", str(self._active_proc.pid)], capture_output=True, text=True, timeout=2)
+                    if c_res.returncode == 0 and c_res.stdout:
+                        for cpid in c_res.stdout.strip().split():
+                            if cpid.isdigit():
+                                try:
+                                    os.kill(int(cpid), signal.SIGSTOP)
+                                except Exception:
+                                    pass
+                    os.kill(self._active_proc.pid, signal.SIGSTOP)
+                except Exception as e:
+                    print(f"Error pausing process {self._active_proc.pid}: {e}")
+
+            run_id = self._current_run_id or f"task_{int(now * 1000)}"
+            self._paused_tasks[run_id] = {
+                "id": run_id,
+                "task_name": self.state.get("task_name", ""),
+                "short_name": self.state.get("short_name", ""),
+                "snippet": self.state.get("snippet", ""),
+                "current_step": self.state.get("current_step", ""),
+                "completed_items": self.state.get("completed_items", 0),
+                "total_items": self.state.get("total_items", 1),
+                "paused_at": now,
+                "started_at": self.state.get("started_at"),
+                "logs": list(self.state.get("logs", [])),
+                "proc": self._active_proc,
+                "context": self._active_context,
+                "task_item": self._current_task,
+                "task_type": self._current_task_type,
+                "task_params": self._current_task_params,
+            }
+            return True
+
+    def resume_task(self, task_id: Optional[str] = None) -> bool:
+        """Resume a paused automation task."""
+        import signal
+        import subprocess
+        with self._lock:
+            # If a specific task_id is given from _paused_tasks
+            target_info = None
+            if task_id and task_id in self._paused_tasks:
+                target_info = self._paused_tasks.pop(task_id)
+            elif self._paused_tasks:
+                k = list(self._paused_tasks.keys())[-1]
+                target_info = self._paused_tasks.pop(k)
+
+            # Resume subprocess if present
+            proc = target_info.get("proc") if target_info else self._active_proc
+            if proc:
+                try:
+                    c_res = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True, timeout=2)
+                    if c_res.returncode == 0 and c_res.stdout:
+                        for cpid in c_res.stdout.strip().split():
+                            if cpid.isdigit():
+                                try:
+                                    os.kill(int(cpid), signal.SIGCONT)
+                                except Exception:
+                                    pass
+                    os.kill(proc.pid, signal.SIGCONT)
+                except Exception as e:
+                    print(f"Error resuming process {proc.pid}: {e}")
+
+            # If the current active state is paused, restore it to running
+            if self.state["status"] == "paused":
+                self.state["status"] = "running"
+                self.state["paused_at"] = None
+                task_name = self.state.get("task_name") or "Task"
+                entry = f"[{time.strftime('%H:%M:%S')}] ▶️ Task resumed by user: {task_name}"
+                self.state["logs"].append(entry)
+                print(entry)
+
+            # Signal any waiting python thread loop to resume
+            self._pause_event.set()
+            return True
+
+    def cancel_paused_task(self, task_id: str) -> bool:
+        """Cancel a paused task from storage and terminate its processes."""
+        import signal
+        with self._lock:
+            ptask = self._paused_tasks.pop(task_id, None)
+            if not ptask:
+                return False
+
+            proc = ptask.get("proc")
+            if proc:
+                try:
+                    os.kill(proc.pid, signal.SIGCONT)
+                    time.sleep(0.1)
+                    proc.terminate()
+                    time.sleep(0.2)
+                    if proc.poll() is None:
+                        proc.kill()
+                except Exception:
+                    pass
+
+            ctx = ptask.get("context")
+            if ctx:
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+
+            # If current active state is this paused task, mark it stopped
+            if self._current_run_id == task_id or self.state.get("status") == "paused":
+                self.state["status"] = "error"
+                self.state["error"] = "Task cancelled while paused."
+                self.state["current_step"] = "Cancelled while paused"
+                self.state["finished_at"] = time.time()
+                self._pause_event.set()
+            return True
+
+    def get_paused_tasks_summary(self) -> List[Dict[str, Any]]:
+        """Return serialized list of all currently paused tasks."""
+        with self._lock:
+            summary = []
+            for tid, item in self._paused_tasks.items():
+                summary.append({
+                    "id": item["id"],
+                    "task_name": item["task_name"],
+                    "short_name": item.get("short_name") or item["task_name"],
+                    "snippet": item.get("snippet", ""),
+                    "current_step": item.get("current_step", ""),
+                    "completed_items": item.get("completed_items", 0),
+                    "total_items": item.get("total_items", 1),
+                    "paused_at": item.get("paused_at"),
+                    "started_at": item.get("started_at"),
+                })
+            return summary
+
+    def cancel_active_task(self) -> bool:
+        """Cancel the currently executing automation task and stop underlying processes/browser."""
+        import signal
+        with self._lock:
+            if self.state["status"] not in ("running", "paused"):
+                return False
             self._cancel_requested.set()
+            self._pause_event.set()  # Unblock thread if paused
             task_name = self.state.get("task_name") or "Task"
             entry = f"[{time.strftime('%H:%M:%S')}] 🛑 Stopping ongoing task: {task_name}..."
             self.state["logs"].append(entry)
@@ -147,6 +311,10 @@ class TaskManager:
             # Terminate active scraper subprocess if running
             if self._active_proc:
                 try:
+                    try:
+                        os.kill(self._active_proc.pid, signal.SIGCONT)
+                    except Exception:
+                        pass
                     self._active_proc.terminate()
                     time.sleep(0.3)
                     if self._active_proc.poll() is None:
@@ -215,6 +383,7 @@ class TaskManager:
         with self._queue_lock:
             with self._lock:
                 is_currently_running = self.state["status"] == "running"
+                is_currently_paused = self.state["status"] == "paused"
 
             if is_currently_running:
                 self.queue.append(item)
@@ -229,6 +398,47 @@ class TaskManager:
                     "task_name": task_name,
                     "short_name": item["short_name"],
                     "snippet": item["snippet"],
+                }
+            elif is_currently_paused:
+                # Active task is paused: park it if needed and launch new task parallelly
+                with self._lock:
+                    run_id = self._current_run_id or f"paused_{int(time.time() * 1000)}"
+                    if run_id not in self._paused_tasks:
+                        self._paused_tasks[run_id] = {
+                            "id": run_id,
+                            "task_name": self.state.get("task_name", ""),
+                            "short_name": self.state.get("short_name", ""),
+                            "snippet": self.state.get("snippet", ""),
+                            "current_step": self.state.get("current_step", ""),
+                            "completed_items": self.state.get("completed_items", 0),
+                            "total_items": self.state.get("total_items", 1),
+                            "paused_at": self.state.get("paused_at", time.time()),
+                            "started_at": self.state.get("started_at"),
+                            "logs": list(self.state.get("logs", [])),
+                            "proc": self._active_proc,
+                            "context": self._active_context,
+                            "task_item": self._current_task,
+                            "task_type": self._current_task_type,
+                            "task_params": self._current_task_params,
+                        }
+                    self._active_proc = None
+                    self._active_context = None
+                    self._pause_event.set()
+                    self._cancel_requested.clear()
+                    self.state["status"] = "idle"
+
+                self.queue.append(item)
+                parallel_worker = threading.Thread(target=self._worker_loop, daemon=True)
+                parallel_worker.start()
+                return {
+                    "queued": False,
+                    "task_id": tid,
+                    "position": 0,
+                    "queue_length": len(self.queue),
+                    "task_name": task_name,
+                    "short_name": item["short_name"],
+                    "snippet": item["snippet"],
+                    "parallel": True,
                 }
             else:
                 self.queue.append(item)
@@ -476,6 +686,15 @@ class TaskManager:
             st["eta_display"] = timing["eta_display"]
             st["eta_short"] = timing["eta_short"]
             st["eta_confidence"] = timing["confidence"]
+        elif st.get("status") == "paused":
+            started = st.get("started_at")
+            paused_at = st.get("paused_at") or time.time()
+            st["elapsed_seconds"] = max(0.0, paused_at - started) if started else 0.0
+            st["estimated_remaining_seconds"] = 0.0
+            st["estimated_total_seconds"] = st["elapsed_seconds"]
+            st["eta_display"] = "Paused"
+            st["eta_short"] = "Paused"
+            st["eta_confidence"] = "paused"
         else:
             st["elapsed_seconds"] = 0.0
             st["estimated_remaining_seconds"] = 0.0
@@ -484,6 +703,9 @@ class TaskManager:
             st["eta_short"] = ""
             st["eta_confidence"] = "idle"
 
+        st["is_paused"] = (st.get("status") == "paused")
+        st["paused_tasks"] = self.get_paused_tasks_summary()
+        st["has_paused_tasks"] = len(st["paused_tasks"]) > 0
         st["queue"] = self.get_queue_summary(running_remaining=st.get("estimated_remaining_seconds", 0.0))
         st["queue_length"] = len(st["queue"])
         return st
@@ -525,6 +747,7 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                 failed_posts = []
 
                 for idx, post_id in enumerate(post_ids, start=1):
+                    task_manager.check_pause()
                     if task_manager.is_cancel_requested():
                         task_manager.log("🛑 ChatGPT generation stopped by user.")
                         return
@@ -602,6 +825,7 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                         task_manager.log(f"  Pacing pause: waiting {pause:.1f}s before next post...")
                         p_start = time.time()
                         while time.time() - p_start < pause:
+                            task_manager.check_pause()
                             if task_manager.is_cancel_requested():
                                 task_manager.log("🛑 Pacing pause interrupted by user cancellation.")
                                 return
@@ -1042,6 +1266,7 @@ def run_send_batch_drafts(post_ids: List[str]):
                         task_manager.log(f"  Waiting {pause:.1f}s before sending next email...")
                         p_start = time.time()
                         while time.time() - p_start < pause:
+                            task_manager.check_pause()
                             if task_manager.is_cancel_requested():
                                 task_manager.log("🛑 Pacing pause interrupted by user cancellation.")
                                 return
@@ -1114,6 +1339,9 @@ def run_scraper_subprocess_with_timeout(
                 time.sleep(1.0)
                 if completed.is_set():
                     break
+                if task_manager.is_paused():
+                    last_activity[0] = time.time()
+                    continue
                 elapsed = time.time() - last_activity[0]
                 if elapsed >= inactivity_timeout_seconds:
                     timed_out[0] = True
@@ -1136,6 +1364,7 @@ def run_scraper_subprocess_with_timeout(
 
         parsed_stats = None
         for line in proc.stdout:
+            task_manager.check_pause()
             if task_manager.is_cancel_requested():
                 break
             last_activity[0] = time.time()

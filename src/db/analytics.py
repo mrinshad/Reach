@@ -137,31 +137,55 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
     """
     cutoff_date = None
     date_labels = []
+    is_today_only = (days == 1)
     
     effective_days = days if (days and days > 0) else None
-    if effective_days:
-        today = datetime.now().date()
+    today = datetime.now().date()
+
+    if is_today_only:
+        cutoff_date = today.strftime('%Y-%m-%d')
+        current_hour = datetime.now().hour
+        max_h = max(12, current_hour + 1)
+        date_labels = [f"{h:02d}:00" for h in range(min(24, max_h))]
+    elif effective_days:
         cutoff_date = (today - timedelta(days=effective_days - 1)).strftime('%Y-%m-%d')
         date_labels = [(today - timedelta(days=i)).strftime('%Y-%m-%d') for i in range(effective_days - 1, -1, -1)]
 
     with get_connection(db_url) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # 1. Summary KPIs
-            cur.execute("""
-                SELECT
-                    COUNT(*) AS total_scraped,
-                    COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
-                    COUNT(*) FILTER (WHERE status = 'SENT') AS total_sent,
-                    COUNT(*) FILTER (WHERE status = 'EMAIL_GENERATED') AS total_drafted,
-                    COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected,
-                    COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
-                    COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS pending_review,
-                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY') AS easy_apply_total,
-                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
-                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_screened,
-                    COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
-                FROM posts;
-            """)
+            if cutoff_date:
+                cur.execute("""
+                    SELECT
+                        COUNT(*) FILTER (WHERE created_at >= %s::date) AS total_scraped,
+                        COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0 AND created_at >= %s::date) AS with_emails,
+                        COUNT(*) FILTER (WHERE status = 'SENT' AND COALESCE(sent_at, updated_at, created_at) >= %s::date) AS total_sent,
+                        COUNT(*) FILTER (WHERE status = 'EMAIL_GENERATED' AND updated_at >= %s::date) AS total_drafted,
+                        COUNT(*) FILTER (WHERE status = 'REJECTED' AND updated_at >= %s::date) AS total_rejected,
+                        COUNT(*) FILTER (WHERE is_potential_spam = TRUE AND created_at >= %s::date) AS potential_spam_total,
+                        COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS pending_review,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND created_at >= %s::date) AS easy_apply_total,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED' AND COALESCE(sent_at, updated_at, created_at) >= %s::date) AS easy_apply_applied,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE' AND updated_at >= %s::date) AS easy_apply_screened,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
+                    FROM posts;
+                """, (cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date))
+            else:
+                cur.execute("""
+                    SELECT
+                        COUNT(*) AS total_scraped,
+                        COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
+                        COUNT(*) FILTER (WHERE status = 'SENT') AS total_sent,
+                        COUNT(*) FILTER (WHERE status = 'EMAIL_GENERATED') AS total_drafted,
+                        COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected,
+                        COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
+                        COUNT(*) FILTER (WHERE status IN ('DISCOVERED', 'SELECTED')) AS pending_review,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY') AS easy_apply_total,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_screened,
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
+                    FROM posts;
+                """)
             kpi_row = dict(cur.fetchone() or {})
             total_scraped = kpi_row.get("total_scraped") or 0
             with_emails = kpi_row.get("with_emails") or 0
@@ -184,69 +208,104 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                 pending_questions = 0
 
             # 2. Daily Applied Timeline (Outreach Emails + Easy Apply Submissions)
-            if cutoff_date:
+            if is_today_only:
                 cur.execute("""
-                    SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                    SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'HH24:00') AS hr, COUNT(*) AS count
                     FROM posts
                     WHERE (status = 'SENT' OR status = 'APPLIED')
                       AND COALESCE(sent_at, updated_at, created_at) >= %s::date
-                    GROUP BY day
-                    ORDER BY day ASC;
+                    GROUP BY hr
+                    ORDER BY hr ASC;
                 """, (cutoff_date,))
-            else:
-                cur.execute("""
-                    SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
-                    FROM posts
-                    WHERE (status = 'SENT' OR status = 'APPLIED')
-                      AND COALESCE(sent_at, updated_at, created_at) IS NOT NULL
-                    GROUP BY day
-                    ORDER BY day ASC;
-                """)
-            applied_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
+                applied_map = {r["hr"]: int(r["count"]) for r in cur.fetchall()}
 
-            # 3. Daily Scraped Timeline
-            if cutoff_date:
                 cur.execute("""
-                    SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                    SELECT TO_CHAR(created_at, 'HH24:00') AS hr, COUNT(*) AS count
                     FROM posts
                     WHERE created_at >= %s::date
-                    GROUP BY day
-                    ORDER BY day ASC;
+                    GROUP BY hr
+                    ORDER BY hr ASC;
                 """, (cutoff_date,))
+                scraped_map = {r["hr"]: int(r["count"]) for r in cur.fetchall()}
+
+                timeline_applied = []
+                timeline_scraped = []
+                for hr in date_labels:
+                    timeline_applied.append({"date": f"{cutoff_date} {hr}", "label": hr, "count": applied_map.get(hr, 0)})
+                    timeline_scraped.append({"date": f"{cutoff_date} {hr}", "label": hr, "count": scraped_map.get(hr, 0)})
             else:
-                cur.execute("""
-                    SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
-                    FROM posts
-                    WHERE created_at >= %s::date
-                    GROUP BY day
-                    ORDER BY day ASC;
-                """)
-            scraped_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
+                if cutoff_date:
+                    cur.execute("""
+                        SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                        FROM posts
+                        WHERE (status = 'SENT' OR status = 'APPLIED')
+                          AND COALESCE(sent_at, updated_at, created_at) >= %s::date
+                        GROUP BY day
+                        ORDER BY day ASC;
+                    """, (cutoff_date,))
+                    applied_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
 
-            if not date_labels:
-                all_dates = sorted(set(list(applied_map.keys()) + list(scraped_map.keys())))
-                if not all_dates:
-                    all_dates = [datetime.now().strftime('%Y-%m-%d')]
-                date_labels = all_dates
+                    cur.execute("""
+                        SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                        FROM posts
+                        WHERE created_at >= %s::date
+                        GROUP BY day
+                        ORDER BY day ASC;
+                    """, (cutoff_date,))
+                    scraped_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
+                else:
+                    cur.execute("""
+                        SELECT TO_CHAR(COALESCE(sent_at, updated_at, created_at), 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                        FROM posts
+                        WHERE (status = 'SENT' OR status = 'APPLIED')
+                          AND COALESCE(sent_at, updated_at, created_at) IS NOT NULL
+                        GROUP BY day
+                        ORDER BY day ASC;
+                    """)
+                    applied_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
 
-            timeline_applied = []
-            timeline_scraped = []
-            for d in date_labels:
-                try:
-                    dt_obj = datetime.strptime(d, '%Y-%m-%d')
-                    lbl = dt_obj.strftime('%b %d')
-                except Exception:
-                    lbl = d
-                timeline_applied.append({"date": d, "label": lbl, "count": applied_map.get(d, 0)})
-                timeline_scraped.append({"date": d, "label": lbl, "count": scraped_map.get(d, 0)})
+                    cur.execute("""
+                        SELECT TO_CHAR(created_at, 'YYYY-MM-DD') AS day, COUNT(*) AS count
+                        FROM posts
+                        WHERE created_at IS NOT NULL
+                        GROUP BY day
+                        ORDER BY day ASC;
+                    """)
+                    scraped_map = {r["day"]: int(r["count"]) for r in cur.fetchall()}
+
+                if not date_labels:
+                    all_dates = sorted(set(list(applied_map.keys()) + list(scraped_map.keys())))
+                    if not all_dates:
+                        all_dates = [datetime.now().strftime('%Y-%m-%d')]
+                    date_labels = all_dates
+
+                timeline_applied = []
+                timeline_scraped = []
+                for d in date_labels:
+                    try:
+                        dt_obj = datetime.strptime(d, '%Y-%m-%d')
+                        lbl = dt_obj.strftime('%b %d')
+                    except Exception:
+                        lbl = d
+                    timeline_applied.append({"date": d, "label": lbl, "count": applied_map.get(d, 0)})
+                    timeline_scraped.append({"date": d, "label": lbl, "count": scraped_map.get(d, 0)})
 
             # 4. Application Status Breakdown
-            cur.execute("""
-                SELECT status, COUNT(*) AS count
-                FROM posts
-                GROUP BY status
-                ORDER BY count DESC;
-            """)
+            if cutoff_date:
+                cur.execute("""
+                    SELECT status, COUNT(*) AS count
+                    FROM posts
+                    WHERE COALESCE(sent_at, updated_at, created_at) >= %s::date
+                    GROUP BY status
+                    ORDER BY count DESC;
+                """, (cutoff_date,))
+            else:
+                cur.execute("""
+                    SELECT status, COUNT(*) AS count
+                    FROM posts
+                    GROUP BY status
+                    ORDER BY count DESC;
+                """)
             status_colors = {
                 "SENT": "#10b981",                   # Emerald
                 "APPLIED": "#10b981",                # Emerald (Easy Apply)
@@ -283,51 +342,128 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                 })
 
             # 5. Scraper Sources Breakdown
-            cur.execute("""
-                SELECT 
-                    CASE 
-                        WHEN post_url LIKE 'https://infopark.in%' THEN 'Infopark Kochi'
-                        WHEN post_url LIKE 'manual://%' THEN 'Manual Input'
-                        WHEN post_url LIKE 'direct://%' THEN 'Direct Outreach'
-                        ELSE 'LinkedIn'
-                    END AS source,
-                    COUNT(*) AS total_scraped,
-                    COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
-                    COUNT(*) FILTER (WHERE status = 'SENT') AS total_sent,
-                    COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected
-                FROM posts
-                GROUP BY 1
-                ORDER BY total_scraped DESC;
-            """)
+            if cutoff_date:
+                cur.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN post_url LIKE 'https://infopark.in%%' THEN 'Infopark Kochi'
+                            WHEN post_url LIKE 'manual://%%' THEN 'Manual Input'
+                            WHEN post_url LIKE 'direct://%%' THEN 'Direct Outreach'
+                            ELSE 'LinkedIn'
+                        END AS source,
+                        COUNT(*) AS total_scraped,
+                        COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
+                        COUNT(*) FILTER (WHERE status = 'SENT') AS total_sent,
+                        COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected
+                    FROM posts
+                    WHERE created_at >= %s::date
+                    GROUP BY 1
+                    ORDER BY total_scraped DESC;
+                """, (cutoff_date,))
+            else:
+                cur.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN post_url LIKE 'https://infopark.in%%' THEN 'Infopark Kochi'
+                            WHEN post_url LIKE 'manual://%%' THEN 'Manual Input'
+                            WHEN post_url LIKE 'direct://%%' THEN 'Direct Outreach'
+                            ELSE 'LinkedIn'
+                        END AS source,
+                        COUNT(*) AS total_scraped,
+                        COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
+                        COUNT(*) FILTER (WHERE status = 'SENT') AS total_sent,
+                        COUNT(*) FILTER (WHERE status = 'REJECTED') AS total_rejected
+                    FROM posts
+                    GROUP BY 1
+                    ORDER BY total_scraped DESC;
+                """)
             source_breakdown = [dict(r) for r in cur.fetchall()]
 
             # 6. Rejection / Spam Reasons Breakdown
-            cur.execute("""
-                SELECT 
-                    COALESCE(NULLIF(TRIM(rejection_reason), ''), 'Not Specified') AS reason,
-                    COUNT(*) AS count
-                FROM posts
-                WHERE status = 'REJECTED'
-                GROUP BY 1
-                ORDER BY count DESC;
-            """)
+            if cutoff_date:
+                cur.execute("""
+                    SELECT 
+                        COALESCE(NULLIF(TRIM(rejection_reason), ''), 'Not Specified') AS reason,
+                        COUNT(*) AS count
+                    FROM posts
+                    WHERE status = 'REJECTED' AND updated_at >= %s::date
+                    GROUP BY 1
+                    ORDER BY count DESC;
+                """, (cutoff_date,))
+            else:
+                cur.execute("""
+                    SELECT 
+                        COALESCE(NULLIF(TRIM(rejection_reason), ''), 'Not Specified') AS reason,
+                        COUNT(*) AS count
+                    FROM posts
+                    WHERE status = 'REJECTED'
+                    GROUP BY 1
+                    ORDER BY count DESC;
+                """)
             rejection_reasons = [dict(r) for r in cur.fetchall()]
 
             # 7. Experience Distribution
-            cur.execute("""
+            if cutoff_date:
+                cur.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN is_fresher = TRUE OR (max_experience IS NOT NULL AND max_experience <= 1) THEN 'Fresher (0–1 yr)'
+                            WHEN min_experience >= 3 OR max_experience >= 4 THEN 'Senior (3–5+ yrs)'
+                            WHEN min_experience >= 1 OR max_experience > 1 THEN 'Mid-Level (1–3 yrs)'
+                            ELSE 'Flexible / Unspecified'
+                        END AS exp_tier,
+                        COUNT(*) AS count
+                    FROM posts
+                    WHERE created_at >= %s::date
+                    GROUP BY 1
+                    ORDER BY count DESC;
+                """, (cutoff_date,))
+            else:
+                cur.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN is_fresher = TRUE OR (max_experience IS NOT NULL AND max_experience <= 1) THEN 'Fresher (0–1 yr)'
+                            WHEN min_experience >= 3 OR max_experience >= 4 THEN 'Senior (3–5+ yrs)'
+                            WHEN min_experience >= 1 OR max_experience > 1 THEN 'Mid-Level (1–3 yrs)'
+                            ELSE 'Flexible / Unspecified'
+                        END AS exp_tier,
+                        COUNT(*) AS count
+                    FROM posts
+                    GROUP BY 1
+                    ORDER BY count DESC;
+                """)
+            experience_breakdown = [dict(r) for r in cur.fetchall()]
+
+            # 8. Top Job Locations Breakdown
+            loc_where = "WHERE location IS NOT NULL AND TRIM(location) != ''"
+            loc_params = ()
+            if cutoff_date:
+                loc_where += " AND created_at >= %s::date"
+                loc_params = (cutoff_date,)
+            
+            cur.execute(f"""
                 SELECT 
                     CASE 
-                        WHEN is_fresher = TRUE OR (max_experience IS NOT NULL AND max_experience <= 1) THEN 'Fresher (0–1 yr)'
-                        WHEN min_experience >= 3 OR max_experience >= 4 THEN 'Senior (3–5+ yrs)'
-                        WHEN min_experience >= 1 OR max_experience > 1 THEN 'Mid-Level (1–3 yrs)'
-                        ELSE 'Flexible / Unspecified'
-                    END AS exp_tier,
+                        WHEN location ILIKE '%%remote%%' THEN 'Remote'
+                        WHEN location ILIKE '%%bengaluru%%' OR location ILIKE '%%bangalore%%' THEN 'Bengaluru'
+                        WHEN location ILIKE '%%kochi%%' OR location ILIKE '%%cochin%%' THEN 'Kochi'
+                        WHEN location ILIKE '%%hyderabad%%' THEN 'Hyderabad'
+                        WHEN location ILIKE '%%chennai%%' THEN 'Chennai'
+                        WHEN location ILIKE '%%dubai%%' THEN 'Dubai'
+                        WHEN location ILIKE '%%pune%%' THEN 'Pune'
+                        WHEN location ILIKE '%%mumbai%%' THEN 'Mumbai'
+                        WHEN location ILIKE '%%delhi%%' OR location ILIKE '%%noida%%' OR location ILIKE '%%gurgaon%%' OR location ILIKE '%%gurugram%%' THEN 'Delhi / NCR'
+                        WHEN location ILIKE '%%trivandrum%%' OR location ILIKE '%%thiruvananthapuram%%' THEN 'Trivandrum'
+                        ELSE TRIM(location)
+                    END AS location,
                     COUNT(*) AS count
                 FROM posts
+                {loc_where}
                 GROUP BY 1
-                ORDER BY count DESC;
-            """)
-            experience_breakdown = [dict(r) for r in cur.fetchall()]
+                ORDER BY count DESC
+                LIMIT 8;
+            """, loc_params)
+            top_locations = [dict(r) for r in cur.fetchall()]
 
             return {
                 "timeframe_days": effective_days,
@@ -355,4 +491,5 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                 "source_breakdown": source_breakdown,
                 "rejection_reasons": rejection_reasons,
                 "experience_breakdown": experience_breakdown,
+                "top_locations": top_locations,
             }

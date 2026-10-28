@@ -74,7 +74,7 @@ function updateSidebarCollapseUI() {
 function switchTab(tabId) {
   if (tabId === 'crawlers') tabId = 'tabCrawlers';
   else if (tabId === 'discovered') tabId = 'tabDiscovered';
-  else if (tabId === 'easy_apply' || tabId === 'easyApply') tabId = 'tabEasyApply';
+  else if (tabId === 'easy_apply' || tabId === 'easyApply' || tabId === 'easy-apply' || tabId === '#easy-apply') tabId = 'tabEasyApply';
   else if (tabId === 'questions' || tabId === 'question_bank' || tabId === 'questionBank') tabId = 'tabQuestionBank';
   else if (tabId === 'review') tabId = 'tabReview';
   else if (tabId === 'sent') tabId = 'tabSent';
@@ -174,7 +174,7 @@ function switchTab(tabId) {
       fetchSentPosts();
     }
   } else if (tabId === 'tabAnalytics') {
-    loadAnalytics(state.analyticsDays || 30);
+    loadAnalytics(typeof state.analyticsDays === 'number' ? state.analyticsDays : 30);
   }
 }
 

@@ -112,6 +112,25 @@ def is_unreasonable_response(text: str) -> bool:
     )
 
 
+def is_chatgpt_error_response(text: str) -> bool:
+    """Check if ChatGPT returned a client-side or network error banner instead of a real response."""
+    if not text:
+        return False
+    t = text.lower().strip()
+    return any(err in t for err in [
+        "this response couldn't load",
+        "this response couldn’t load",
+        "something went wrong",
+        "an error occurred",
+        "failed to generate",
+        "unable to load conversation",
+        "unable to load",
+        "network error",
+        "there was an error",
+        "our systems are currently",
+    ])
+
+
 def is_user_response_needed(text: str) -> bool:
     """Check if ChatGPT returned user_response_needed or DONT_KNOW."""
     return is_dont_know_response(text)
@@ -982,57 +1001,66 @@ def send_question_and_get_answer(
         time.sleep(poll_interval)
         elapsed += poll_interval
 
-        # Check transient retry button
-        retry_btn = page.locator("button:has-text('Retry')")
-        if retry_btn.count() > 0 and retry_btn.last.is_visible():
-            try:
-                retry_btn.last.click(timeout=1000)
-                time.sleep(1.0)
-            except Exception:
-                pass
+        if page.is_closed():
+            logger("  ⚠️ ChatGPT page was closed.")
+            return None, "FAILED"
 
-        # Check streaming
-        stop_btn = page.locator(
-            "button[aria-label*='Stop' i], button[data-testid='stop-button'], button[aria-label*='stop' i]"
-        )
-        is_streaming = stop_btn.count() > 0 and stop_btn.first.is_visible()
-        if is_streaming:
-            has_streamed = True
-            continue
+        try:
+            # Check transient retry button
+            retry_btn = page.locator("button:has-text('Retry')")
+            if retry_btn.count() > 0 and retry_btn.last.is_visible():
+                try:
+                    retry_btn.last.click(timeout=1000)
+                    time.sleep(1.0)
+                except Exception:
+                    pass
 
-        current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
-        current_count = current_msgs.count()
-        if current_count > 0:
-            last_msg = current_msgs.last
-            try:
-                new_last_id = last_msg.evaluate(
-                    "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
-                )
-            except Exception:
-                new_last_id = ""
-
-            try:
-                current_last_text = last_msg.inner_text().strip()
-            except Exception:
-                current_last_text = ""
-
-            is_new = (
-                (new_last_id and last_msg_id and new_last_id != last_msg_id)
-                or current_count > initial_count
-                or (has_streamed and current_last_text != initial_last_text)
-                or (current_last_text and current_last_text != initial_last_text and not is_streaming)
+            # Check streaming
+            stop_btn = page.locator(
+                "button[aria-label*='Stop' i], button[data-testid='stop-button'], button[aria-label*='stop' i]"
             )
+            is_streaming = stop_btn.count() > 0 and stop_btn.first.is_visible()
+            if is_streaming:
+                has_streamed = True
+                continue
 
-            if is_new and current_last_text and not is_streaming:
-                md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
-                if md_el.count() > 0:
-                    response_text = md_el.first.inner_text().strip()
-                else:
-                    response_text = current_last_text
+            current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
+            current_count = current_msgs.count()
+            if current_count > 0:
+                last_msg = current_msgs.last
+                try:
+                    new_last_id = last_msg.evaluate(
+                        "el => el.getAttribute('data-dil-message-id') || el.getAttribute('data-message-id') || el.closest('[data-dil-message-id]')?.getAttribute('data-dil-message-id') || ''"
+                    )
+                except Exception:
+                    new_last_id = ""
 
-                if response_text:
-                    if current_count > initial_count or (new_last_id and new_last_id != last_msg_id) or response_text != initial_last_text:
-                        break
+                try:
+                    current_last_text = last_msg.inner_text().strip()
+                except Exception:
+                    current_last_text = ""
+
+                is_new = (
+                    (new_last_id and last_msg_id and new_last_id != last_msg_id)
+                    or current_count > initial_count
+                    or (has_streamed and current_last_text != initial_last_text)
+                    or (current_last_text and current_last_text != initial_last_text and not is_streaming)
+                )
+
+                if is_new and current_last_text and not is_streaming:
+                    md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
+                    if md_el.count() > 0:
+                        response_text = md_el.first.inner_text().strip()
+                    else:
+                        response_text = current_last_text
+
+                    if response_text:
+                        if current_count > initial_count or (new_last_id and new_last_id != last_msg_id) or response_text != initial_last_text:
+                            break
+        except Exception as e:
+            if "closed" in str(e).lower() or page.is_closed():
+                logger(f"  ⚠️ Browser/Page closed during wait: {e}")
+                return None, "FAILED"
 
     if not response_text:
         current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
@@ -1042,6 +1070,10 @@ def send_question_and_get_answer(
             response_text = md_el.first.inner_text().strip() if md_el.count() > 0 else last_msg.inner_text().strip()
 
     clean_ans = clean_chatgpt_answer(response_text)
+    if is_chatgpt_error_response(clean_ans):
+        logger(f"  ⚠️ ChatGPT returned an error message ('{clean_ans}'). Left as PENDING.")
+        return None, "FAILED"
+
     if is_unreasonable_response(clean_ans):
         logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF'): {clean_ans}")
         return None, "WTF"

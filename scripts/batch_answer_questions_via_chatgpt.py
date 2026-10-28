@@ -144,6 +144,18 @@ def run_batch_answering(
                 opts_display = f" | Options: {options}" if options else ""
                 print(f"[{idx}/{total_found}] '{qtext[:75]}'{opts_display}")
 
+                if page.is_closed():
+                    print("  🔄 Page was closed. Launching new tab and navigating to conversation...")
+                    try:
+                        page = context.new_page()
+                        navigate_to_conversation(page, url=chatgpt_url)
+                        dismiss_chatgpt_overlays(page)
+                        page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=15000)
+                    except Exception as e:
+                        print(f"  ✗ Failed to recover browser tab: {e}")
+                        failed_count += 1
+                        continue
+
                 ans, status = send_question_and_get_answer(
                     page,
                     question_text=qtext,
@@ -169,17 +181,26 @@ def run_batch_answering(
                 elif status == "OK" and ans:
                     cur.execute("""
                         UPDATE screening_questions
-                        SET answer = %s, status = 'ANSWERED', updated_at = CURRENT_TIMESTAMP
+                        SET answer = %s, status = 'AI_SUGGESTED', updated_at = CURRENT_TIMESTAMP
                         WHERE id = %s;
                     """, (ans, qid))
                     conn.commit()
                     remove_from_deleted_question_keys([qkey, qid, qtext])
                     answered_count += 1
-                    print(f"  ✓ [ANSWERED] Saved: '{ans}'")
+                    print(f"  ✓ [AI_SUGGESTED] Saved suggestion: '{ans}'")
 
                 else:
                     failed_count += 1
                     print(f"  ✗ [FAILED] Could not resolve answer (status: {status}). Kept PENDING.")
+                    try:
+                        page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=3000)
+                    except Exception:
+                        print("  🔄 Re-navigating to ChatGPT conversation to recover session...")
+                        try:
+                            navigate_to_conversation(page, url=chatgpt_url)
+                            dismiss_chatgpt_overlays(page)
+                        except Exception:
+                            pass
 
                 if idx < total_found:
                     time.sleep(delay)

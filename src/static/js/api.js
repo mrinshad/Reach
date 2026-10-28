@@ -183,7 +183,7 @@ async function loadDashboardData() {
       await fetchSentPosts();
     }
   } else if (state.activeTab === 'tabAnalytics') {
-    await loadAnalytics(state.analyticsDays || 30);
+    await loadAnalytics(typeof state.analyticsDays === 'number' ? state.analyticsDays : 30);
   }
 }
 
@@ -247,7 +247,7 @@ async function fetchStats() {
       const qbPending = stats.question_bank_pending !== undefined ? stats.question_bank_pending : 0;
       countQBankEl.textContent = qbPending;
       countQBankEl.title = `${qbPending} screening questions unanswered`;
-      countQBankEl.style.display = '';
+      countQBankEl.style.display = qbPending > 0 ? 'inline-flex' : 'none';
     }
 
     // 4. Review & Drafts: drafted count ready for review
@@ -366,7 +366,7 @@ function refreshActiveTabRealtime(stats) {
     }
   } else if (activeTab === 'tabAnalytics') {
     if (typeof loadAnalytics === 'function') {
-      loadAnalytics(state.analyticsDays || 30);
+      loadAnalytics(typeof state.analyticsDays === 'number' ? state.analyticsDays : 30);
     }
   }
 }

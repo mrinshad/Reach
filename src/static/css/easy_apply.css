@@ -521,11 +521,21 @@
 /* Column width classes (applied via HTML colgroup or th/td attributes) */
 .col-check  { width: 36px; }
 .col-role   { /* fluid auto — gets remaining space */ }
-.col-location { width: 125px; }
+.col-location { width: 160px; min-width: 130px; }
 .col-exp    { width: 80px; }
 .col-status { width: 125px; }
 .col-date   { width: 95px; }
 .col-actions { width: 115px; text-align: right; }
+
+@keyframes easyRowGlow {
+  0% { background: rgba(56, 189, 248, 0.35) !important; outline: 1px solid rgba(56, 189, 248, 0.6); }
+  50% { background: rgba(56, 189, 248, 0.15) !important; outline: 1px solid rgba(56, 189, 248, 0.3); }
+  100% { background: transparent; outline: 1px solid transparent; }
+}
+
+.easy-row-highlight {
+  animation: easyRowGlow 3s ease-out forwards;
+}
 
 .easy-role-cell {
   display: flex;
@@ -589,7 +599,59 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 125px;
+  max-width: 155px;
+}
+
+.easy-location-chip {
+  font-size: 0.72rem;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 9999px;
+  padding: 0.08rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 500;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.easy-location-chip:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.easy-location-badge {
+  font-size: 0.74rem;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 6px;
+  padding: 0.22rem 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  max-width: 155px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: all 0.15s ease;
+}
+
+.easy-location-badge .loc-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.easy-location-badge.is-remote {
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  font-weight: 500;
 }
 
 .easy-date-text {

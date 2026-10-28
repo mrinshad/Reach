@@ -443,6 +443,7 @@ def upsert_screening_question(
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
                     status = EXCLUDED.status,
+                    answer = COALESCE(EXCLUDED.answer, screening_questions.answer),
                     options = CASE 
                         WHEN array_length(EXCLUDED.options, 1) > 0 THEN EXCLUDED.options
                         ELSE screening_questions.options
@@ -549,13 +550,15 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
         SELECT 
             COUNT(*) as total,
             COUNT(CASE WHEN status = 'ANSWERED' THEN 1 END) as answered,
+            COUNT(CASE WHEN status = 'AI_SUGGESTED' THEN 1 END) as ai_suggested,
             COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending
         FROM screening_questions;
     """)
     stat_row = cur.fetchone()
     total_cnt = stat_row[0] if stat_row else 0
     ans_cnt = stat_row[1] if stat_row else 0
-    pending_cnt = stat_row[2] if stat_row else 0
+    ai_cnt = stat_row[2] if stat_row else 0
+    pending_cnt = stat_row[3] if stat_row else 0
 
     cur.close()
     conn.close()
@@ -564,6 +567,7 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
         "saved_count": saved_count,
         "total_count": total_cnt,
         "answered_count": ans_cnt,
+        "ai_suggested_count": ai_cnt,
         "pending_count": pending_cnt,
     }
 
@@ -628,16 +632,27 @@ def get_aggregated_question_bank(
     questions = []
     total_count = len(rows)
     answered_count = 0
+    ai_suggested_count = 0
+    unreasonable_count = 0
     pending_count = 0
 
     for r in rows:
         ans = (r[4] or "").strip()
         status_val = (r[9] or "PENDING").upper()
-        is_ans = (status_val == "ANSWERED") or bool(ans) or (ans == "__EMPTY__")
         opts = list(r[11]) if (len(r) > 11 and r[11]) else []
 
-        if is_ans:
+        # Auto-heal: If marked PENDING but has a non-empty answer, treat as ANSWERED
+        if status_val == "PENDING" and (ans != "" or ans == "__EMPTY__"):
+            status_val = "ANSWERED"
+
+        if status_val == "ANSWERED":
             answered_count += 1
+        elif status_val == "AI_SUGGESTED":
+            ai_suggested_count += 1
+        elif status_val == "UNREASONABLE":
+            unreasonable_count += 1
+        elif status_val == "PENDING":
+            pending_count += 1
         else:
             pending_count += 1
 
@@ -651,7 +666,7 @@ def get_aggregated_question_bank(
             "default_placeholder": r[6] or "Enter your answer...",
             "occurrences": r[7] or 1,
             "sample_jobs": r[8] or [],
-            "status": "ANSWERED" if is_ans else "PENDING",
+            "status": status_val,
             "updated_at": r[10].isoformat() if r[10] else None,
             "options": opts,
         }
@@ -659,15 +674,19 @@ def get_aggregated_question_bank(
         # Apply status filter if requested
         if status and isinstance(status, str):
             stat_low = status.lower().strip()
-            if stat_low in ("pending", "unanswered") and is_ans:
+            if stat_low in ("pending", "unanswered") and status_val != "PENDING":
                 continue
-            elif stat_low in ("answered", "completed") and not is_ans:
+            elif stat_low in ("answered", "completed") and status_val != "ANSWERED":
+                continue
+            elif stat_low in ("ai_suggested", "suggested", "ai") and status_val != "AI_SUGGESTED":
+                continue
+            elif stat_low in ("unreasonable", "wtf") and status_val != "UNREASONABLE":
                 continue
 
         # Apply category filter if requested
         if category and isinstance(category, str):
             cat_low = category.lower().strip()
-            if cat_low in ("unanswered", "pending") and is_ans:
+            if cat_low in ("unanswered", "pending") and status_val == "ANSWERED":
                 continue
             elif cat_low not in ("all", "unanswered", "pending") and q_item["category"] != cat_low:
                 continue
@@ -688,6 +707,8 @@ def get_aggregated_question_bank(
     return {
         "total_count": total_count,
         "answered_count": answered_count,
+        "ai_suggested_count": ai_suggested_count,
+        "unreasonable_count": unreasonable_count,
         "pending_count": pending_count,
         "questions": questions,
     }
@@ -737,26 +758,42 @@ def lookup_answer_for_question(question_text: str) -> Tuple[Optional[str], Optio
     """, (norm_key,))
     row = cur.fetchone()
 
-    if row and ((row[4] is not None and row[4] != "") or row[6] == "ANSWERED"):
-        ans_val = (row[4] or "").strip()
-        cur.close()
-        conn.close()
-        return ans_val, {
-            "id": row[0],
-            "key": row[1],
-            "question": row[2],
-            "category": row[3],
-            "answer": ans_val,
-            "is_standard": row[5],
-            "status": row[6],
-            "options": list(row[7]) if (len(row) > 7 and row[7]) else [],
-        }
+    if row:
+        if row[6] == "ANSWERED":
+            ans_val = (row[4] or "").strip()
+            cur.close()
+            conn.close()
+            return ans_val, {
+                "id": row[0],
+                "key": row[1],
+                "question": row[2],
+                "category": row[3],
+                "answer": ans_val,
+                "is_standard": row[5],
+                "status": row[6],
+                "options": list(row[7]) if (len(row) > 7 and row[7]) else [],
+            }
+        else:
+            # If the exact question exists in DB but is NOT confirmed ANSWERED (e.g. AI_SUGGESTED, PENDING),
+            # DO NOT fall back to fuzzy aliases. Treat it as awaiting manual review.
+            cur.close()
+            conn.close()
+            return None, {
+                "id": row[0],
+                "key": row[1],
+                "question": row[2],
+                "category": row[3],
+                "answer": (row[4] or "").strip(),
+                "is_standard": row[5],
+                "status": row[6],
+                "options": list(row[7]) if (len(row) > 7 and row[7]) else [],
+            }
 
-    # Fetch all standard and answered questions for smart alias matching
+    # Fetch all confirmed answered questions for smart alias matching
     cur.execute("""
         SELECT id, question_key, question_text, category, answer, is_standard, status, options
         FROM screening_questions
-        WHERE status = 'ANSWERED' OR (answer IS NOT NULL AND answer != '');
+        WHERE status = 'ANSWERED';
     """)
     answered_pool = cur.fetchall()
     cur.close()

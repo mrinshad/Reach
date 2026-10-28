@@ -295,6 +295,9 @@ function selectReviewPost(post) {
   const emailEl = document.getElementById('reviewTargetEmail');
   if (emailEl) emailEl.textContent = (post.contact_emails || []).join(', ') || 'None';
 
+  const locEl = document.getElementById('reviewTargetLocation');
+  if (locEl) locEl.textContent = post.location || 'Not Specified';
+
   const expLabel = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
   const expEl = document.getElementById('reviewExpPill');
   if (expEl) expEl.textContent = expLabel;
@@ -934,13 +937,54 @@ async function confirmCancelWithReason() {
       });
       if (res.ok) {
         const data = await res.json();
-        showToast(`✕ Cancelled ${data.count || postIds.length} applications: ${reason}`, 'info');
+        const count = data.count || postIds.length;
         closeCancelReasonModal();
         state.selectedDraftIds.clear();
         updateSelectedDraftsUI();
         await fetchReviewPosts();
         await fetchSentPosts();
         if (typeof loadDashboardData === 'function') loadDashboardData();
+
+        const undoAction = {
+          label: 'Undo',
+          payload: { post_ids: postIds, target_status: 'EMAIL_GENERATED' },
+          onClick: async () => {
+            try {
+              const revRes = await fetch('/api/posts/revert-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ post_ids: postIds }),
+              });
+              if (revRes.ok) {
+                showToast(`✓ Restored ${count} application(s) to Review queue`, 'success');
+                await fetchReviewPosts();
+                await fetchSentPosts();
+              }
+            } catch (e) {
+              showToast('Error restoring drafts: ' + e.message, 'error');
+            }
+          },
+        };
+
+        if (typeof sendAppNotification === 'function') {
+          sendAppNotification({
+            title: 'Applications Cancelled',
+            message: `Cancelled ${count} applications: ${reason}`,
+            type: 'warn',
+            action: undoAction,
+          });
+        }
+        if (typeof showSnackbar === 'function') {
+          showSnackbar({
+            title: 'Applications Cancelled',
+            message: `Cancelled ${count} applications: ${reason}`,
+            type: 'warn',
+            duration: 14000,
+            action: undoAction,
+          });
+        } else {
+          showToast(`✕ Cancelled ${count} applications: ${reason}`, 'info');
+        }
       } else {
         const err = await res.json();
         showAlert('Error', err.detail || 'Could not cancel applications.');
@@ -965,7 +1009,6 @@ async function confirmCancelWithReason() {
       body: JSON.stringify({ reason }),
     });
     if (res.ok) {
-      showToast(`✕ Application cancelled: ${reason}`, 'info');
       closeCancelReasonModal();
       if (state.activeReviewPost && state.activeReviewPost.id === postId) {
         state.activeReviewPost = null;
@@ -980,6 +1023,44 @@ async function confirmCancelWithReason() {
           document.getElementById('workspacePanel')?.classList.add('hidden');
           document.getElementById('emptyReviewState')?.classList.remove('hidden');
         }
+      }
+
+      const undoAction = {
+        label: 'Undo',
+        payload: { post_ids: [postId], target_status: 'EMAIL_GENERATED' },
+        onClick: async () => {
+          try {
+            const revRes = await fetch(`/api/posts/${postId}/revert`, { method: 'POST' });
+            if (revRes.ok) {
+              showToast('✓ Restored application to Review queue', 'success');
+              await fetchReviewPosts();
+              await fetchSentPosts();
+              await openPostInReview(postId);
+            }
+          } catch (e) {
+            showToast('Error restoring draft: ' + e.message, 'error');
+          }
+        },
+      };
+
+      if (typeof sendAppNotification === 'function') {
+        sendAppNotification({
+          title: 'Application Cancelled',
+          message: `Application cancelled: ${reason}`,
+          type: 'warn',
+          action: undoAction,
+        });
+      }
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Application Cancelled',
+          message: `Application cancelled: ${reason}`,
+          type: 'warn',
+          duration: 12000,
+          action: undoAction,
+        });
+      } else {
+        showToast(`✕ Application cancelled: ${reason}`, 'info');
       }
     } else {
       const err = await res.json();

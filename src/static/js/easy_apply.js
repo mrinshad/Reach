@@ -307,7 +307,7 @@ function renderEasyApplyTable() {
     const dateText = typeof formatPostDateTimeWithRelative === 'function'
       ? formatPostDateTimeWithRelative(post)
       : (typeof formatDateTime === 'function' ? formatDateTime(post.created_at) : (post.created_at || '—'));
-    const locText = escapeHtml(post.location || 'India');
+    const locText = escapeHtml(post.location || 'Not Specified');
 
     let actionBtn = `<button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>`;
     if (post.status === 'APPLIED') {
@@ -340,6 +340,10 @@ function renderEasyApplyTable() {
               <span style="opacity: 0.7;">🏢</span>
               <span>${escapeHtml(post.author_name || 'Company')}</span>
             </span>
+            <span class="easy-location-chip" title="Location: ${locText}">
+              <span style="opacity: 0.85;">📍</span>
+              <span>${locText}</span>
+            </span>
             ${post.status === 'NOT_FOUND' && post.rejection_reason ? `<span class="col-closed-reason" style="color: #94a3b8; font-size: 0.68rem; background: rgba(148, 163, 184, 0.12); padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.22); line-height: 1.3;" title="${escapeHtml(post.rejection_reason)}">🚫 ${escapeHtml(post.rejection_reason)}</span>` : ''}
           </div>
           <span class="easy-role-subline">
@@ -349,9 +353,9 @@ function renderEasyApplyTable() {
         </div>
       </td>
       <td class="col-location">
-        <span class="easy-location-text" title="${escapeHtml(post.location || 'India')}">
-          <span style="opacity: 0.7;">📍</span>
-          <span>${locText}</span>
+        <span class="easy-location-badge ${post.location && post.location.toLowerCase().includes('remote') ? 'is-remote' : ''}" title="${locText}">
+          <span style="opacity: 0.85; flex-shrink: 0;">📍</span>
+          <span class="loc-label">${locText}</span>
         </span>
       </td>
       <td class="col-exp">
@@ -439,6 +443,10 @@ async function triggerEasyApplyCrawl() {
 
 async function dismissSingleEasyJob(postId, event) {
   if (event) event.stopPropagation();
+  const post = easyApplyPosts.find((p) => p.id === postId);
+  const prevStatus = post ? post.status : 'DISCOVERED';
+  const title = post ? (post.author_headline || post.author_name || 'Job') : 'Job';
+
   try {
     const res = await fetch(`/api/posts/${postId}/reject`, {
       method: 'POST',
@@ -446,7 +454,6 @@ async function dismissSingleEasyJob(postId, event) {
       body: JSON.stringify({ reason: 'Dismissed by user' }),
     });
     if (res.ok) {
-      const post = easyApplyPosts.find((p) => p.id === postId);
       if (post) {
         post.status = 'REJECTED';
         post.rejection_reason = 'Dismissed by user';
@@ -454,7 +461,35 @@ async function dismissSingleEasyJob(postId, event) {
       selectedEasyJobIds.delete(postId);
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast('✓ Job dismissed from queue', 'success');
+
+      const undoAction = {
+        label: 'Undo',
+        payload: { post_ids: [postId], target_status: prevStatus },
+        onClick: async () => {
+          await revertPostsToStatus([postId], prevStatus);
+        },
+      };
+
+      if (typeof sendAppNotification === 'function') {
+        sendAppNotification({
+          title: 'Job Dismissed',
+          message: `Dismissed "${title}"`,
+          type: 'warn',
+          action: undoAction,
+        });
+      }
+
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Job Dismissed',
+          message: `Dismissed "${title}"`,
+          type: 'warn',
+          duration: 12000,
+          action: undoAction,
+        });
+      } else {
+        showToast('✓ Job dismissed from queue', 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Dismiss Failed', err.detail || 'Could not dismiss job');
@@ -502,22 +537,42 @@ function copyEasyJobLink(postId) {
   });
 }
 
-function openEasyDetailsModal(postId) {
-  const post = easyApplyPosts.find((p) => p.id === postId);
+async function openEasyDetailsModal(postOrId) {
+  let post = null;
+  if (typeof postOrId === 'object' && postOrId !== null) {
+    post = postOrId;
+  } else if (typeof postOrId === 'string') {
+    post = easyApplyPosts.find((p) => p.id === postOrId);
+    if (!post) {
+      try {
+        const res = await fetch(`/api/posts/${postOrId}`);
+        if (res.ok) {
+          post = await res.json();
+        }
+      } catch (err) {
+        console.error('Failed to load post for easy modal', err);
+      }
+    }
+  }
   if (!post) return;
   activeEasyModalPost = post;
+  if (Array.isArray(easyApplyPosts) && !easyApplyPosts.some((p) => p.id === post.id)) {
+    easyApplyPosts.unshift(post);
+  }
 
   const modal = document.getElementById('modalEasyDetails');
   if (!modal) return;
 
   const comp = post.author_name || 'N/A';
-  const loc = post.location || 'India';
+  const loc = post.location || 'Not Specified';
 
   document.getElementById('easyModalJobTitle').textContent = post.author_headline || 'Job Details';
   const headerComp = document.getElementById('easyModalHeaderCompany');
   const headerLoc = document.getElementById('easyModalHeaderLocation');
   if (headerComp) headerComp.textContent = comp;
-  if (headerLoc) headerLoc.textContent = loc;
+  if (headerLoc) {
+    headerLoc.innerHTML = `<span style="color: #38bdf8; display: inline-flex; align-items: center; gap: 0.2rem;">📍 ${escapeHtml(loc)}</span>`;
+  }
 
   document.getElementById('easyModalCompany').textContent = comp;
   document.getElementById('easyModalLocation').textContent = loc;
@@ -579,6 +634,163 @@ function triggerEasyModalApply() {
     closeEasyDetailsModal();
     triggerSingleEasyApply(id);
   }
+}
+
+async function navigateToJobInEasyApply(jobLabel, event, locHint) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  if (!jobLabel || !String(jobLabel).trim()) return;
+
+  let rawLabel = String(jobLabel).trim();
+  let locationFilter = String(locHint || '').trim();
+
+  // If rawLabel has embedded location marker: "Title @ Company • 📍 Location"
+  if (rawLabel.includes(' • 📍 ')) {
+    const parts = rawLabel.split(' • 📍 ');
+    rawLabel = (parts[0] || '').trim();
+    if (!locationFilter) locationFilter = (parts[1] || '').trim();
+  } else if (rawLabel.includes(' • ')) {
+    const parts = rawLabel.split(' • ');
+    rawLabel = (parts[0] || '').trim();
+    if (!locationFilter) locationFilter = (parts[1] || '').trim();
+  }
+
+  const lowerLabel = rawLabel.toLowerCase();
+
+  // If generic system marker
+  if (lowerLabel === 'direct application flow' || lowerLabel === 'standard candidate profile question') {
+    if (typeof showToast === 'function') {
+      showToast('This is a core standard question found across multiple applications.', 'info');
+    }
+    return;
+  }
+
+  // Parse label into title and company if formatted as "Title @ Company"
+  let title = rawLabel;
+  let company = '';
+  if (rawLabel.includes(' @ ')) {
+    const parts = rawLabel.split(' @ ');
+    title = (parts[0] || '').trim();
+    company = (parts[1] || '').trim();
+  }
+
+  // Feedback to user
+  if (typeof showToast === 'function') {
+    const locMsg = locationFilter ? ` (📍 ${locationFilter})` : '';
+    showToast(`Locating job: "${rawLabel}"${locMsg}...`, 'info', 1800);
+  }
+
+  // Score candidate post based on company, title, and location matching
+  const scorePost = (p) => {
+    let score = 0;
+    const pComp = (p.author_name || '').toLowerCase();
+    const pTitle = (p.author_headline || '').toLowerCase();
+    const pLoc = (p.location || '').toLowerCase();
+
+    if (company && pComp.includes(company.toLowerCase())) score += 10;
+    if (company && pComp === company.toLowerCase()) score += 5;
+    if (title && pTitle.includes(title.toLowerCase())) score += 10;
+    if (title && pTitle === title.toLowerCase()) score += 5;
+    if (locationFilter && pLoc && pLoc.includes(locationFilter.toLowerCase())) score += 25;
+    return score;
+  };
+
+  // 1. Try to find the post in memory first
+  let foundPost = null;
+  if (Array.isArray(easyApplyPosts) && easyApplyPosts.length > 0) {
+    let bestScore = 0;
+    easyApplyPosts.forEach((p) => {
+      const s = scorePost(p);
+      if (s > bestScore) {
+        bestScore = s;
+        foundPost = p;
+      }
+    });
+  }
+
+  // 2. If not found in memory, query API
+  if (!foundPost) {
+    try {
+      const searchTarget = company || title;
+      const res = await fetch(`/api/posts?category=EASY_APPLY&status=ALL&search=${encodeURIComponent(searchTarget)}&limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        const candidatePosts = data.posts || [];
+
+        let bestScore = 0;
+        candidatePosts.forEach((p) => {
+          const s = scorePost(p);
+          if (s > bestScore) {
+            bestScore = s;
+            foundPost = p;
+          }
+        });
+
+        if (!foundPost && candidatePosts.length > 0) {
+          foundPost = candidatePosts[0];
+        }
+      }
+    } catch (err) {
+      console.error('Error querying job by sample label', err);
+    }
+  }
+
+  // Fallback 3: If not found, try searching by title directly
+  if (!foundPost && title && title !== company) {
+    try {
+      const cleanTitle = title.replace(/[^\w\s]/g, ' ').trim().slice(0, 30);
+      const res = await fetch(`/api/posts?category=EASY_APPLY&status=ALL&search=${encodeURIComponent(cleanTitle)}&limit=25`);
+      if (res.ok) {
+        const data = await res.json();
+        const candidatePosts = data.posts || [];
+        if (candidatePosts.length > 0) {
+          foundPost = candidatePosts[0];
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (!foundPost) {
+    if (typeof showToast === 'function') {
+      showToast(`Could not find job details for "${rawLabel}" in Easy Apply.`, 'warning');
+    }
+    return;
+  }
+
+  // Close any modal that might currently be open
+  if (typeof closeScreeningModal === 'function') closeScreeningModal();
+  if (typeof closeQuestionBankModal === 'function') closeQuestionBankModal();
+
+  // Switch to Easy Apply section (#easy-apply)
+  if (typeof switchTab === 'function') {
+    switchTab('easy-apply');
+  } else {
+    state.activeTab = 'tabEasyApply';
+    const panel = document.getElementById('tabEasyApply');
+    if (panel) panel.classList.remove('hidden');
+  }
+
+  try {
+    if (window.location.hash !== '#easy-apply') {
+      window.location.hash = '#easy-apply';
+    }
+  } catch (_) {}
+
+  // Open the Easy Apply Job Details modal immediately (shows full Job Description!)
+  await openEasyDetailsModal(foundPost);
+
+  // If table row exists in the DOM, scroll to it and highlight
+  setTimeout(() => {
+    const rowEl = document.getElementById(`easy-row-${foundPost.id}`);
+    if (rowEl) {
+      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      rowEl.classList.remove('easy-row-highlight');
+      void rowEl.offsetWidth; // trigger reflow
+      rowEl.classList.add('easy-row-highlight');
+    }
+  }, 250);
 }
 
 // Batch actions
@@ -699,7 +911,35 @@ async function batchDismissEasyJobs() {
       selectedEasyJobIds.clear();
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast(`✓ Dismissed ${size} jobs from queue`, 'success');
+
+      const undoAction = {
+        label: 'Undo',
+        payload: { post_ids: ids, target_status: 'DISCOVERED' },
+        onClick: async () => {
+          await revertPostsToStatus(ids, 'DISCOVERED');
+        },
+      };
+
+      if (typeof sendAppNotification === 'function') {
+        sendAppNotification({
+          title: 'Jobs Dismissed',
+          message: `Dismissed ${size} job(s) from queue`,
+          type: 'warn',
+          action: undoAction,
+        });
+      }
+
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Jobs Dismissed',
+          message: `Dismissed ${size} job(s) from queue`,
+          type: 'warn',
+          duration: 14000,
+          action: undoAction,
+        });
+      } else {
+        showToast(`✓ Dismissed ${size} jobs from queue`, 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Dismiss Failed', err.detail || 'Could not dismiss selected jobs');
@@ -858,6 +1098,9 @@ async function setEasyPostStatus(postId, newStatus, event) {
   if (event) event.stopPropagation();
   const wrap = document.getElementById(`status-wrap-${postId}`);
   if (wrap) wrap.classList.remove('open');
+  const post = easyApplyPosts.find((p) => p.id === postId);
+  const prevStatus = post ? post.status : 'DISCOVERED';
+  const title = post ? (post.author_headline || post.author_name || 'Job') : 'Job';
 
   try {
     const res = await fetch(`/api/posts/${postId}/status`, {
@@ -868,7 +1111,6 @@ async function setEasyPostStatus(postId, newStatus, event) {
 
     if (res.ok) {
       const data = await res.json();
-      const post = easyApplyPosts.find((p) => p.id === postId);
       if (post) {
         post.status = newStatus;
       }
@@ -878,7 +1120,37 @@ async function setEasyPostStatus(postId, newStatus, event) {
       }
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast(`✓ Status updated to ${newStatus}`, 'success');
+
+      if (newStatus === 'REJECTED') {
+        const undoAction = {
+          label: 'Undo',
+          payload: { post_ids: [postId], target_status: prevStatus },
+          onClick: async () => {
+            await revertPostsToStatus([postId], prevStatus);
+          },
+        };
+        if (typeof sendAppNotification === 'function') {
+          sendAppNotification({
+            title: 'Job Dismissed',
+            message: `Moved "${title}" to Dismissed`,
+            type: 'warn',
+            action: undoAction,
+          });
+        }
+        if (typeof showSnackbar === 'function') {
+          showSnackbar({
+            title: 'Job Dismissed',
+            message: `Moved "${title}" to Dismissed`,
+            type: 'warn',
+            duration: 12000,
+            action: undoAction,
+          });
+        } else {
+          showToast(`✓ Status updated to ${newStatus}`, 'success');
+        }
+      } else {
+        showToast(`✓ Status updated to ${newStatus}`, 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Failed to Update Status', err.detail || 'Could not update status');
@@ -907,7 +1179,37 @@ async function batchSetEasyStatus(newStatus) {
       selectedEasyJobIds.clear();
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+
+      if (newStatus === 'REJECTED') {
+        const undoAction = {
+          label: 'Undo',
+          payload: { post_ids: ids, target_status: 'DISCOVERED' },
+          onClick: async () => {
+            await revertPostsToStatus(ids, 'DISCOVERED');
+          },
+        };
+        if (typeof sendAppNotification === 'function') {
+          sendAppNotification({
+            title: 'Batch Dismissed',
+            message: `Dismissed ${ids.length} jobs from queue`,
+            type: 'warn',
+            action: undoAction,
+          });
+        }
+        if (typeof showSnackbar === 'function') {
+          showSnackbar({
+            title: 'Batch Dismissed',
+            message: `Dismissed ${ids.length} jobs from queue`,
+            type: 'warn',
+            duration: 14000,
+            action: undoAction,
+          });
+        } else {
+          showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+        }
+      } else {
+        showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Batch Update Failed', err.detail || 'Could not update jobs');
@@ -1524,9 +1826,9 @@ async function fetchQuestionBank(renderAfter = true) {
       });
     }
 
-    // Update Question Bank button counter
+    // Update Question Bank button counter (shows answered questions ready for automation)
     const countEl = document.getElementById('totalQuestionsCount');
-    if (countEl) countEl.textContent = data.total_count || 0;
+    if (countEl) countEl.textContent = data.answered_count !== undefined ? data.answered_count : (data.total_count || 0);
 
     const allPillCount = document.getElementById('qbankCountAll');
     if (allPillCount) allPillCount.textContent = data.total_count || 0;
@@ -1657,8 +1959,24 @@ function renderQuestionBankList() {
       : `<span class="qbank-badge qbank-badge-pending">⚠️ Pending Answer</span>`;
 
     const sampleJobInfo = !q.is_standard && q.sample_jobs && q.sample_jobs.length > 0
-      ? `<div class="qbank-sample-jobs" title="${escapeHtml(q.sample_jobs.join(' • '))}">
-           <span>💼</span> <span>${escapeHtml(q.sample_jobs.slice(0, 2).join(' • '))}</span>
+      ? `<div class="qbank-sample-jobs">
+           <span style="font-weight: 600; color: var(--text-dim); font-size: 0.72rem;">Found on:</span>
+           ${q.sample_jobs.slice(0, 2).map(j => {
+             const jStr = String(j || '').trim();
+             let rComp = jStr;
+             let rLoc = '';
+             if (jStr.includes(' • 📍 ')) {
+               const pts = jStr.split(' • 📍 ');
+               rComp = (pts[0] || '').trim();
+               rLoc = (pts[1] || '').trim();
+             } else if (jStr.includes(' • ')) {
+               const pts = jStr.split(' • ');
+               rComp = (pts[0] || '').trim();
+               rLoc = (pts[1] || '').trim();
+             }
+             const tip = rLoc ? `Click to view '${escapeHtml(rComp)}' (📍 ${escapeHtml(rLoc)}) on Easy Apply section` : `Click to view '${escapeHtml(rComp)}' on Easy Apply section`;
+             return `<button type="button" class="sample-job-tag is-clickable" data-job="${escapeHtml(rComp)}" data-loc="${escapeHtml(rLoc)}" onclick="handleSampleJobClick(this, event)" title="${tip}"><span style="opacity: 0.85; flex-shrink: 0;">💼</span><span class="sample-job-name">${escapeHtml(rComp)}</span>${rLoc ? `<span class="sample-job-location-badge">📍 ${escapeHtml(rLoc)}</span>` : ''}<span class="sample-job-arrow" aria-hidden="true">↗</span></button>`;
+           }).join('')}
          </div>`
       : '';
 
@@ -1849,4 +2167,6 @@ window.applyToCurrentScreeningPost = applyToCurrentScreeningPost;
 window.triggerRerunScreenedApplications = triggerRerunScreenedApplications;
 window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
 window.checkRateLimitSafeguard = checkRateLimitSafeguard;
+window.navigateToJobInEasyApply = navigateToJobInEasyApply;
+window.handleSampleJobClick = handleSampleJobClick;
 

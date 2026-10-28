@@ -300,16 +300,56 @@ function playNotificationSound() {
   }
 }
 
-function sendAppNotification({ title, message, type = 'info' }) {
+const registeredNotificationActions = new Map();
+
+async function revertPostsToStatus(postIds, targetStatus = 'DISCOVERED') {
+  if (!postIds || postIds.length === 0) return;
+  try {
+    const res = await fetch('/api/posts/status-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: postIds, status: targetStatus, reason: '' }),
+    });
+    if (res.ok) {
+      if (typeof showToast === 'function') {
+        showToast(`✓ Restored ${postIds.length} job(s) to Ready to Apply`, 'success');
+      }
+      if (typeof fetchEasyApplyPosts === 'function') fetchEasyApplyPosts();
+      if (typeof fetchDiscoveredPosts === 'function') fetchDiscoveredPosts();
+      if (typeof fetchReviewPosts === 'function') fetchReviewPosts();
+      if (typeof fetchStats === 'function') fetchStats();
+    } else {
+      const err = await res.json();
+      if (typeof showToast === 'function') {
+        showToast('Could not restore jobs: ' + (err.detail || err.message), 'error');
+      }
+    }
+  } catch (err) {
+    if (typeof showToast === 'function') {
+      showToast('Error restoring jobs: ' + err.message, 'error');
+    }
+  }
+}
+window.revertPostsToStatus = revertPostsToStatus;
+
+function sendAppNotification({ title, message, type = 'info', action = null }) {
+  const notifId = 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
   const item = {
-    id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    id: notifId,
     title: title || 'System Update',
     message: message || '',
     type: type,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     date: new Date().toLocaleDateString(),
     read: false,
+    hasAction: !!action,
+    actionLabel: action ? (action.label || 'Undo') : null,
+    payload: action ? (action.payload || null) : null,
   };
+
+  if (action && typeof action.onClick === 'function') {
+    registeredNotificationActions.set(notifId, action.onClick);
+  }
 
   notificationState.list.unshift(item);
   if (notificationState.list.length > 50) {
@@ -411,10 +451,47 @@ function renderNotificationCenter() {
         <div class="notification-item-title">${escapeHtml(n.title)}</div>
         <div class="notification-item-msg">${escapeHtml(n.message)}</div>
         <div class="notification-item-time">${n.date === new Date().toLocaleDateString() ? n.time : n.date + ' ' + n.time}</div>
+        ${n.hasAction && !n.undone ? `
+          <div class="notification-item-actions">
+            <button class="btn-notif-undo" onclick="handleNotificationAction('${n.id}', event)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              <span>${escapeHtml(n.actionLabel || 'Undo')}</span>
+            </button>
+          </div>
+        ` : ''}
       </div>
     </div>
   `).join('');
 }
+
+async function handleNotificationAction(id, event) {
+  if (event) event.stopPropagation();
+  const fn = registeredNotificationActions.get(id);
+  if (typeof fn === 'function') {
+    try {
+      await fn();
+    } catch (err) {
+      console.error('Error executing notification action callback:', err);
+    }
+  } else {
+    const item = notificationState.list.find(n => n.id === id);
+    if (item && item.payload && item.payload.post_ids) {
+      await revertPostsToStatus(item.payload.post_ids, item.payload.target_status || 'DISCOVERED');
+    }
+  }
+
+  // Mark action as undone
+  const item = notificationState.list.find(n => n.id === id);
+  if (item) {
+    item.undone = true;
+    item.message += ' (Undone)';
+    try {
+      localStorage.setItem('reach_notifications', JSON.stringify(notificationState.list));
+    } catch (_) {}
+    renderNotificationCenter();
+  }
+}
+window.handleNotificationAction = handleNotificationAction;
 
 function clearAllNotifications() {
   notificationState.list = [];

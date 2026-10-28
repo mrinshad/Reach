@@ -14,8 +14,10 @@ const qbankState = {
   questions: [],
   totalCount: 0,
   answeredCount: 0,
+  aiSuggestedCount: 0,
+  unreasonableCount: 0,
   pendingCount: 0,
-  statusFilter: 'all', // 'all' | 'pending' | 'answered'
+  statusFilter: 'all', // 'all' | 'ai_suggested' | 'pending' | 'answered' | 'unreasonable'
   categoryFilter: 'all',
   searchQuery: '',
   sortBy: 'occurrences',
@@ -28,9 +30,9 @@ const qbankState = {
 };
 
 // --- Page Initialization & Data Fetching ---
-async function loadQuestionBankPage() {
+async function loadQuestionBankPage(silent = false) {
   qbankState.isLoading = true;
-  updateQuestionBankLoadingUI(true);
+  if (!silent) updateQuestionBankLoadingUI(true);
   updateQuestionBankClearFiltersButton();
 
   try {
@@ -63,6 +65,8 @@ async function loadQuestionBankPage() {
     qbankState.questions = data.questions || [];
     qbankState.totalCount = data.total_count || 0;
     qbankState.answeredCount = data.answered_count || 0;
+    qbankState.aiSuggestedCount = data.ai_suggested_count || 0;
+    qbankState.unreasonableCount = data.unreasonable_count || 0;
     qbankState.pendingCount = data.pending_count || 0;
 
     // Prune selected keys that no longer exist
@@ -90,7 +94,7 @@ async function loadQuestionBankPage() {
     }
   } finally {
     qbankState.isLoading = false;
-    updateQuestionBankLoadingUI(false);
+    if (!silent) updateQuestionBankLoadingUI(false);
   }
 }
 
@@ -119,6 +123,9 @@ function updateQuestionBankKpis() {
   const elAnswered = document.getElementById('qbankKpiAnswered');
   if (elAnswered) elAnswered.textContent = qbankState.answeredCount;
 
+  const elAiSuggested = document.getElementById('qbankKpiAiSuggested');
+  if (elAiSuggested) elAiSuggested.textContent = qbankState.aiSuggestedCount;
+
   const elPending = document.getElementById('qbankKpiPending');
   if (elPending) elPending.textContent = qbankState.pendingCount;
 
@@ -136,32 +143,43 @@ function updateQuestionBankKpis() {
     elPendingBadge.className = qbankState.pendingCount > 0 ? 'kpi-trend warn' : 'kpi-trend ok';
   }
 
-  // Also update sidebar badge in real-time
+  // Also update sidebar badge in real-time (shows total actionable items: pending + review)
   const countQBankEl = document.getElementById('countSidebarQuestionBank');
   if (countQBankEl) {
-    countQBankEl.textContent = qbankState.pendingCount;
-    countQBankEl.style.display = qbankState.pendingCount > 0 ? 'inline-flex' : 'none';
+    const totalNeedingAction = (qbankState.pendingCount || 0) + (qbankState.aiSuggestedCount || 0);
+    countQBankEl.textContent = totalNeedingAction;
+    countQBankEl.style.display = totalNeedingAction > 0 ? 'inline-flex' : 'none';
   }
 }
 
 // --- Update Status Segmented Buttons UI ---
 function updateQuestionBankStatusSegmentUI() {
   const btnAll = document.getElementById('btnQbankStatAll');
+  const btnAi = document.getElementById('btnQbankStatAi');
   const btnPending = document.getElementById('btnQbankStatPending');
   const btnAnswered = document.getElementById('btnQbankStatAnswered');
+  const btnUnreasonable = document.getElementById('btnQbankStatUnreasonable');
 
   if (btnAll) btnAll.classList.toggle('active', qbankState.statusFilter === 'all');
+  if (btnAi) btnAi.classList.toggle('active', qbankState.statusFilter === 'ai_suggested');
   if (btnPending) btnPending.classList.toggle('active', qbankState.statusFilter === 'pending');
   if (btnAnswered) btnAnswered.classList.toggle('active', qbankState.statusFilter === 'answered');
+  if (btnUnreasonable) btnUnreasonable.classList.toggle('active', qbankState.statusFilter === 'unreasonable');
 
   const countAll = document.getElementById('qbankCountStatAll');
   if (countAll) countAll.textContent = qbankState.totalCount;
+
+  const countAi = document.getElementById('qbankCountStatAi');
+  if (countAi) countAi.textContent = qbankState.aiSuggestedCount;
 
   const countPending = document.getElementById('qbankCountStatPending');
   if (countPending) countPending.textContent = qbankState.pendingCount;
 
   const countAnswered = document.getElementById('qbankCountStatAnswered');
   if (countAnswered) countAnswered.textContent = qbankState.answeredCount;
+
+  const countUnreasonable = document.getElementById('qbankCountStatUnreasonable');
+  if (countUnreasonable) countUnreasonable.textContent = qbankState.unreasonableCount;
 }
 
 // --- Render Question Cards ---
@@ -179,6 +197,8 @@ function renderQuestionBankCards() {
         emptyDesc.textContent = `No questions found matching "${qbankState.searchQuery}". Try a different keyword or clear your search.`;
       } else if (qbankState.statusFilter === 'pending') {
         emptyDesc.textContent = 'Awesome! All questions have been answered. Your auto-apply submissions are fully trained!';
+      } else if (qbankState.statusFilter === 'unreasonable') {
+        emptyDesc.textContent = 'No unreasonable or spam screening questions detected.';
       } else if (qbankState.categoryFilter !== 'all') {
         emptyDesc.textContent = `No questions found under the "${qbankState.categoryFilter}" category.`;
       } else {
@@ -198,7 +218,9 @@ function renderQuestionBankCards() {
     const hasUnsavedEdit = Object.prototype.hasOwnProperty.call(qbankState.modifiedAnswers, key);
     const currentAnswer = hasUnsavedEdit ? qbankState.modifiedAnswers[key] : (q.answer || '');
     const isBlank = (currentAnswer === '__EMPTY__');
-    const isAnswered = isBlank || Boolean(currentAnswer && currentAnswer.trim());
+    const isAiSuggested = (q.status === 'AI_SUGGESTED');
+    const isUnreasonable = (q.status === 'UNREASONABLE');
+    const isAnswered = !isAiSuggested && !isUnreasonable && (isBlank || Boolean(currentAnswer && currentAnswer.trim()));
     const occurrences = q.occurrences || 1;
     const isStandard = Boolean(q.is_standard);
     const category = (q.category || 'profile').toLowerCase();
@@ -209,13 +231,64 @@ function renderQuestionBankCards() {
     // Sample jobs preview
     let sampleJobsHtml = '';
     if (Array.isArray(q.sample_jobs) && q.sample_jobs.length > 0) {
+      const renderJobBtn = (jobItem) => {
+        const jStr = String(jobItem || '').trim();
+        const isGeneric = ['direct application flow', 'standard candidate profile question'].includes(jStr.toLowerCase());
+        if (isGeneric) {
+          return `<span class="sample-job-tag is-generic" title="${escapeFn(jStr)}">${escapeFn(jStr)}</span>`;
+        }
+
+        let roleAndComp = jStr;
+        let locText = '';
+        if (jStr.includes(' • 📍 ')) {
+          const parts = jStr.split(' • 📍 ');
+          roleAndComp = (parts[0] || '').trim();
+          locText = (parts[1] || '').trim();
+        } else if (jStr.includes(' • ')) {
+          const parts = jStr.split(' • ');
+          roleAndComp = (parts[0] || '').trim();
+          locText = (parts[1] || '').trim();
+        }
+
+        const tooltip = locText 
+          ? `Click to view '${escapeFn(roleAndComp)}' (📍 ${escapeFn(locText)}) job description on Easy Apply section` 
+          : `Click to view '${escapeFn(roleAndComp)}' job description on Easy Apply section`;
+
+        return `
+          <button 
+            type="button" 
+            class="sample-job-tag is-clickable" 
+            data-job="${escapeFn(roleAndComp)}" 
+            data-loc="${escapeFn(locText)}"
+            onclick="handleSampleJobClick(this, event)" 
+            title="${tooltip}"
+          >
+            <span style="opacity: 0.85; flex-shrink: 0;">💼</span>
+            <span class="sample-job-name">${escapeFn(roleAndComp)}</span>
+            ${locText ? `<span class="sample-job-location-badge" title="Location: ${escapeFn(locText)}">📍 ${escapeFn(locText)}</span>` : ''}
+            <span class="sample-job-arrow" aria-hidden="true">↗</span>
+          </button>
+        `;
+      };
+
       const topJobs = q.sample_jobs.slice(0, 3);
-      const tags = topJobs.map(j => `<span class="sample-job-tag" title="${escapeFn(j)}">${escapeFn(j)}</span>`).join('');
+      const tags = topJobs.map(renderJobBtn).join('');
       const moreCount = q.sample_jobs.length - topJobs.length;
-      const moreTag = moreCount > 0 ? `<span class="sample-job-tag">+${moreCount} more</span>` : '';
+      let moreTag = '';
+      if (moreCount > 0) {
+        const remainingJobs = q.sample_jobs.slice(3);
+        const remainingHtml = remainingJobs.map(renderJobBtn).join('');
+        moreTag = `
+          <span class="sample-job-more-wrap">
+            <button type="button" class="sample-job-tag is-more-toggle" onclick="toggleMoreSampleJobs(this, event)" title="Show ${moreCount} more jobs">+${moreCount} more</button>
+            <span class="sample-jobs-expanded hidden" style="display: none; align-items: center; gap: 0.35rem; flex-wrap: wrap;">${remainingHtml}</span>
+          </span>
+        `;
+      }
+
       sampleJobsHtml = `
         <div class="qbank-sample-jobs">
-          <span>Found on:</span>
+          <span class="qbank-sample-jobs-lbl" style="font-weight: 600; color: var(--text-dim);">Found on:</span>
           ${tags}
           ${moreTag}
         </div>
@@ -226,6 +299,10 @@ function renderQuestionBankCards() {
     let statusBadgeHtml = '';
     if (isBlank) {
       statusBadgeHtml = `<span class="qbank-badge badge-blank" title="Configured to leave blank on applications">🚫 Blank / N/A</span>`;
+    } else if (isAiSuggested) {
+      statusBadgeHtml = `<span class="qbank-badge badge-ai" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); font-weight: 600;" title="Suggested by ChatGPT. Please review and save to confirm.">🤖 AI Suggested</span>`;
+    } else if (isUnreasonable) {
+      statusBadgeHtml = `<span class="qbank-badge status-unreasonable" title="Flagged as unreasonable / unanswerable recruiter screening question. Easy Apply halts on roles requiring this.">🚫 Unreasonable</span>`;
     } else if (isAnswered) {
       statusBadgeHtml = `<span class="qbank-badge status-ans">✓ Answered</span>`;
     } else {
@@ -246,7 +323,7 @@ function renderQuestionBankCards() {
       `;
     }
 
-    const cardStatusClass = isAnswered ? 'status-answered' : 'status-pending';
+    const cardStatusClass = isAnswered ? 'status-answered' : (isAiSuggested ? 'status-ai' : (isUnreasonable ? 'status-unreasonable' : 'status-pending'));
     const selectedClass = isSelected ? 'is-selected' : '';
     const dirtyClass = hasUnsavedEdit ? 'is-dirty' : '';
 
@@ -313,19 +390,32 @@ function renderQuestionBankCards() {
               >
                 ${isBlank ? '✓ Set as Blank / N/A' : '🚫 Leave Blank'}
               </button>
-              <div class="qbank-status-text ${hasUnsavedEdit ? 'modified' : (isAnswered ? 'saved' : '')}" id="qbankFooterStatus-${escapeFn(key)}">
-                ${hasUnsavedEdit ? '⚠️ Modified (Unsaved)' : (isBlank ? '✓ Auto-cleared on apply' : (isAnswered ? '✓ Auto-fill Ready' : 'Empty response'))}
+              <div class="qbank-status-text ${hasUnsavedEdit ? 'modified' : (isAnswered ? 'saved' : (isAiSuggested ? 'ai-review' : ''))}" id="qbankFooterStatus-${escapeFn(key)}">
+                ${hasUnsavedEdit ? '⚠️ Modified (Unsaved)' : (isBlank ? '✓ Auto-cleared on apply' : (isAnswered ? '✓ Auto-fill Ready' : (isAiSuggested ? '🤖 Suggested — Review & Approve' : 'Empty response')))}
               </div>
             </div>
-            <button 
-              type="button"
-              class="card-save-btn ${hasUnsavedEdit ? '' : 'btn-disabled'}" 
-              id="btnCardSave-${escapeFn(key)}" 
-              onclick="saveSingleQuestionAnswer('${escapeFn(key)}')"
-              title="Save changes to this question"
-            >
-              Save Answer
-            </button>
+            ${isAiSuggested ? `
+              <button 
+                type="button" 
+                class="btn-approve-answer ${hasUnsavedEdit ? 'is-modified' : ''}" 
+                id="btnCardApprove-${escapeFn(key)}" 
+                onclick="approveSingleQuestionAnswer('${escapeFn(key)}')"
+                title="Approve this AI suggested answer and promote to Answered for auto-apply"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>${hasUnsavedEdit ? 'Save & Approve' : 'Approve'}</span>
+              </button>
+            ` : `
+              <button 
+                type="button"
+                class="card-save-btn ${hasUnsavedEdit ? '' : 'btn-disabled'}" 
+                id="btnCardSave-${escapeFn(key)}" 
+                onclick="saveSingleQuestionAnswer('${escapeFn(key)}')"
+                title="Save changes to this question"
+              >
+                Save Answer
+              </button>
+            `}
           </div>
         </div>
       </div>
@@ -342,11 +432,13 @@ function handleQuestionBankAnswerInput(key, value) {
 
   const originalAnswer = (question.answer || '').trim();
   const newAnswer = (value || '').trim();
+  const isAiSuggested = (question.status === 'AI_SUGGESTED');
 
   const card = document.getElementById(`qbankCard-${key}`);
   const textarea = document.getElementById(`qbankTextarea-${key}`);
   const footerStatus = document.getElementById(`qbankFooterStatus-${key}`);
   const saveBtn = document.getElementById(`btnCardSave-${key}`);
+  const approveBtn = document.getElementById(`btnCardApprove-${key}`);
   const blankBtn = card ? card.querySelector('.btn-card-blank') : null;
 
   const isBlank = (newAnswer === '__EMPTY__');
@@ -370,18 +462,28 @@ function handleQuestionBankAnswerInput(key, value) {
     if (textarea) textarea.classList.add('is-dirty');
     if (footerStatus) {
       footerStatus.className = 'qbank-status-text modified';
-      footerStatus.textContent = isBlank ? '⚠️ Set to Blank (Unsaved)' : '⚠️ Modified (Unsaved)';
+      footerStatus.textContent = isBlank ? '⚠️ Set to Blank (Unsaved)' : (isAiSuggested ? '⚠️ Edited Suggestion (Unsaved)' : '⚠️ Modified (Unsaved)');
     }
     if (saveBtn) saveBtn.classList.remove('btn-disabled');
+    if (approveBtn) {
+      approveBtn.classList.add('is-modified');
+      const span = approveBtn.querySelector('span');
+      if (span) span.textContent = 'Save & Approve';
+    }
   } else {
     delete qbankState.modifiedAnswers[key];
     if (textarea) textarea.classList.remove('is-dirty');
     if (footerStatus) {
       const isAns = isBlank || Boolean(originalAnswer);
-      footerStatus.className = `qbank-status-text ${isAns ? 'saved' : ''}`;
-      footerStatus.textContent = isBlank ? '✓ Auto-cleared on apply' : (isAns ? '✓ Auto-fill Ready' : 'Empty response');
+      footerStatus.className = `qbank-status-text ${isAns ? 'saved' : (isAiSuggested ? 'ai-review' : '')}`;
+      footerStatus.textContent = isBlank ? '✓ Auto-cleared on apply' : (isAns ? (isAiSuggested ? '🤖 Suggested — Review & Approve' : '✓ Auto-fill Ready') : 'Empty response');
     }
     if (saveBtn) saveBtn.classList.add('btn-disabled');
+    if (approveBtn) {
+      approveBtn.classList.remove('is-modified');
+      const span = approveBtn.querySelector('span');
+      if (span) span.textContent = 'Approve';
+    }
   }
 
   updateUnsavedToastUI();
@@ -457,6 +559,20 @@ async function saveSingleQuestionAnswer(key) {
     ? qbankState.modifiedAnswers[key] 
     : (textarea ? textarea.value : '');
 
+  const isNowAnswered = Boolean(newAnswer.trim() || newAnswer === '__EMPTY__');
+
+  // If filtered by pending or ai_suggested and answered, remove card immediately
+  if (isNowAnswered && (qbankState.statusFilter === 'pending' || qbankState.statusFilter === 'ai_suggested')) {
+    const cardEl = document.getElementById(`qbankCard-${key}`);
+    if (cardEl) {
+      cardEl.style.transition = 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
+      cardEl.style.opacity = '0';
+      cardEl.style.transform = 'translateY(-10px) scale(0.98)';
+      setTimeout(() => { if (cardEl && cardEl.parentNode) cardEl.remove(); }, 220);
+    }
+    qbankState.questions = qbankState.questions.filter(q => (q.key || q.id) !== key);
+  }
+
   try {
     const res = await fetch('/api/easy-apply/questions/answers', {
       method: 'POST',
@@ -471,23 +587,18 @@ async function saveSingleQuestionAnswer(key) {
     const data = await res.json();
     delete qbankState.modifiedAnswers[key];
 
-    // Update local state item
-    const targetQ = qbankState.questions.find(q => (q.key || q.id) === key);
-    if (targetQ) {
-      targetQ.answer = newAnswer;
-      targetQ.status = (newAnswer.trim() || newAnswer === '__EMPTY__') ? 'ANSWERED' : 'PENDING';
-    }
-
     if (data.answered_count !== undefined) {
       qbankState.answeredCount = data.answered_count;
       qbankState.pendingCount = data.pending_count;
+      if (data.ai_suggested_count !== undefined) {
+        qbankState.aiSuggestedCount = data.ai_suggested_count;
+      }
       updateQuestionBankKpis();
       updateQuestionBankStatusSegmentUI();
     }
 
-    // Refresh card UI
-    renderQuestionBankCards();
-    updateUnsavedToastUI();
+    // Refresh immediately from database (silent refresh keeps UI stable)
+    await loadQuestionBankPage(true);
 
     if (typeof fetchStats === 'function') fetchStats();
 
@@ -504,10 +615,119 @@ async function saveSingleQuestionAnswer(key) {
 
   } catch (err) {
     console.error('Error saving single answer:', err);
+    await loadQuestionBankPage(true);
     if (typeof showSnackbar === 'function') {
       showSnackbar({
         title: 'Save Failed',
         message: err.message || 'Could not update answer in database.',
+        type: 'error',
+      });
+    }
+  }
+}
+
+// --- Approve Single AI-Suggested Question Answer ---
+async function approveSingleQuestionAnswer(key) {
+  const textarea = document.getElementById(`qbankTextarea-${key}`);
+  let newAnswer = qbankState.modifiedAnswers[key] !== undefined 
+    ? qbankState.modifiedAnswers[key] 
+    : (textarea ? textarea.value : '');
+
+  // If answer is empty and not deliberately blank, alert user
+  if (!newAnswer || !newAnswer.trim()) {
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Cannot Approve Empty Answer',
+        message: 'Please provide an answer or click "Leave Blank" before approving.',
+        type: 'warning',
+        duration: 3500,
+      });
+    }
+    return;
+  }
+
+  // 1. Immediately remove from DOM & local memory list (instant responsiveness)
+  const cardEl = document.getElementById(`qbankCard-${key}`);
+  const removedIdx = qbankState.questions.findIndex(q => (q.key || q.id) === key);
+  let removedQ = null;
+  if (removedIdx !== -1) {
+    removedQ = qbankState.questions[removedIdx];
+    qbankState.questions.splice(removedIdx, 1);
+  }
+  delete qbankState.modifiedAnswers[key];
+  qbankState.selectedKeys.delete(key);
+
+  // Optimistically update counts immediately
+  qbankState.aiSuggestedCount = Math.max(0, (qbankState.aiSuggestedCount || 1) - 1);
+  qbankState.answeredCount = (qbankState.answeredCount || 0) + 1;
+  updateQuestionBankKpis();
+  updateQuestionBankStatusSegmentUI();
+  updateBatchBarUI();
+  updateUnsavedToastUI();
+
+  // Smoothly collapse and remove card element from DOM
+  if (cardEl) {
+    cardEl.style.transition = 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
+    cardEl.style.opacity = '0';
+    cardEl.style.transform = 'translateY(-10px) scale(0.98)';
+    setTimeout(() => {
+      if (cardEl && cardEl.parentNode) cardEl.remove();
+      if (qbankState.questions.length === 0) {
+        renderQuestionBankCards();
+      }
+    }, 220);
+  } else if (qbankState.questions.length === 0) {
+    renderQuestionBankCards();
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: { [key]: newAnswer } }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to approve answer (HTTP ${res.status})`);
+    }
+
+    const data = await res.json();
+
+    if (data.answered_count !== undefined) {
+      qbankState.answeredCount = data.answered_count;
+      qbankState.pendingCount = data.pending_count;
+      if (data.ai_suggested_count !== undefined) {
+        qbankState.aiSuggestedCount = data.ai_suggested_count;
+      }
+      updateQuestionBankKpis();
+      updateQuestionBankStatusSegmentUI();
+    }
+
+    // Refresh Question Bank list immediately from database (silent refresh keeps UI stable)
+    await loadQuestionBankPage(true);
+
+    if (typeof fetchStats === 'function') fetchStats();
+
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Answer Approved!',
+        message: 'Promoted to Ready for Auto-Apply.',
+        type: 'success',
+        duration: 2500,
+      });
+    }
+
+  } catch (err) {
+    console.error('Error approving answer:', err);
+    // Rollback question on network failure
+    if (removedQ && removedIdx !== -1) {
+      qbankState.questions.splice(removedIdx, 0, removedQ);
+      renderQuestionBankCards();
+    }
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Approval Failed',
+        message: err.message || 'Could not approve answer in database.',
         type: 'error',
       });
     }
@@ -768,6 +988,117 @@ async function triggerBatchDeleteQuestions() {
   }
 }
 
+// --- Batch Approve Selected Questions ---
+async function triggerBatchApproveQuestions() {
+  const selectedKeys = Array.from(qbankState.selectedKeys);
+  if (selectedKeys.length === 0) return;
+
+  // Gather answers for all selected questions
+  const answersToApprove = {};
+  let count = 0;
+  for (const k of selectedKeys) {
+    const q = qbankState.questions.find(item => (item.key || item.id) === k);
+    let ans = qbankState.modifiedAnswers[k] !== undefined ? qbankState.modifiedAnswers[k] : (q ? q.answer : '');
+    if (ans && (ans.trim() || ans === '__EMPTY__')) {
+      answersToApprove[k] = ans;
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'No Answers to Approve',
+        message: 'None of the selected questions have answers provided. Please enter an answer or choose "Leave Blank" first.',
+        type: 'warning',
+        duration: 3500,
+      });
+    }
+    return;
+  }
+
+  const approvedKeySet = new Set(Object.keys(answersToApprove));
+
+  // 1. Instantly animate and remove cards from DOM
+  approvedKeySet.forEach(k => {
+    const cardEl = document.getElementById(`qbankCard-${k}`);
+    if (cardEl) {
+      cardEl.style.transition = 'all 0.22s cubic-bezier(0.4, 0, 0.2, 1)';
+      cardEl.style.opacity = '0';
+      cardEl.style.transform = 'translateY(-10px) scale(0.98)';
+      setTimeout(() => {
+        if (cardEl && cardEl.parentNode) cardEl.remove();
+      }, 220);
+    }
+    delete qbankState.modifiedAnswers[k];
+  });
+
+  // Remove from state questions array immediately
+  qbankState.questions = qbankState.questions.filter(q => !approvedKeySet.has(q.key || q.id));
+  clearQuestionBankSelection();
+
+  // Optimistically update counts immediately
+  qbankState.aiSuggestedCount = Math.max(0, (qbankState.aiSuggestedCount || count) - count);
+  qbankState.answeredCount = (qbankState.answeredCount || 0) + count;
+  updateQuestionBankKpis();
+  updateQuestionBankStatusSegmentUI();
+  updateUnsavedToastUI();
+
+  if (qbankState.questions.length === 0) {
+    setTimeout(() => {
+      renderQuestionBankCards();
+    }, 230);
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: answersToApprove }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to batch approve (HTTP ${res.status})`);
+    }
+
+    const data = await res.json();
+
+    if (data.answered_count !== undefined) {
+      qbankState.answeredCount = data.answered_count;
+      qbankState.pendingCount = data.pending_count;
+      if (data.ai_suggested_count !== undefined) {
+        qbankState.aiSuggestedCount = data.ai_suggested_count;
+      }
+      updateQuestionBankKpis();
+      updateQuestionBankStatusSegmentUI();
+    }
+
+    // Refresh Question Bank list immediately from database (silent refresh keeps UI stable)
+    await loadQuestionBankPage(true);
+
+    if (typeof fetchStats === 'function') fetchStats();
+
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Batch Approved!',
+        message: `Successfully approved ${count} question(s) and removed from review.`,
+        type: 'success',
+        duration: 3000,
+      });
+    }
+  } catch (err) {
+    console.error('Error in batch approve:', err);
+    await loadQuestionBankPage(true);
+    if (typeof showSnackbar === 'function') {
+      showSnackbar({
+        title: 'Batch Approval Failed',
+        message: err.message || 'Could not approve selected questions in database.',
+        type: 'error',
+      });
+    }
+  }
+}
+
 // --- Search & Filtering Handlers ---
 function updateQuestionBankClearFiltersButton() {
   const btn = document.getElementById('btnClearQbankFilters');
@@ -965,8 +1296,45 @@ async function submitAddQuestion(event) {
   }
 }
 
+function toggleMoreSampleJobs(btn, event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const wrap = btn ? btn.closest('.sample-job-more-wrap') : null;
+  if (!wrap) return;
+  const exp = wrap.querySelector('.sample-jobs-expanded');
+  if (!exp) return;
+  const isHidden = exp.style.display === 'none' || exp.classList.contains('hidden');
+  if (isHidden) {
+    exp.style.display = 'inline-flex';
+    exp.classList.remove('hidden');
+    btn.style.display = 'none';
+  } else {
+    exp.style.display = 'none';
+    exp.classList.add('hidden');
+    btn.style.display = 'inline-flex';
+  }
+}
+
+function handleSampleJobClick(btn, event) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  const jobLabel = btn ? (btn.getAttribute('data-job') || btn.textContent) : '';
+  const locHint = btn ? (btn.getAttribute('data-loc') || '') : '';
+  if (typeof navigateToJobInEasyApply === 'function') {
+    navigateToJobInEasyApply(jobLabel, event, locHint);
+  } else {
+    console.warn('navigateToJobInEasyApply is not defined yet');
+  }
+}
+
 // Global window registrations
 window.qbankState = qbankState;
+window.toggleMoreSampleJobs = toggleMoreSampleJobs;
+window.handleSampleJobClick = handleSampleJobClick;
 window.loadQuestionBankPage = loadQuestionBankPage;
 window.renderQuestionBankCards = renderQuestionBankCards;
 window.handleQuestionBankSearchInput = handleQuestionBankSearchInput;

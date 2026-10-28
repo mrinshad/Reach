@@ -4,11 +4,12 @@
   <div class="analytics-toolbar">
     <div class="analytics-title-group">
       <h2 class="analytics-title">Outreach & Scraping Analytics</h2>
-      <p class="analytics-subtitle">Real-time database intelligence, application velocity, and crawler metrics</p>
+      <p class="analytics-subtitle">Real-time pipeline intelligence, application velocity, and crawler metrics</p>
     </div>
 
     <div class="analytics-actions">
       <div class="timeframe-pills" id="timeframePills">
+        <button class="pill" data-days="1" onclick="setAnalyticsTimeframe(1)">Today</button>
         <button class="pill" data-days="7" onclick="setAnalyticsTimeframe(7)">7 Days</button>
         <button class="pill" data-days="14" onclick="setAnalyticsTimeframe(14)">14 Days</button>
         <button class="pill active" data-days="30" onclick="setAnalyticsTimeframe(30)">30 Days</button>
@@ -25,216 +26,123 @@
     </div>
   </div>
 
-  <!-- Section 1: Executive KPI Performance Cards with Direct Jump Links -->
+  <!-- Section 1: Streamlined KPI Performance Cards -->
   <div class="dashboard-section">
-    <!-- <div class="dashboard-section-header">
-          <div>
-            <h3 class="dashboard-section-title">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg>
-              <span>Executive Overview & Jump Links</span>
-            </h3>
-            <p class="dashboard-section-subtitle">Click any card to jump directly to that section or filtered workspace</p>
-          </div>
-        </div> -->
-
     <div class="analytics-kpi-grid">
-      <div class="kpi-card glow-emerald clickable-kpi" onclick="jumpToSentApplications()"
-        title="Click to view Sent Applications History">
+      <!-- 1. Discovered Jobs -->
+      <div class="kpi-card kpi-discovered clickable-kpi" onclick="jumpToDiscovered()" title="Click to browse discovered jobs">
         <div class="kpi-header">
-          <span class="kpi-label">Jobs Applied (Outreach)</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z">
-              </path>
-              <path
-                d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-2.05 9a22 22 0 0 1-3.95 2l-4 2z">
-              </path>
-            </svg>
-          </span>
-        </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiApplied">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-green" id="kpiConversionRate">0.0% conversion</span>
-          <span class="kpi-note">from scraped leads</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>View Sent History →</span>
-        </div>
-      </div>
-
-      <div class="kpi-card glow-cyan clickable-kpi" onclick="jumpToEasyApply()"
-        title="Click to open LinkedIn Easy Apply Workspace">
-        <div class="kpi-header">
-          <span class="kpi-label">LinkedIn Easy Apply</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.64c-.9 0-1.63.73-1.63 1.63 0 .9.73 1.63 1.63 1.63.9 0 1.63-.73 1.63-1.63 0-.9-.73-1.63-1.63-1.63Z" />
-            </svg>
-          </span>
-        </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
-          <div class="kpi-sublabel">Submitted Applications</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-green" id="kpiEasyApplyReady">0 ready</span>
-          <span class="kpi-note" id="kpiEasyApplyScreened">0 questionnaires</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>Open Easy Apply Workspace →</span>
-        </div>
-      </div>
-
-      <div class="kpi-card glow-amber clickable-kpi" onclick="jumpToQuestionBank()"
-        title="Click to view and answer centralized Screening Question Bank">
-        <div class="kpi-header">
-          <span class="kpi-label">Question & Answer Bank</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-              <polyline points="14 2 14 8 20 8"></polyline>
-              <line x1="16" y1="13" x2="8" y2="13"></line>
-              <line x1="16" y1="17" x2="8" y2="17"></line>
-              <polyline points="10 9 9 9 8 9"></polyline>
-            </svg>
-          </span>
-        </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
-          <div class="kpi-sublabel">Questions Collected</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue" id="kpiQuestionBankAnswered">0 answered</span>
-          <span class="kpi-note" id="kpiQuestionBankRate">0% saved answers</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>Manage Question Bank →</span>
-        </div>
-      </div>
-
-      <div class="kpi-card glow-sky clickable-kpi" onclick="jumpToOutreachReady()"
-        title="Click to view Leads with Direct Contact Emails">
-        <div class="kpi-header">
-          <span class="kpi-label">Outreach Ready</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <circle cx="12" cy="12" r="6"></circle>
-              <circle cx="12" cy="12" r="2"></circle>
-            </svg>
-          </span>
-        </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiDirectEmails">0</div>
-          <div class="kpi-sublabel">Direct Recruiter Emails</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue" id="kpiEmailRate">0.0% emails found</span>
-          <span class="kpi-note">verified contacts</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>Filter Outreach Ready →</span>
-        </div>
-      </div>
-
-      <div class="kpi-card glow-indigo clickable-kpi" onclick="jumpToReviewDrafts()"
-        title="Click to open Review & Send Workspace">
-        <div class="kpi-header">
-          <span class="kpi-label">AI Drafts Generated</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="10" rx="2"></rect>
-              <circle cx="12" cy="5" r="2"></circle>
-              <path d="M12 7v4"></path>
-              <line x1="8" y1="16" x2="8.01" y2="16"></line>
-              <line x1="16" y1="16" x2="16.01" y2="16"></line>
-            </svg>
-          </span>
-        </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiDrafted">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-purple" id="kpiDraftReady">0 ready to send</span>
-          <span class="kpi-note" id="kpiPendingGen">0 pending AI</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>Review & Send Drafts →</span>
-        </div>
-      </div>
-
-      <div class="kpi-card glow-blue clickable-kpi" onclick="jumpToDiscovered()"
-        title="Click to browse all discovered job leads">
-        <div class="kpi-header">
-          <span class="kpi-label">Total JDs Scraped</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
-              </path>
-            </svg>
+          <span class="kpi-label">Jobs Discovered</span>
+          <span class="kpi-header-action" title="Jump to Discovered">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
         <div class="kpi-num-box">
           <div class="kpi-value" id="kpiScraped">0</div>
         </div>
         <div class="kpi-footer">
-          <span class="kpi-badge badge-blue">All sources</span>
-          <span class="kpi-note">in database</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>Browse Discovered Jobs →</span>
+          <span class="kpi-badge badge-blue">Discovered</span>
+          <span class="kpi-note">in selected period</span>
         </div>
       </div>
 
-      <div class="kpi-card glow-rose clickable-kpi" onclick="jumpToScreenedApplications()"
-        title="Click to view Screened / Cancelled applications">
+      <!-- 2. Easy Apply Submitted -->
+      <div class="kpi-card kpi-easy-apply clickable-kpi" onclick="jumpToEasyApply()" title="Click to open LinkedIn Easy Apply Workspace">
         <div class="kpi-header">
-          <span class="kpi-label">Screened & Cancelled</span>
-          <span class="kpi-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              <line x1="9.5" y1="9.5" x2="14.5" y2="14.5"></line>
-              <line x1="14.5" y1="9.5" x2="9.5" y2="14.5"></line>
-            </svg>
+          <span class="kpi-label">Easy Apply Submitted</span>
+          <span class="kpi-header-action" title="Jump to Easy Apply">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-green" id="kpiEasyApplyReady">0 ready</span>
+          <span class="kpi-note">applications filed</span>
+        </div>
+      </div>
+
+      <!-- 3. Questionnaires Pending -->
+      <div class="kpi-card kpi-questionnaires clickable-kpi" onclick="jumpToEasyApply()" title="Click to view jobs requiring screening questionnaires">
+        <div class="kpi-header">
+          <span class="kpi-label">Questionnaires</span>
+          <span class="kpi-header-action" title="Jump to Screening">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiEasyApplyScreened">0</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-amber">Action Needed</span>
+          <span class="kpi-note">screening questions</span>
+        </div>
+      </div>
+
+      <!-- 4. Question & Answer Bank -->
+      <div class="kpi-card kpi-qbank clickable-kpi" onclick="jumpToQuestionBank()" title="Click to manage Screening Question Bank">
+        <div class="kpi-header">
+          <span class="kpi-label">Question Bank</span>
+          <span class="kpi-header-action" title="Jump to Question Bank">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-purple" id="kpiQuestionBankAnswered">0 answered</span>
+          <span class="kpi-note" id="kpiQuestionBankRate">0% saved</span>
+        </div>
+      </div>
+
+      <!-- 5. Outreach & AI Drafts -->
+      <div class="kpi-card kpi-outreach clickable-kpi" onclick="jumpToReviewDrafts()" title="Click to review and dispatch email drafts">
+        <div class="kpi-header">
+          <span class="kpi-label">Cold Outreach & Drafts</span>
+          <span class="kpi-header-action" title="Jump to Review & Drafts">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+          </span>
+        </div>
+        <div class="kpi-num-box">
+          <div class="kpi-value" id="kpiDrafted">0</div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-badge badge-blue" id="kpiDraftReady">0 ready to send</span>
+          <span class="kpi-note" id="kpiApplied">0 sent</span>
+        </div>
+      </div>
+
+      <!-- 6. Screened / Cancelled -->
+      <div class="kpi-card kpi-cancelled clickable-kpi" onclick="jumpToScreenedApplications()" title="Click to view Screened / Cancelled applications">
+        <div class="kpi-header">
+          <span class="kpi-label">Filtered & Dismissed</span>
+          <span class="kpi-header-action" title="Jump to Cancelled History">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
         <div class="kpi-num-box">
           <div class="kpi-value" id="kpiRejected">0</div>
         </div>
         <div class="kpi-footer">
-          <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 potential spam</span>
-          <span class="kpi-note">screened criteria</span>
-        </div>
-        <div class="kpi-jump-action">
-          <span>View Cancelled History →</span>
+          <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 filtered</span>
+          <span class="kpi-note">criteria screened</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Primary Charts Row (Line & Bar) -->
+  <!-- Primary Charts Row (Application Velocity & Discovery Inflow) -->
   <div class="analytics-grid-two">
     <div class="chart-card">
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-              <polyline points="17 6 23 6 23 12"></polyline>
-            </svg>
-            <span>Jobs Applied Each Day</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+            <span>Applications Submitted Velocity</span>
           </h3>
-          <p class="chart-subtitle">Direct cold email applications sent over time</p>
+          <p class="chart-subtitle">Easy Apply and cold outreach submissions over time</p>
         </div>
         <span class="chart-badge" id="chartAppliedTotalBadge">0 Applications</span>
       </div>
@@ -247,15 +155,10 @@
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             <span>Scraping & Discovery Inflow</span>
           </h3>
-          <p class="chart-subtitle">New job opportunities discovered per day</p>
+          <p class="chart-subtitle">New job opportunities discovered per timeframe</p>
         </div>
         <span class="chart-badge" id="chartScrapedTotalBadge">0 Discovered</span>
       </div>
@@ -265,20 +168,16 @@
     </div>
   </div>
 
-  <!-- Secondary Charts Row (Donut Distributions & Sources) -->
+  <!-- Secondary Charts Row (Funnel Status, Sources & Experience) -->
   <div class="analytics-grid-three">
     <div class="chart-card">
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M12 2a10 10 0 0 1 10 10"></path>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path></svg>
             <span>Application Status Breakdown</span>
           </h3>
-          <p class="chart-subtitle">Current distribution across the funnel</p>
+          <p class="chart-subtitle">Current distribution across pipeline</p>
         </div>
       </div>
       <div class="chart-container-donut">
@@ -290,13 +189,7 @@
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
-              </path>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
             <span>Scraping Sources</span>
           </h3>
           <p class="chart-subtitle">Performance by crawling origin</p>
@@ -311,14 +204,10 @@
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
-              <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
             <span>Experience Demographics</span>
           </h3>
-          <p class="chart-subtitle">Experience requirements of discovered jobs</p>
+          <p class="chart-subtitle">Seniority distribution of jobs</p>
         </div>
       </div>
       <div class="chart-container-donut">
@@ -327,198 +216,23 @@
     </div>
   </div>
 
-  <!-- Tertiary Section: Cancellation Reasons Breakdown -->
+  <!-- Tertiary Section: Geographic Intelligence & Top Locations (Replacing Cancellation Reasons) -->
   <div class="analytics-grid-single">
     <div class="chart-card">
       <div class="chart-header">
         <div>
           <h3 class="chart-title">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>Cancellation & Screening Reasons</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <span>Top Job Locations & Hiring Hubs</span>
           </h3>
-          <p class="chart-subtitle">Why jobs were marked unsuitable, scam, or cancelled</p>
+          <p class="chart-subtitle">Geographic distribution of opportunities — click any hub to filter discovered jobs</p>
         </div>
       </div>
-      <div class="chart-container-horizontal" id="chartReasonsContainer">
-        <canvas id="chartRejectionReasons"></canvas>
+      <div class="chart-container" style="height: 240px;">
+        <canvas id="chartTopLocations"></canvas>
       </div>
-      <div class="reasons-analytics-list" id="reasonsAnalyticsList">
-        <!-- Dynamic companion ranked analytical list -->
-      </div>
-    </div>
-  </div>
-
-  <!-- Section 5: Integration & Automation Health -->
-  <div class="dashboard-section" style="margin-top: 1.5rem;">
-    <div class="dashboard-section-header">
-      <div>
-        <h3 class="dashboard-section-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-            <line x1="6" y1="6" x2="6.01" y2="6"></line>
-            <line x1="6" y1="18" x2="6.01" y2="18"></line>
-          </svg>
-          <span>Connected Services & Engine Health</span>
-        </h3>
-        <p class="dashboard-section-subtitle">Real-time status of scraping sessions, automated browsers, and database
-        </p>
-      </div>
-      <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <button class="btn btn-outline btn-xs" onclick="launchServiceLogin('all')" title="Launch Firefox to log into LinkedIn, ChatGPT & Gmail in one window">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-          </svg>
-          <span>Login All Services</span>
-        </button>
-        <button class="btn btn-outline btn-xs" onclick="fetchHealth()" title="Refresh connection states">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M23 4v6h-6"></path>
-            <path d="M1 20v-6h6"></path>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          <span>Refresh Health</span>
-        </button>
-      </div>
-    </div>
-    <div class="health-grid" id="dashboardHealthGrid">
-      <div class="health-card health-card-interactive" id="healthCardLinkedin" onclick="launchServiceLogin('linkedin')" title="Click to launch LinkedIn login session in Firefox">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
-              <rect x="2" y="9" width="4" height="12"></rect>
-              <circle cx="4" cy="4" r="2"></circle>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthLinkedin"></span>
-        </div>
-        <div class="health-card-name">LinkedIn Browser</div>
-        <div class="health-card-status" id="healthLabelLinkedin">Checking...</div>
-        <button class="health-action-btn btn-subtle" id="healthBtnLinkedin" onclick="event.stopPropagation(); launchServiceLogin('linkedin')" title="Launch LinkedIn in Firefox">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-          </svg>
-          <span id="healthBtnLabelLinkedin">Log In</span>
-        </button>
-      </div>
-      <div class="health-card">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
-              <line x1="9" y1="22" x2="9" y2="22.01"></line>
-              <line x1="15" y1="22" x2="15" y2="22.01"></line>
-              <line x1="9" y1="6" x2="9" y2="6.01"></line>
-              <line x1="15" y1="6" x2="15" y2="6.01"></line>
-              <line x1="9" y1="10" x2="9" y2="10.01"></line>
-              <line x1="15" y1="10" x2="15" y2="10.01"></line>
-              <line x1="9" y1="14" x2="9" y2="14.01"></line>
-              <line x1="15" y1="14" x2="15" y2="14.01"></line>
-              <line x1="9" y1="18" x2="9" y2="18.01"></line>
-              <line x1="15" y1="18" x2="15" y2="18.01"></line>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthInfopark"></span>
-        </div>
-        <div class="health-card-name">Infopark Kochi</div>
-        <div class="health-card-status" id="healthLabelInfopark">Checking...</div>
-        <div class="health-card-note">Public Jobs Portal</div>
-      </div>
-      <div class="health-card health-card-interactive" id="healthCardChatgpt" onclick="launchServiceLogin('chatgpt')" title="Click to launch ChatGPT login session in Firefox">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="10" rx="2"></rect>
-              <circle cx="12" cy="5" r="2"></circle>
-              <path d="M12 7v4"></path>
-              <line x1="8" y1="16" x2="8.01" y2="16"></line>
-              <line x1="16" y1="16" x2="16.01" y2="16"></line>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthChatgpt"></span>
-        </div>
-        <div class="health-card-name">ChatGPT Session</div>
-        <div class="health-card-status" id="healthLabelChatgpt">Checking...</div>
-        <button class="health-action-btn btn-subtle" id="healthBtnChatgpt" onclick="event.stopPropagation(); launchServiceLogin('chatgpt')" title="Launch ChatGPT in Firefox">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-          </svg>
-          <span id="healthBtnLabelChatgpt">Log In</span>
-        </button>
-      </div>
-      <div class="health-card health-card-interactive" id="healthCardGmail" onclick="launchServiceLogin('gmail')" title="Click to launch Gmail login session in Firefox">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1-0.9-2-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthGmail"></span>
-        </div>
-        <div class="health-card-name">Gmail Automation</div>
-        <div class="health-card-status" id="healthLabelGmail">Checking...</div>
-        <button class="health-action-btn btn-subtle" id="healthBtnGmail" onclick="event.stopPropagation(); launchServiceLogin('gmail')" title="Launch Gmail in Firefox">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-            <polyline points="10 17 15 12 10 7"></polyline>
-            <line x1="15" y1="12" x2="3" y2="12"></line>
-          </svg>
-          <span id="healthBtnLabelGmail">Log In</span>
-        </button>
-      </div>
-      <div class="health-card">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-              <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
-              <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthDatabase"></span>
-        </div>
-        <div class="health-card-name">PostgreSQL DB</div>
-        <div class="health-card-status" id="healthLabelDatabase">Checking...</div>
-        <div class="health-card-note">Local Database</div>
-      </div>
-      <div class="health-card health-card-interactive" id="healthCardEasyApply" onclick="jumpToEasyApply()" title="Click to open Easy Apply & view safeguard cooldown / pacing status">
-        <div class="health-card-top">
-          <span class="health-card-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              <polyline points="9 12 11 14 15 10"></polyline>
-            </svg>
-          </span>
-          <span class="health-status-dot ok" id="healthEasyApply"></span>
-        </div>
-        <div class="health-card-name">Easy Apply Safeguard</div>
-        <div class="health-card-status" id="healthLabelEasyApply">Safe Pacing Active</div>
-        <button class="health-action-btn btn-subtle" id="healthBtnEasyApply" onclick="event.stopPropagation(); jumpToEasyApply()" title="Open Easy Apply Workspace">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-          <span id="healthBtnLabelEasyApply">Open</span>
-        </button>
+      <div class="locations-analytics-list" id="locationsAnalyticsList">
+        <!-- Dynamic interactive location filter tags -->
       </div>
     </div>
   </div>

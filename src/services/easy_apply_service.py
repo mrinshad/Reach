@@ -1005,10 +1005,15 @@ def handle_screening_form_step(
                     continue
 
                 if not ans and not is_explicit_empty:
-                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
-                    chat_ans, status = ask_chatgpt_for_question_answer(
-                        page.context, prompt, options=extracted_options, logger=logger
-                    )
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=extracted_options, logger=logger
+                        )
                     if status == "WTF":
                         logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
@@ -1026,9 +1031,9 @@ def handle_screening_form_step(
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                     elif status == "OK" and chat_ans:
-                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
-                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans)
-                        ans = chat_ans
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
                     else:
                         logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
@@ -1159,10 +1164,15 @@ def handle_screening_form_step(
                     continue
 
                 if not ans and not is_explicit_empty:
-                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
-                    chat_ans, status = ask_chatgpt_for_question_answer(
-                        page.context, prompt, options=extracted_options, logger=logger
-                    )
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=extracted_options, logger=logger
+                        )
                     if status == "WTF":
                         logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
@@ -1180,9 +1190,9 @@ def handle_screening_form_step(
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
                     elif status == "OK" and chat_ans:
-                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
-                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans)
-                        ans = chat_ans
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
                     else:
                         logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
@@ -1306,10 +1316,15 @@ def handle_screening_form_step(
                 is_basic = any(b in prompt.lower() for b in basic_profile_terms)
 
                 if not ans and not is_explicit_empty and not curr_val and not is_basic:
-                    logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
-                    chat_ans, status = ask_chatgpt_for_question_answer(
-                        page.context, prompt, options=None, logger=logger
-                    )
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=None, logger=logger
+                        )
                     if status == "WTF":
                         logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
                         upsert_screening_question(prompt, sample_job=job_label, options=None, status='UNREASONABLE')
@@ -1327,9 +1342,9 @@ def handle_screening_form_step(
                         upsert_screening_question(prompt, sample_job=job_label, options=None)
                         unanswered.append(prompt)
                     elif status == "OK" and chat_ans:
-                        logger(f"  ✓ Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans}")
-                        upsert_screening_question(prompt, sample_job=job_label, options=None, answer=chat_ans)
-                        ans = chat_ans
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
                     else:
                         logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
                         upsert_screening_question(prompt, sample_job=job_label, options=None)
@@ -1467,8 +1482,8 @@ def execute_easy_apply(
             if closed_reason:
                 logger(f"  🚫 Position is closed: {closed_reason}")
                 return "NOT_FOUND", closed_reason
-            logger("  ⚠️ No Easy Apply button found on page.")
-            return "FAILED", "No Easy Apply button visible"
+            logger("  ⚠️ No Easy Apply button found on page (position closed or external apply only).")
+            return "NOT_FOUND", "No Easy Apply button available (position closed or external apply only)"
 
         logger("  Clicking 'Easy Apply' button...")
         try:
@@ -1782,6 +1797,8 @@ def run_easy_apply_crawler(
         auto_dismissed_count = 0
 
         for idx, job in enumerate(extracted_jobs, start=1):
+            if task_manager:
+                task_manager.check_pause()
             if task_manager and task_manager.is_cancel_requested():
                 logger("🛑 Task cancelled by user.")
                 break
@@ -2075,9 +2092,28 @@ def apply_to_batch_easy_apply_posts(
         page = context.pages[0] if context.pages else context.new_page()
 
         for idx, post_id in enumerate(post_ids, 1):
+            if task_manager:
+                task_manager.check_pause()
             if task_manager and task_manager.is_cancel_requested():
                 logger("🛑 Batch Easy Apply stopped upon user request.")
                 break
+
+            # Browser health recovery check
+            try:
+                if page.is_closed():
+                    logger("  🔄 Browser page was closed. Opening a fresh page...")
+                    page = context.new_page()
+            except Exception:
+                try:
+                    logger("  🔄 Browser context was disconnected. Re-launching Firefox context...")
+                    context = launch_firefox_context(
+                        playwright,
+                        headless=headless,
+                        sync_cookies_domains=["linkedin.com"],
+                    )
+                    page = context.pages[0] if context.pages else context.new_page()
+                except Exception as rec_err:
+                    logger(f"  ❌ Failed to recover Firefox session: {rec_err}")
 
             post = get_post_by_id(post_id)
             if not post:
@@ -2098,9 +2134,13 @@ def apply_to_batch_easy_apply_posts(
             logger(f"[{idx}/{total}] Processing Easy Apply: {title} @ {company}")
             logger(f"  URL: {job_url}")
 
-            status, detail = execute_easy_apply(
-                page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
-            )
+            try:
+                status, detail = execute_easy_apply(
+                    page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+                )
+            except Exception as apply_err:
+                logger(f"  ✗ Error executing Easy Apply for {title}: {apply_err}")
+                status, detail = "FAILED", str(apply_err)
 
             if status == "APPLIED":
                 update_post_status(post_id, "APPLIED", rejection_reason=detail if ("previously" in detail.lower() or "submitted" in detail.lower() or "already" in detail.lower()) else "")
@@ -2127,8 +2167,9 @@ def apply_to_batch_easy_apply_posts(
                 failed_count += 1
                 logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
             else:
+                update_post_status(post_id, "NOT_FOUND", rejection_reason=detail or "Application did not submit")
                 failed_count += 1
-                logger(f"  ℹ️ Application did not submit: {detail}")
+                logger(f"  ℹ️ Application did not submit ({detail}). Status -> NOT_FOUND")
 
             if task_manager:
                 task_manager.update_progress(idx, f"Processed {idx}/{total}: {title} ({status})")
@@ -2136,15 +2177,19 @@ def apply_to_batch_easy_apply_posts(
             # Safe human delay between applications
             if idx < total:
                 cancel_fn = task_manager.is_cancel_requested if task_manager else None
-                if pacing == "slow":
+                if status in ("NOT_FOUND", "REQUIRES_QUESTIONNAIRE", "UNREASONABLE_QUESTION"):
+                    # Natural brief pause when modal is dismissed without submitting
+                    logger("  ⏳ Pacing: Brief 5–10s pause before next job...")
+                    human_sleep(5.0, 10.0, cancel_check=cancel_fn)
+                elif pacing == "slow":
                     logger("  ⏳ Extra slow pacing safeguard: Pausing 75–120s before next job...")
                     human_sleep(75.0, 120.0, cancel_check=cancel_fn)
                 elif pacing == "standard":
                     logger("  ⏳ Moderate pacing: Pausing 25–40s before next job...")
                     human_sleep(25.0, 40.0, cancel_check=cancel_fn)
                 else:  # safe (default)
-                    logger("  ⏳ Safe human pacing safeguard: Pausing 40–70s before next job...")
-                    human_sleep(40.0, 70.0, cancel_check=cancel_fn)
+                    logger("  ⏳ Safe human pacing safeguard: Pausing 35–60s before next job...")
+                    human_sleep(35.0, 60.0, cancel_check=cancel_fn)
 
         context.close()
 

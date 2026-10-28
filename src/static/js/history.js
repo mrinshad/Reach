@@ -265,7 +265,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem; opacity: 0.55;" title="Location not specified in post"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>Not Specified</span>`}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>

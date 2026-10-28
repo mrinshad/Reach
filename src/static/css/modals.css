@@ -366,6 +366,30 @@
     transition: color 0.15s ease, background 0.15s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .snackbar-action-btn {
+    width: auto;
+    height: auto;
+    padding: 0.2rem 0.55rem;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .snackbar-action-btn:hover {
+    background: rgba(245, 158, 11, 0.28);
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+  }
+
   .snackbar-btn:hover {
     color: var(--text-main);
     background: rgba(255, 255, 255, 0.08);
