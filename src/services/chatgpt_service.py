@@ -1023,15 +1023,16 @@ def send_question_and_get_answer(
                 or (current_last_text and current_last_text != initial_last_text and not is_streaming)
             )
 
-            if is_new and current_last_text:
+            if is_new and current_last_text and not is_streaming:
                 md_el = last_msg.locator(".markdown, [class*='MarkdownRoot']")
                 if md_el.count() > 0:
                     response_text = md_el.first.inner_text().strip()
                 else:
                     response_text = current_last_text
 
-                if response_text and response_text != initial_last_text:
-                    break
+                if response_text:
+                    if current_count > initial_count or (new_last_id and new_last_id != last_msg_id) or response_text != initial_last_text:
+                        break
 
     if not response_text:
         current_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
