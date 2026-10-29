@@ -65,10 +65,13 @@ class SettingsPayload(BaseModel):
     search_query: Optional[str] = None
     search_location: Optional[str] = None
     chatgpt_url: Optional[str] = None
+    chatgpt_question_url: Optional[str] = None
     pacing_min_seconds: Optional[float] = None
     pacing_max_seconds: Optional[float] = None
     headless_mode: Optional[bool] = None
     headless: Optional[bool] = None
+    easy_apply_cycles: Optional[int] = None
+    crawler_cycles: Optional[int] = None
 
 
 class HeadlessTogglePayload(BaseModel):
@@ -80,19 +83,26 @@ class ScrapePayload(BaseModel):
     location: Optional[str] = None
     search_query: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
+    max_jobs: Optional[int] = None
+    limit: Optional[int] = None
 
 
 class EasyApplyBatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = "India"
     time_filter: Optional[str] = "24h"
-    max_jobs: Optional[int] = 20
+    max_jobs: Optional[int] = None
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
 
 
 class LinkedInBatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
 
 
 class BatchScrapePayload(BaseModel):
@@ -100,6 +110,32 @@ class BatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = None
     time_filter: Optional[str] = "24h"
+    cycles: Optional[int] = None
+    pacing: Optional[str] = None
+
+
+class SaveQuestionAnswersPayload(BaseModel):
+    answers: dict
+
+
+class DeleteQuestionsPayload(BaseModel):
+    keys: List[str]
+
+
+class CreateQuestionPayload(BaseModel):
+    question: str
+    category: Optional[str] = None
+    answer: Optional[str] = None
+    default_placeholder: Optional[str] = None
+    options: Optional[List[str]] = None
+
+
+class EasyApplyBatchApplyPayload(BaseModel):
+    post_ids: Optional[List[str]] = None
+    all_screened: bool = False
+    all_ready: bool = False
+    pacing: Optional[str] = "safe"
+
 
 
 

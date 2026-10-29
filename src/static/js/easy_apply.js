@@ -21,7 +21,7 @@ async function fetchEasyApplyPosts() {
     const params = new URLSearchParams({
       category: 'EASY_APPLY',
       status: 'ALL',
-      limit: '200',
+      limit: '1000',
     });
 
     if (state.fromEasyDate) {
@@ -39,10 +39,94 @@ async function fetchEasyApplyPosts() {
 
     updateEasyKPIs(easyApplyPosts);
     renderEasyApplyTable();
+    checkRateLimitSafeguard();
+    fetchQuestionBank(false);
+    initEasyCyclesPersistence();
   } catch (err) {
     console.error('Error fetching Easy Apply posts:', err);
     tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: #ef4444;">Error loading jobs: ${escapeHtml(err.message)}</td></tr>`;
   }
+}
+
+function initEasyCyclesPersistence() {
+  const input = document.getElementById('easyCrawlerCycles');
+  if (input && !input.dataset.persisted) {
+    input.dataset.persisted = 'true';
+    const saved = localStorage.getItem('reach_easy_apply_cycles');
+    if (saved) input.value = saved;
+
+    const onCyclesUpdate = (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        localStorage.setItem('reach_easy_apply_cycles', val);
+        if (typeof persistCyclesSetting === 'function') {
+          persistCyclesSetting('easy_apply_cycles', val);
+        }
+      }
+    };
+
+    input.addEventListener('change', onCyclesUpdate);
+    input.addEventListener('input', onCyclesUpdate);
+  }
+
+  const maxJobsInput = document.getElementById('easyMaxJobs');
+  if (maxJobsInput && !maxJobsInput.dataset.persisted) {
+    maxJobsInput.dataset.persisted = 'true';
+    const savedMax = localStorage.getItem('reach_easy_apply_max_jobs');
+    if (savedMax) maxJobsInput.value = savedMax;
+
+    const onMaxJobsUpdate = (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!isNaN(val) && val >= 1) {
+        localStorage.setItem('reach_easy_apply_max_jobs', val);
+      }
+    };
+
+    maxJobsInput.addEventListener('change', onMaxJobsUpdate);
+    maxJobsInput.addEventListener('input', onMaxJobsUpdate);
+  }
+}
+
+function updateEasyClearFiltersButton() {
+  const btn = document.getElementById('btnClearEasyFilters');
+  if (!btn) return;
+  const isFiltered = (
+    easyApplyStatusFilter !== 'ALL' ||
+    Boolean(easyTableSearchQuery) ||
+    Boolean(state.fromEasyDate) ||
+    Boolean(state.toEasyDate)
+  );
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
+function clearEasyApplyFilters() {
+  easyApplyStatusFilter = 'ALL';
+  easyTableSearchQuery = '';
+  state.fromEasyDate = '';
+  state.toEasyDate = '';
+
+  const pills = {
+    ALL: document.getElementById('pillEasyAll'),
+    DISCOVERED: document.getElementById('pillEasyDiscovered'),
+    REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
+    APPLIED: document.getElementById('pillEasyApplied'),
+    NOT_FOUND: document.getElementById('pillEasyNotFound'),
+    REJECTED: document.getElementById('pillEasyDismissed'),
+  };
+  Object.entries(pills).forEach(([key, el]) => {
+    if (el) el.classList.toggle('active', key === 'ALL');
+  });
+
+  const searchInput = document.getElementById('easyFilterKeyword');
+  if (searchInput) searchInput.value = '';
+
+  const fromEl = document.getElementById('easyDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('easyDateTo');
+  if (toEl) toEl.value = '';
+
+  updateEasyClearFiltersButton();
+  fetchEasyApplyPosts();
 }
 
 function applyEasyDateFilter() {
@@ -50,6 +134,7 @@ function applyEasyDateFilter() {
   const toEl = document.getElementById('easyDateTo');
   state.fromEasyDate = fromEl ? fromEl.value.trim() : '';
   state.toEasyDate = toEl ? toEl.value.trim() : '';
+  updateEasyClearFiltersButton();
   fetchEasyApplyPosts();
 }
 
@@ -60,6 +145,7 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const questionnaire = list.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
   const ready = list.filter((p) => p.status === 'DISCOVERED').length;
   const notFound = list.filter((p) => p.status === 'NOT_FOUND').length;
+  const dismissed = list.filter((p) => p.status === 'REJECTED').length;
 
   const totalEl = document.getElementById('easyKpiTotal');
   if (totalEl) totalEl.textContent = total;
@@ -86,11 +172,17 @@ function updateEasyKPIs(posts = easyApplyPosts) {
   const countScreening = document.getElementById('countPillScreening');
   if (countScreening) countScreening.textContent = questionnaire;
 
+  const rerunBtnCount = document.getElementById('countRerunScreenedBtn');
+  if (rerunBtnCount) rerunBtnCount.textContent = questionnaire;
+
   const countApplied = document.getElementById('countPillApplied');
   if (countApplied) countApplied.textContent = applied;
 
   const countNF = document.getElementById('countPillNotFound');
   if (countNF) countNF.textContent = notFound;
+
+  const countDismissed = document.getElementById('countPillDismissed');
+  if (countDismissed) countDismissed.textContent = dismissed;
 
   const badgeEl = document.getElementById('countEasyApply');
   if (badgeEl) {
@@ -109,17 +201,20 @@ function filterEasyApplyStatus(status) {
     REQUIRES_QUESTIONNAIRE: document.getElementById('pillEasyQuestionnaire'),
     APPLIED: document.getElementById('pillEasyApplied'),
     NOT_FOUND: document.getElementById('pillEasyNotFound'),
+    REJECTED: document.getElementById('pillEasyDismissed'),
   };
 
   Object.entries(pills).forEach(([key, el]) => {
     if (el) el.classList.toggle('active', key === status);
   });
 
+  updateEasyClearFiltersButton();
   renderEasyApplyTable();
 }
 
 function handleEasyTableSearch(query) {
   easyTableSearchQuery = (query || '').trim().toLowerCase();
+  updateEasyClearFiltersButton();
   renderEasyApplyTable();
 }
 
@@ -148,7 +243,7 @@ function renderEasyApplyTable() {
   }
 
   if (filtered.length === 0) {
-    let emptyMsg = 'No LinkedIn Easy Apply jobs scraped yet. Click "Crawl & Auto-Apply" to discover jobs!';
+    let emptyMsg = 'No LinkedIn Easy Apply jobs in queue yet. Click "Collect Jobs" to discover matching roles!';
     if (easyTableSearchQuery) {
       emptyMsg = `No jobs matched search "${escapeHtml(easyTableSearchQuery)}".`;
     } else if (easyApplyStatusFilter !== 'ALL') {
@@ -181,9 +276,10 @@ function renderEasyApplyTable() {
       statusBadgeClass = 'not-found';
     }
 
+    const statusTitle = post.rejection_reason ? `${post.status}: ${post.rejection_reason} (Click to change)` : 'Click to change status';
     const statusDropdown = `
       <div class="easy-status-wrap" id="status-wrap-${post.id}">
-        <span class="tag-easy-status ${statusBadgeClass} tag-easy-status-btn" onclick="toggleEasyStatusMenu('${post.id}', event)" title="Click to change status">
+        <span class="tag-easy-status ${statusBadgeClass} tag-easy-status-btn" onclick="toggleEasyStatusMenu('${post.id}', event)" title="${escapeHtml(statusTitle)}">
           <span>${statusBadgeText}</span>
           <span class="status-caret">▾</span>
         </span>
@@ -192,13 +288,16 @@ function renderEasyApplyTable() {
             <span>⚡</span><span>Ready (Queue)</span>
           </button>
           <button class="status-menu-opt opt-screening" onclick="setEasyPostStatus('${post.id}', 'REQUIRES_QUESTIONNAIRE', event)">
-            <span>📋</span><span>Screening Required</span>
+            <span>📋</span><span>Screening (Rerun)</span>
           </button>
           <button class="status-menu-opt opt-applied" onclick="setEasyPostStatus('${post.id}', 'APPLIED', event)">
             <span>✓</span><span>Mark Applied</span>
           </button>
           <button class="status-menu-opt opt-not-found" onclick="setEasyPostStatus('${post.id}', 'NOT_FOUND', event)">
             <span>🚫</span><span>Not Found / Closed</span>
+          </button>
+          <button class="status-menu-opt opt-rejected" onclick="setEasyPostStatus('${post.id}', 'REJECTED', event)">
+            <span>✕</span><span>Dismissed</span>
           </button>
         </div>
       </div>
@@ -208,15 +307,23 @@ function renderEasyApplyTable() {
     const dateText = typeof formatPostDateTimeWithRelative === 'function'
       ? formatPostDateTimeWithRelative(post)
       : (typeof formatDateTime === 'function' ? formatDateTime(post.created_at) : (post.created_at || '—'));
-    const locText = escapeHtml(post.location || 'India');
+    const locText = escapeHtml(post.location || 'Not Specified');
 
     let actionBtn = `<button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>`;
     if (post.status === 'APPLIED') {
       actionBtn = `<span class="tag-easy-status applied" style="opacity: 0.9; font-size: 0.68rem; cursor: default;">✓ Submitted</span>`;
     } else if (post.status === 'REQUIRES_QUESTIONNAIRE') {
-      actionBtn = `<button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>`;
+      actionBtn = `
+        <button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Rerun Easy Apply with saved Question Bank answers"><span>⚡ Rerun</span></button>
+        <button class="btn btn-outline btn-xs" onclick="openScreeningModal('${post.id}')" title="View screening questions" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.4);"><span>📋 Screen</span></button>
+      `;
     } else if (post.status === 'NOT_FOUND') {
-      actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;">🚫 Closed</span>`;
+      actionBtn = `<span class="tag-easy-status not-found" style="opacity: 0.8; font-size: 0.68rem; cursor: default;" title="${post.rejection_reason ? escapeHtml(post.rejection_reason) : 'Position closed'}">🚫 Closed</span>`;
+    } else if (post.status === 'REJECTED') {
+      actionBtn = `
+        <button class="btn btn-outline btn-xs" onclick="setEasyPostStatus('${post.id}', 'REQUIRES_QUESTIONNAIRE', event)" title="Restore to Screening (Rerun)" style="color: #fbbf24; border-color: rgba(245, 158, 11, 0.45);"><span>📋 Restore</span></button>
+        <button class="btn btn-primary btn-xs" onclick="triggerSingleEasyApply('${post.id}')" title="Run Easy Apply submission"><span>⚡ Apply</span></button>
+      `;
     }
 
     tr.innerHTML = `
@@ -228,10 +335,17 @@ function renderEasyApplyTable() {
           <a href="javascript:void(0)" onclick="openEasyDetailsModal('${post.id}')" class="easy-job-title-link" title="Click to view full job details">
             ${escapeHtml(post.author_headline || 'Software Role')}
           </a>
-          <span class="easy-company-name">
-            <span style="opacity: 0.7;">🏢</span>
-            <span>${escapeHtml(post.author_name || 'Company')}</span>
-          </span>
+          <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
+            <span class="easy-company-name">
+              <span style="opacity: 0.7;">🏢</span>
+              <span>${escapeHtml(post.author_name || 'Company')}</span>
+            </span>
+            <span class="easy-location-chip" title="Location: ${locText}">
+              <span style="opacity: 0.85;">📍</span>
+              <span>${locText}</span>
+            </span>
+            ${post.status === 'NOT_FOUND' && post.rejection_reason ? `<span class="col-closed-reason" style="color: #94a3b8; font-size: 0.68rem; background: rgba(148, 163, 184, 0.12); padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.22); line-height: 1.3;" title="${escapeHtml(post.rejection_reason)}">🚫 ${escapeHtml(post.rejection_reason)}</span>` : ''}
+          </div>
           <span class="easy-role-subline">
             <span class="col-mobile-loc">📍 ${locText}</span>
             <span class="col-mobile-date">⏱ ${escapeHtml(dateText)}</span>
@@ -239,9 +353,9 @@ function renderEasyApplyTable() {
         </div>
       </td>
       <td class="col-location">
-        <span class="easy-location-text" title="${escapeHtml(post.location || 'India')}">
-          <span style="opacity: 0.7;">📍</span>
-          <span>${locText}</span>
+        <span class="easy-location-badge ${post.location && post.location.toLowerCase().includes('remote') ? 'is-remote' : ''}" title="${locText}">
+          <span style="opacity: 0.85; flex-shrink: 0;">📍</span>
+          <span class="loc-label">${locText}</span>
         </span>
       </td>
       <td class="col-exp">
@@ -261,6 +375,7 @@ function renderEasyApplyTable() {
           <a href="${post.post_url}" target="_blank" rel="noopener noreferrer" class="icon-btn sm" title="Open Job on LinkedIn">
             <span style="font-size: 0.72rem; line-height: 1;">↗</span>
           </a>
+          ${post.status !== 'REJECTED' ? `<button class="icon-btn sm btn-dismiss-job" onclick="dismissSingleEasyJob('${post.id}', event)" title="Dismiss / Cancel this job" style="color: #94a3b8;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>` : ''}
           ${actionBtn}
         </div>
       </td>
@@ -276,13 +391,16 @@ async function triggerEasyApplyCrawl() {
   const query = (document.getElementById('easySearchQuery')?.value || 'Full Stack Developer').trim();
   const location = (document.getElementById('easySearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('easyTimeFilter')?.value || '24h';
+  const cycles = parseInt(document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const maxJobs = parseInt(document.getElementById('easyMaxJobs')?.value || '25', 10);
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
 
   const btn = document.getElementById('btnLaunchEasyApplyCrawl');
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = `
       <svg class="spin-fast" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
-      <span>Crawling...</span>
+      <span>Collecting...</span>
     `;
   }
 
@@ -294,12 +412,15 @@ async function triggerEasyApplyCrawl() {
         search_query: query,
         location: location,
         time_filter: timeFilter,
+        cycles: isNaN(cycles) ? 8 : cycles,
+        max_jobs: isNaN(maxJobs) ? 25 : maxJobs,
+        pacing: pacing,
       }),
     });
 
     if (res.ok) {
       const data = await res.json();
-      showToast(`⚡ Enqueued LinkedIn Easy Apply Crawler (${location})`, 'info');
+      showToast(`🔍 Enqueued LinkedIn Job Collector (${location})`, 'info');
       if (typeof startTaskPolling === 'function') startTaskPolling();
     } else {
       const err = await res.json();
@@ -312,15 +433,94 @@ async function triggerEasyApplyCrawl() {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = `
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>Crawl & Auto-Apply</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Collect Jobs</span>
         `;
       }
     }, 2000);
   }
 }
 
+async function dismissSingleEasyJob(postId, event) {
+  if (event) event.stopPropagation();
+  const post = easyApplyPosts.find((p) => p.id === postId);
+  const prevStatus = post ? post.status : 'DISCOVERED';
+  const title = post ? (post.author_headline || post.author_name || 'Job') : 'Job';
+
+  try {
+    const res = await fetch(`/api/posts/${postId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'Dismissed by user' }),
+    });
+    if (res.ok) {
+      if (post) {
+        post.status = 'REJECTED';
+        post.rejection_reason = 'Dismissed by user';
+      }
+      selectedEasyJobIds.delete(postId);
+      updateEasyKPIs();
+      renderEasyApplyTable();
+
+      const undoAction = {
+        label: 'Undo',
+        payload: { post_ids: [postId], target_status: prevStatus },
+        onClick: async () => {
+          await revertPostsToStatus([postId], prevStatus);
+        },
+      };
+
+      if (typeof sendAppNotification === 'function') {
+        sendAppNotification({
+          title: 'Job Dismissed',
+          message: `Dismissed "${title}"`,
+          type: 'warn',
+          action: undoAction,
+        });
+      }
+
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Job Dismissed',
+          message: `Dismissed "${title}"`,
+          type: 'warn',
+          duration: 12000,
+          action: undoAction,
+        });
+      } else {
+        showToast('✓ Job dismissed from queue', 'success');
+      }
+    } else {
+      const err = await res.json();
+      showAlert('Dismiss Failed', err.detail || 'Could not dismiss job');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
 async function triggerSingleEasyApply(postId) {
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
+
   const post = easyApplyPosts.find((p) => p.id === postId);
   const title = post ? post.author_headline : 'job';
 
@@ -358,22 +558,42 @@ function copyEasyJobLink(postId) {
   });
 }
 
-function openEasyDetailsModal(postId) {
-  const post = easyApplyPosts.find((p) => p.id === postId);
+async function openEasyDetailsModal(postOrId) {
+  let post = null;
+  if (typeof postOrId === 'object' && postOrId !== null) {
+    post = postOrId;
+  } else if (typeof postOrId === 'string') {
+    post = easyApplyPosts.find((p) => p.id === postOrId);
+    if (!post) {
+      try {
+        const res = await fetch(`/api/posts/${postOrId}`);
+        if (res.ok) {
+          post = await res.json();
+        }
+      } catch (err) {
+        console.error('Failed to load post for easy modal', err);
+      }
+    }
+  }
   if (!post) return;
   activeEasyModalPost = post;
+  if (Array.isArray(easyApplyPosts) && !easyApplyPosts.some((p) => p.id === post.id)) {
+    easyApplyPosts.unshift(post);
+  }
 
   const modal = document.getElementById('modalEasyDetails');
   if (!modal) return;
 
   const comp = post.author_name || 'N/A';
-  const loc = post.location || 'India';
+  const loc = post.location || 'Not Specified';
 
   document.getElementById('easyModalJobTitle').textContent = post.author_headline || 'Job Details';
   const headerComp = document.getElementById('easyModalHeaderCompany');
   const headerLoc = document.getElementById('easyModalHeaderLocation');
   if (headerComp) headerComp.textContent = comp;
-  if (headerLoc) headerLoc.textContent = loc;
+  if (headerLoc) {
+    headerLoc.innerHTML = `<span style="color: #38bdf8; display: inline-flex; align-items: center; gap: 0.2rem;">📍 ${escapeHtml(loc)}</span>`;
+  }
 
   document.getElementById('easyModalCompany').textContent = comp;
   document.getElementById('easyModalLocation').textContent = loc;
@@ -399,6 +619,16 @@ function openEasyDetailsModal(postId) {
   } else {
     if (qBox) qBox.classList.add('hidden');
     if (viewQBtn) viewQBtn.classList.add('hidden');
+  }
+
+  // Closed Job box
+  const cBox = document.getElementById('easyModalClosedBox');
+  const cNotes = document.getElementById('easyModalClosedNotes');
+  if (post.status === 'NOT_FOUND' && post.rejection_reason) {
+    if (cBox) cBox.classList.remove('hidden');
+    if (cNotes) cNotes.textContent = post.rejection_reason;
+  } else {
+    if (cBox) cBox.classList.add('hidden');
   }
 
   modal.classList.remove('hidden');
@@ -427,6 +657,163 @@ function triggerEasyModalApply() {
   }
 }
 
+async function navigateToJobInEasyApply(jobLabel, event, locHint) {
+  if (event) {
+    event.stopPropagation();
+    event.preventDefault();
+  }
+  if (!jobLabel || !String(jobLabel).trim()) return;
+
+  let rawLabel = String(jobLabel).trim();
+  let locationFilter = String(locHint || '').trim();
+
+  // If rawLabel has embedded location marker: "Title @ Company • 📍 Location"
+  if (rawLabel.includes(' • 📍 ')) {
+    const parts = rawLabel.split(' • 📍 ');
+    rawLabel = (parts[0] || '').trim();
+    if (!locationFilter) locationFilter = (parts[1] || '').trim();
+  } else if (rawLabel.includes(' • ')) {
+    const parts = rawLabel.split(' • ');
+    rawLabel = (parts[0] || '').trim();
+    if (!locationFilter) locationFilter = (parts[1] || '').trim();
+  }
+
+  const lowerLabel = rawLabel.toLowerCase();
+
+  // If generic system marker
+  if (lowerLabel === 'direct application flow' || lowerLabel === 'standard candidate profile question') {
+    if (typeof showToast === 'function') {
+      showToast('This is a core standard question found across multiple applications.', 'info');
+    }
+    return;
+  }
+
+  // Parse label into title and company if formatted as "Title @ Company"
+  let title = rawLabel;
+  let company = '';
+  if (rawLabel.includes(' @ ')) {
+    const parts = rawLabel.split(' @ ');
+    title = (parts[0] || '').trim();
+    company = (parts[1] || '').trim();
+  }
+
+  // Feedback to user
+  if (typeof showToast === 'function') {
+    const locMsg = locationFilter ? ` (📍 ${locationFilter})` : '';
+    showToast(`Locating job: "${rawLabel}"${locMsg}...`, 'info', 1800);
+  }
+
+  // Score candidate post based on company, title, and location matching
+  const scorePost = (p) => {
+    let score = 0;
+    const pComp = (p.author_name || '').toLowerCase();
+    const pTitle = (p.author_headline || '').toLowerCase();
+    const pLoc = (p.location || '').toLowerCase();
+
+    if (company && pComp.includes(company.toLowerCase())) score += 10;
+    if (company && pComp === company.toLowerCase()) score += 5;
+    if (title && pTitle.includes(title.toLowerCase())) score += 10;
+    if (title && pTitle === title.toLowerCase()) score += 5;
+    if (locationFilter && pLoc && pLoc.includes(locationFilter.toLowerCase())) score += 25;
+    return score;
+  };
+
+  // 1. Try to find the post in memory first
+  let foundPost = null;
+  if (Array.isArray(easyApplyPosts) && easyApplyPosts.length > 0) {
+    let bestScore = 0;
+    easyApplyPosts.forEach((p) => {
+      const s = scorePost(p);
+      if (s > bestScore) {
+        bestScore = s;
+        foundPost = p;
+      }
+    });
+  }
+
+  // 2. If not found in memory, query API
+  if (!foundPost) {
+    try {
+      const searchTarget = company || title;
+      const res = await fetch(`/api/posts?category=EASY_APPLY&status=ALL&search=${encodeURIComponent(searchTarget)}&limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        const candidatePosts = data.posts || [];
+
+        let bestScore = 0;
+        candidatePosts.forEach((p) => {
+          const s = scorePost(p);
+          if (s > bestScore) {
+            bestScore = s;
+            foundPost = p;
+          }
+        });
+
+        if (!foundPost && candidatePosts.length > 0) {
+          foundPost = candidatePosts[0];
+        }
+      }
+    } catch (err) {
+      console.error('Error querying job by sample label', err);
+    }
+  }
+
+  // Fallback 3: If not found, try searching by title directly
+  if (!foundPost && title && title !== company) {
+    try {
+      const cleanTitle = title.replace(/[^\w\s]/g, ' ').trim().slice(0, 30);
+      const res = await fetch(`/api/posts?category=EASY_APPLY&status=ALL&search=${encodeURIComponent(cleanTitle)}&limit=25`);
+      if (res.ok) {
+        const data = await res.json();
+        const candidatePosts = data.posts || [];
+        if (candidatePosts.length > 0) {
+          foundPost = candidatePosts[0];
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (!foundPost) {
+    if (typeof showToast === 'function') {
+      showToast(`Could not find job details for "${rawLabel}" in Easy Apply.`, 'warning');
+    }
+    return;
+  }
+
+  // Close any modal that might currently be open
+  if (typeof closeScreeningModal === 'function') closeScreeningModal();
+  if (typeof closeQuestionBankModal === 'function') closeQuestionBankModal();
+
+  // Switch to Easy Apply section (#easy-apply)
+  if (typeof switchTab === 'function') {
+    switchTab('easy-apply');
+  } else {
+    state.activeTab = 'tabEasyApply';
+    const panel = document.getElementById('tabEasyApply');
+    if (panel) panel.classList.remove('hidden');
+  }
+
+  try {
+    if (window.location.hash !== '#easy-apply') {
+      window.location.hash = '#easy-apply';
+    }
+  } catch (_) {}
+
+  // Open the Easy Apply Job Details modal immediately (shows full Job Description!)
+  await openEasyDetailsModal(foundPost);
+
+  // If table row exists in the DOM, scroll to it and highlight
+  setTimeout(() => {
+    const rowEl = document.getElementById(`easy-row-${foundPost.id}`);
+    if (rowEl) {
+      rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      rowEl.classList.remove('easy-row-highlight');
+      void rowEl.offsetWidth; // trigger reflow
+      rowEl.classList.add('easy-row-highlight');
+    }
+  }, 250);
+}
+
 // Batch actions
 function toggleSelectEasyJob(postId, checked) {
   if (checked) {
@@ -441,6 +828,20 @@ function toggleSelectAllEasyJobs(checked) {
   let filtered = easyApplyPosts;
   if (easyApplyStatusFilter !== 'ALL') {
     filtered = easyApplyPosts.filter((p) => p.status === easyApplyStatusFilter);
+  }
+  if (easyTableSearchQuery) {
+    filtered = filtered.filter((p) => {
+      const headline = (p.author_headline || '').toLowerCase();
+      const company = (p.author_name || '').toLowerCase();
+      const location = (p.location || '').toLowerCase();
+      const text = (p.full_text || '').toLowerCase();
+      return (
+        headline.includes(easyTableSearchQuery) ||
+        company.includes(easyTableSearchQuery) ||
+        location.includes(easyTableSearchQuery) ||
+        text.includes(easyTableSearchQuery)
+      );
+    });
   }
 
   if (checked) {
@@ -513,42 +914,192 @@ async function batchDismissEasyJobs() {
   const confirmed = await showConfirm('Dismiss Selected', `Dismiss ${size} selected jobs from queue?`);
   if (!confirmed) return;
 
-  for (const id of selectedEasyJobIds) {
-    try {
-      await fetch(`/api/posts/${id}/reject`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'Dismissed by user' }),
+  const ids = Array.from(selectedEasyJobIds);
+  try {
+    const res = await fetch('/api/posts/reject-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, reason: 'Dismissed by user' }),
+    });
+    if (res.ok) {
+      ids.forEach((id) => {
+        const post = easyApplyPosts.find((p) => p.id === id);
+        if (post) {
+          post.status = 'REJECTED';
+          post.rejection_reason = 'Dismissed by user';
+        }
       });
-    } catch (_) {}
-  }
+      selectedEasyJobIds.clear();
+      updateEasyKPIs();
+      renderEasyApplyTable();
 
-  selectedEasyJobIds.clear();
-  showToast(`✓ Dismissed ${size} jobs`, 'success');
-  fetchEasyApplyPosts();
+      const undoAction = {
+        label: 'Undo',
+        payload: { post_ids: ids, target_status: 'DISCOVERED' },
+        onClick: async () => {
+          await revertPostsToStatus(ids, 'DISCOVERED');
+        },
+      };
+
+      if (typeof sendAppNotification === 'function') {
+        sendAppNotification({
+          title: 'Jobs Dismissed',
+          message: `Dismissed ${size} job(s) from queue`,
+          type: 'warn',
+          action: undoAction,
+        });
+      }
+
+      if (typeof showSnackbar === 'function') {
+        showSnackbar({
+          title: 'Jobs Dismissed',
+          message: `Dismissed ${size} job(s) from queue`,
+          type: 'warn',
+          duration: 14000,
+          action: undoAction,
+        });
+      } else {
+        showToast(`✓ Dismissed ${size} jobs from queue`, 'success');
+      }
+    } else {
+      const err = await res.json();
+      showAlert('Dismiss Failed', err.detail || 'Could not dismiss selected jobs');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
 }
 
 async function batchApplySelectedEasyJobs() {
   const ids = Array.from(selectedEasyJobIds);
   if (ids.length === 0) return;
 
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
+
   const confirmed = await showConfirm(
     'Batch Easy Apply',
-    `Queue automated Easy Apply for ${ids.length} selected jobs sequentially?`,
+    `Queue automated Easy Apply for ${ids.length} selected jobs sequentially?\n\nSaved answers from your Question Bank will be automatically filled, and applications will submit directly once all questions are answered.`,
     { confirmText: 'Queue Applications' }
   );
   if (!confirmed) return;
 
-  for (const id of ids) {
-    try {
-      await fetch(`/api/easy-apply/${id}`, { method: 'POST' });
-    } catch (_) {}
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+
+  try {
+    const res = await fetch('/api/easy-apply/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ post_ids: ids, pacing: pacing }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      selectedEasyJobIds.clear();
+      showToast(data.message || `Queued batch Easy Apply for ${ids.length} jobs!`, 'info');
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      fetchEasyApplyPosts();
+    } else {
+      let errorMsg = `Failed to enqueue batch Easy Apply (${res.status})`;
+      try {
+        const err = await res.json();
+        errorMsg = err.detail || err.message || errorMsg;
+      } catch (_) {
+        try {
+          const txt = await res.text();
+          if (txt) errorMsg = txt;
+        } catch (_) {}
+      }
+      showAlert('Batch Error', errorMsg);
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+async function triggerRerunScreenedApplications() {
+  const screenedCount = easyApplyPosts.filter((p) => p.status === 'REQUIRES_QUESTIONNAIRE').length;
+  if (screenedCount === 0) {
+    showAlert('No Screened Jobs', 'There are currently no applications requiring questionnaire screening in your queue.');
+    return;
   }
 
-  selectedEasyJobIds.clear();
-  showToast(`Queued ${ids.length} Easy Apply tasks!`, 'info');
-  if (typeof startTaskPolling === 'function') startTaskPolling();
-  fetchEasyApplyPosts();
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
+
+  const confirmed = await showConfirm(
+    'Rerun Screened Applications',
+    `Re-run Easy Apply for all ${screenedCount} screened applications sequentially?\n\nThe automated browser will navigate each role and automatically submit applications using the saved answers in your Question Bank.`,
+    { confirmText: `Rerun All (${screenedCount})` }
+  );
+  if (!confirmed) return;
+
+  const pacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+
+  try {
+    const res = await fetch('/api/easy-apply/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all_screened: true, pacing: pacing }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      showToast(data.message || `Enqueued batch rerun for ${screenedCount} screened jobs!`, 'success');
+      if (typeof startTaskPolling === 'function') startTaskPolling();
+      fetchEasyApplyPosts();
+    } else {
+      let errorMsg = `Failed to start batch rerun (${res.status})`;
+      try {
+        const err = await res.json();
+        errorMsg = err.detail || err.message || errorMsg;
+      } catch (_) {
+        try {
+          const txt = await res.text();
+          if (txt) errorMsg = txt;
+        } catch (_) {}
+      }
+      showAlert('Cannot Start Rerun', errorMsg);
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
 }
 
 // Status Transitions & Interactivity — Fixed-Position Smart Dropdown
@@ -610,6 +1161,9 @@ async function setEasyPostStatus(postId, newStatus, event) {
   if (event) event.stopPropagation();
   const wrap = document.getElementById(`status-wrap-${postId}`);
   if (wrap) wrap.classList.remove('open');
+  const post = easyApplyPosts.find((p) => p.id === postId);
+  const prevStatus = post ? post.status : 'DISCOVERED';
+  const title = post ? (post.author_headline || post.author_name || 'Job') : 'Job';
 
   try {
     const res = await fetch(`/api/posts/${postId}/status`, {
@@ -620,7 +1174,6 @@ async function setEasyPostStatus(postId, newStatus, event) {
 
     if (res.ok) {
       const data = await res.json();
-      const post = easyApplyPosts.find((p) => p.id === postId);
       if (post) {
         post.status = newStatus;
       }
@@ -630,7 +1183,37 @@ async function setEasyPostStatus(postId, newStatus, event) {
       }
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast(`✓ Status updated to ${newStatus}`, 'success');
+
+      if (newStatus === 'REJECTED') {
+        const undoAction = {
+          label: 'Undo',
+          payload: { post_ids: [postId], target_status: prevStatus },
+          onClick: async () => {
+            await revertPostsToStatus([postId], prevStatus);
+          },
+        };
+        if (typeof sendAppNotification === 'function') {
+          sendAppNotification({
+            title: 'Job Dismissed',
+            message: `Moved "${title}" to Dismissed`,
+            type: 'warn',
+            action: undoAction,
+          });
+        }
+        if (typeof showSnackbar === 'function') {
+          showSnackbar({
+            title: 'Job Dismissed',
+            message: `Moved "${title}" to Dismissed`,
+            type: 'warn',
+            duration: 12000,
+            action: undoAction,
+          });
+        } else {
+          showToast(`✓ Status updated to ${newStatus}`, 'success');
+        }
+      } else {
+        showToast(`✓ Status updated to ${newStatus}`, 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Failed to Update Status', err.detail || 'Could not update status');
@@ -659,7 +1242,37 @@ async function batchSetEasyStatus(newStatus) {
       selectedEasyJobIds.clear();
       updateEasyKPIs();
       renderEasyApplyTable();
-      showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+
+      if (newStatus === 'REJECTED') {
+        const undoAction = {
+          label: 'Undo',
+          payload: { post_ids: ids, target_status: 'DISCOVERED' },
+          onClick: async () => {
+            await revertPostsToStatus(ids, 'DISCOVERED');
+          },
+        };
+        if (typeof sendAppNotification === 'function') {
+          sendAppNotification({
+            title: 'Batch Dismissed',
+            message: `Dismissed ${ids.length} jobs from queue`,
+            type: 'warn',
+            action: undoAction,
+          });
+        }
+        if (typeof showSnackbar === 'function') {
+          showSnackbar({
+            title: 'Batch Dismissed',
+            message: `Dismissed ${ids.length} jobs from queue`,
+            type: 'warn',
+            duration: 14000,
+            action: undoAction,
+          });
+        } else {
+          showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+        }
+      } else {
+        showToast(`✓ Updated ${ids.length} jobs to ${newStatus}`, 'success');
+      }
     } else {
       const err = await res.json();
       showAlert('Batch Update Failed', err.detail || 'Could not update jobs');
@@ -709,26 +1322,91 @@ let activeScreeningPost = null;
 function parseScreeningQuestions(rejectionReason) {
   if (!rejectionReason) return [];
 
+  const genericPlaceholders = [
+    'requires screening questions',
+    'multi-step questionnaire (saved for screening)',
+    'multi-step form required manual input',
+    'exceeded step limit, saved for screening',
+  ];
+
   // Try JSON format first
   try {
     const parsed = JSON.parse(rejectionReason);
     if (parsed && Array.isArray(parsed.questions)) {
-      return parsed.questions.map((q) => ({
-        label: q.label || q,
-        type: q.type || null,
-        step: q.step || null,
-      }));
+      return parsed.questions
+        .map((q) => ({
+          label: (q.label || q || '').trim(),
+          type: q.type || null,
+          step: q.step || null,
+        }))
+        .filter((q) => q.label && !genericPlaceholders.includes(q.label.toLowerCase()));
     }
-  } catch (_) {
-    // Not JSON — use legacy string parsing
+  } catch (_) {}
+
+  // Legacy string format: "Questions: Q1; Q2; Q3" or semicolon-separated
+  let raw = rejectionReason.trim();
+  if (raw.toLowerCase().startsWith('questions:')) {
+    raw = raw.replace(/^questions:\s*/i, '').trim();
   }
 
-  // Legacy format: "Questions: Q1; Q2; Q3"
-  let raw = rejectionReason;
-  if (raw.startsWith('Questions: ')) {
-    raw = raw.substring('Questions: '.length);
+  return raw
+    .split(';')
+    .map((q) => q.replace(/^\s*\*\s*|\s*\*\s*$/g, '').trim())
+    .filter((q) => q && !genericPlaceholders.includes(q.toLowerCase()))
+    .map((q) => ({ label: q, type: null, step: null }));
+}
+
+function findQuestionBankAnswer(label) {
+  if (!label || !questionBankAnswers) return '';
+  const normKey = label.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (questionBankAnswers[normKey]) return questionBankAnswers[normKey];
+
+  // Smart aliases to standard answers
+  if (/(?:middle name|middle_name)/i.test(label)) {
+    if (questionBankAnswers['std_middle_name']) return questionBankAnswers['std_middle_name'];
+    if (questionBankAnswers['middlename']) return questionBankAnswers['middlename'];
+    return '__EMPTY__';
   }
-  return raw.split('; ').filter(Boolean).map((q) => ({ label: q.trim(), type: null, step: null }));
+  if (/(?:phone|mobile|contact number)/i.test(label)) {
+    if (questionBankAnswers['std_phone']) return questionBankAnswers['std_phone'];
+    if (questionBankAnswers['phonemobilenumber']) return questionBankAnswers['phonemobilenumber'];
+  }
+  if (/(?:email)/i.test(label)) {
+    if (questionBankAnswers['std_email']) return questionBankAnswers['std_email'];
+    if (questionBankAnswers['emailaddress']) return questionBankAnswers['emailaddress'];
+  }
+  if (/(?:city|current location|current city|present location)/i.test(label) && !/relocat/i.test(label)) {
+    if (questionBankAnswers['std_location']) return questionBankAnswers['std_location'];
+    if (questionBankAnswers['currentcitylocation']) return questionBankAnswers['currentcitylocation'];
+  }
+  if (/(?:current ctc|current salary|fix ctc|fixed ctc|in-hand salary)/i.test(label)) {
+    if (questionBankAnswers['std_current_ctc']) return questionBankAnswers['std_current_ctc'];
+    if (questionBankAnswers['currentctcsalaryinlpaorinr']) return questionBankAnswers['currentctcsalaryinlpaorinr'];
+  }
+  if (/(?:expected ctc|expected salary|desired compensation|expectation fix ctc|ectc)/i.test(label)) {
+    if (questionBankAnswers['std_expected_ctc']) return questionBankAnswers['std_expected_ctc'];
+    if (questionBankAnswers['expectedctcsalaryinlpaorinr']) return questionBankAnswers['expectedctcsalaryinlpaorinr'];
+  }
+  if (/(?:notice period|notice days|days left in your notice|how many days is your notice)/i.test(label)) {
+    if (questionBankAnswers['std_notice_period']) return questionBankAnswers['std_notice_period'];
+    if (questionBankAnswers['noticeperiodindays']) return questionBankAnswers['noticeperiodindays'];
+  }
+  if (/(?:total years|total experience|professional software engineering experience)/i.test(label)) {
+    if (questionBankAnswers['std_experience_total']) return questionBankAnswers['std_experience_total'];
+    if (questionBankAnswers['totalyearsofprofessionalsoftwareengineeringexperience']) return questionBankAnswers['totalyearsofprofessionalsoftwareengineeringexperience'];
+  }
+  if (/(?:english)/i.test(label)) {
+    if (questionBankAnswers['std_english']) return questionBankAnswers['std_english'];
+  }
+  return '';
+}
+
+function setScreeningInpValue(normKey, val) {
+  const inp = document.getElementById(`screeningAnsInp_${normKey}`);
+  if (inp) {
+    inp.value = val;
+    inp.focus();
+  }
 }
 
 function openScreeningModal(postId) {
@@ -756,29 +1434,76 @@ function openScreeningModal(postId) {
   const questions = parseScreeningQuestions(post.rejection_reason);
   const listEl = document.getElementById('screeningQuestionsList');
   const emptyEl = document.getElementById('screeningEmptyState');
+  const applyNowBtn = document.getElementById('btnScreeningApplyNow');
 
   if (questions.length > 0) {
     listEl.classList.remove('hidden');
     emptyEl.classList.add('hidden');
 
+    let allQuestionsAnswered = true;
+
     listEl.innerHTML = questions.map((q, i) => {
+      const normKey = q.label.toLowerCase().replace(/[^a-z0-9]/g, '');
       const typeTag = q.type
         ? `<div class="screening-q-type">${escapeHtml(q.type)}${q.step ? ` · Step ${q.step}` : ''}</div>`
         : (q.step ? `<div class="screening-q-type">Step ${q.step}</div>` : '');
+
+      const savedAnswer = findQuestionBankAnswer(q.label);
+      if (!savedAnswer) {
+        allQuestionsAnswered = false;
+      }
+
+      let answerRow = '';
+      if (savedAnswer === '__EMPTY__') {
+        answerRow = `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+                       <span>✓ Configured Blank:</span> <strong>(Will leave blank on apply)</strong>
+                     </div>`;
+      } else if (savedAnswer) {
+        answerRow = `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+                       <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
+                     </div>`;
+      } else {
+        answerRow = `
+          <div class="screening-inline-ans-box" id="screeningAnsBox_${normKey}">
+            <div style="display: flex; gap: 0.35rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'Yes')">Yes</button>
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'No')">No</button>
+              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="setScreeningInpValue('${normKey}', '__EMPTY__')">🚫 Leave Blank</button>
+            </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <input type="text" class="screening-inline-input" id="screeningAnsInp_${normKey}" placeholder="Type answer for Question Bank (e.g. 3, Immediate, Yes)..." onkeydown="if(event.key==='Enter') saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this.nextElementSibling)" />
+              <button type="button" class="btn btn-warning btn-xs screening-inline-save-btn" onclick="saveSingleInlineAnswer('${normKey}', '${escapeHtml(q.label)}', this)">Save Answer</button>
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="screening-question-card">
           <span class="screening-q-num">${i + 1}</span>
-          <div>
+          <div style="flex: 1;">
             <div class="screening-q-text">${escapeHtml(q.label)}</div>
             ${typeTag}
+            <div id="screeningAnsSlot_${normKey}">
+              ${answerRow}
+            </div>
           </div>
         </div>
       `;
     }).join('');
+
+    if (applyNowBtn) {
+      if (allQuestionsAnswered) {
+        applyNowBtn.classList.remove('hidden');
+      } else {
+        applyNowBtn.classList.add('hidden');
+      }
+    }
   } else {
     listEl.classList.add('hidden');
     listEl.innerHTML = '';
     emptyEl.classList.remove('hidden');
+    if (applyNowBtn) applyNowBtn.classList.add('hidden');
   }
 
   modal.classList.remove('hidden');
@@ -791,6 +1516,83 @@ function closeScreeningModal(e) {
   const modal = document.getElementById('modalScreeningQuestions');
   if (modal) modal.classList.add('hidden');
   activeScreeningPost = null;
+}
+
+async function saveSingleInlineAnswer(normKey, label, btn) {
+  const input = document.getElementById(`screeningAnsInp_${normKey}`);
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) {
+    showAlert('Empty Answer', 'Please enter an answer or select Leave Blank.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers: { [normKey]: val, [label]: val } }),
+    });
+
+    if (res.ok) {
+      showToast(val === '__EMPTY__' ? '✓ Configured to submit blank!' : '✓ Answer saved to Question Bank!', 'success');
+      // Update local dictionary immediately
+      if (questionBankAnswers) {
+        questionBankAnswers[normKey] = val;
+      }
+      // Replace inline box with saved pill
+      const slot = document.getElementById(`screeningAnsSlot_${normKey}`);
+      if (slot) {
+        if (val === '__EMPTY__') {
+          slot.innerHTML = `
+            <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <span>✓ Configured Blank:</span> <strong>(Will leave blank on apply)</strong>
+            </div>
+          `;
+        } else {
+          slot.innerHTML = `
+            <div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.3); color: #4ade80; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
+              <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(val)}</strong>
+            </div>
+          `;
+        }
+      }
+      // Refresh Question Bank in background
+      fetchQuestionBank(false);
+
+      // Check if all questions are now answered
+      if (activeScreeningPost) {
+        const questions = parseScreeningQuestions(activeScreeningPost.rejection_reason);
+        const allAnswered = questions.every((q) => Boolean(findQuestionBankAnswer(q.label)));
+        const applyNowBtn = document.getElementById('btnScreeningApplyNow');
+        if (applyNowBtn && allAnswered) {
+          applyNowBtn.classList.remove('hidden');
+        }
+      }
+    } else {
+      const err = await res.json();
+      showAlert('Save Error', err.detail || 'Could not save answer.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save Answer';
+    }
+  }
+}
+
+async function applyToCurrentScreeningPost() {
+  if (!activeScreeningPost) return;
+  const postId = activeScreeningPost.id;
+  closeScreeningModal();
+  await triggerSingleEasyApply(postId);
 }
 
 function openScreeningFromDetails() {
@@ -858,13 +1660,34 @@ function openBulkSearchModal() {
   const modal = document.getElementById('modalBulkEasySearch');
   if (!modal) return;
 
-  // Pre-fill location & time filter from active crawler form if set
+  // Pre-fill location, time filter, pacing & cycles from active crawler form if set
   const currentLoc = document.getElementById('easySearchLocation')?.value || 'India';
   const currentTime = document.getElementById('easyTimeFilter')?.value || '24h';
+  const currentPacing = document.getElementById('selectEasyPacing')?.value || 'safe';
+  const currentCycles = document.getElementById('easyCrawlerCycles')?.value || '8';
+  const currentMaxJobs = document.getElementById('easyMaxJobs')?.value || '50';
+
   const locInput = document.getElementById('bulkSearchLocation');
   const timeSelect = document.getElementById('bulkTimeFilter');
+  const pacingSelect = document.getElementById('bulkEasyPacing');
+  const cyclesInput = document.getElementById('bulkEasyCycles');
+  const maxJobsInput = document.getElementById('bulkEasyMaxJobs');
+
   if (locInput) locInput.value = currentLoc;
   if (timeSelect) timeSelect.value = currentTime;
+  if (pacingSelect) pacingSelect.value = currentPacing;
+  if (cyclesInput) cyclesInput.value = currentCycles;
+  if (maxJobsInput) maxJobsInput.value = currentMaxJobs;
+
+  // Pre-fill keywords from active search query if textarea is currently empty
+  const activeQuery = (document.getElementById('easySearchQuery')?.value || '').trim();
+  const kwTextarea = document.getElementById('bulkKeywordsInput');
+  if (kwTextarea && !kwTextarea.value.trim() && activeQuery) {
+    kwTextarea.value = activeQuery;
+    handleBulkKeywordsInput(activeQuery);
+  } else if (kwTextarea && kwTextarea.value.trim()) {
+    handleBulkKeywordsInput(kwTextarea.value);
+  }
 
   modal.classList.remove('hidden');
 }
@@ -917,12 +1740,12 @@ function renderBulkKeywordsChips() {
       </span>
     `).join('');
 
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) submitBtn.style.opacity = '1';
     if (submitText) submitText.textContent = `Queue ${count} Search${count === 1 ? '' : 'es'}`;
   } else {
     container.classList.add('hidden');
     container.innerHTML = '';
-    if (submitBtn) submitBtn.disabled = true;
+    if (submitBtn) submitBtn.style.opacity = '0.85';
     if (submitText) submitText.textContent = 'Queue Searches';
   }
 }
@@ -974,18 +1797,35 @@ function clearBulkKeywords() {
 }
 
 async function submitBulkEasySearch() {
+  const kwTextarea = document.getElementById('bulkKeywordsInput');
+  const rawInput = (kwTextarea?.value || '').trim();
+  if ((!bulkParsedKeywords || bulkParsedKeywords.length === 0) && rawInput) {
+    bulkParsedKeywords = parseKeywordsString(rawInput);
+    renderBulkKeywordsChips();
+  }
+
   if (!bulkParsedKeywords || bulkParsedKeywords.length === 0) {
-    showAlert('No Keywords', 'Please enter or import at least one keyword to search.');
+    if (kwTextarea) {
+      kwTextarea.focus();
+      kwTextarea.style.borderColor = '#f43f5e';
+      setTimeout(() => { kwTextarea.style.borderColor = ''; }, 2000);
+    }
+    showAlert('No Keywords Provided', 'Please enter, paste, or upload at least one role keyword (e.g. "Full Stack Developer, Python Developer") to queue searches.', { centerPopup: true });
     return;
   }
 
   const location = (document.getElementById('bulkSearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('bulkTimeFilter')?.value || '24h';
+  const cycles = parseInt(document.getElementById('bulkEasyCycles')?.value || document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const maxJobs = parseInt(document.getElementById('bulkEasyMaxJobs')?.value || document.getElementById('easyMaxJobs')?.value || '50', 10);
+  const pacing = document.getElementById('bulkEasyPacing')?.value || document.getElementById('selectEasyPacing')?.value || 'safe';
+  const pacingLabels = { safe: 'Safe (45-75s)', slow: 'Extra Slow (75-120s)', standard: 'Moderate (30-45s)' };
+  const pacingLabel = pacingLabels[pacing] || pacing;
   const count = bulkParsedKeywords.length;
 
   const confirmed = await showConfirm(
     'Launch Bulk LinkedIn Search',
-    `Enqueue ${count} searches sequentially in background for "${location}"?\n\nEach search will run one after another in persistent Firefox.`,
+    `Enqueue ${count} searches sequentially in background for "${location}"?\n\n• Cycles: ${cycles} per role\n• Max Jobs: ${maxJobs} per role\n• Submission delay: ${pacingLabel}\n• Persistent headed/headless Firefox`,
     { confirmText: `Queue ${count} Searches` }
   );
   if (!confirmed) return;
@@ -1001,6 +1841,9 @@ async function submitBulkEasySearch() {
         keywords: bulkParsedKeywords,
         location: location,
         time_filter: timeFilter,
+        cycles: isNaN(cycles) ? 8 : cycles,
+        max_jobs: isNaN(maxJobs) ? 50 : maxJobs,
+        pacing: pacing,
       }),
     });
 
@@ -1010,6 +1853,11 @@ async function submitBulkEasySearch() {
       closeBulkSearchModal();
       clearBulkKeywords();
       if (typeof startTaskPolling === 'function') startTaskPolling();
+      if (typeof toggleTaskDrawer === 'function') {
+        toggleTaskDrawer(true);
+      } else if (typeof toggleTaskLogs === 'function') {
+        toggleTaskLogs(true);
+      }
     } else {
       const err = await res.json();
       showAlert('Bulk Search Error', err.detail || 'Could not enqueue bulk search tasks.');
@@ -1018,6 +1866,337 @@ async function submitBulkEasySearch() {
     showAlert('Error', err.message);
   } finally {
     if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+// --- Centralized Question & Answer Bank Controller ---
+let questionBankData = null;
+let questionBankAnswers = {};
+let activeQBankCategory = 'all';
+let qbankSearchFilter = '';
+let rateLimitTimerInterval = null;
+
+async function fetchQuestionBank(renderAfter = true) {
+  try {
+    const res = await fetch('/api/easy-apply/questions');
+    if (!res.ok) return;
+    const data = await res.json();
+    questionBankData = data;
+
+    // Cache answers in map for instant lookup
+    questionBankAnswers = {};
+    if (data.questions && Array.isArray(data.questions)) {
+      data.questions.forEach((q) => {
+        if (q.answer) {
+          questionBankAnswers[q.key] = q.answer;
+          if (q.id) questionBankAnswers[q.id] = q.answer;
+        }
+      });
+    }
+
+    // Update Question Bank button counter (shows answered questions ready for automation)
+    const countEl = document.getElementById('totalQuestionsCount');
+    if (countEl) countEl.textContent = data.answered_count !== undefined ? data.answered_count : (data.total_count || 0);
+
+    const allPillCount = document.getElementById('qbankCountAll');
+    if (allPillCount) allPillCount.textContent = data.total_count || 0;
+
+    const unansweredPillCount = document.getElementById('qbankCountUnanswered');
+    if (unansweredPillCount) unansweredPillCount.textContent = data.pending_count || 0;
+
+    // Update pending alert banner and button badge
+    const pendingCount = data.pending_count || 0;
+    const alertBanner = document.getElementById('qbankPendingAlertBanner');
+    const bannerCountEl = document.getElementById('qbankPendingCountBanner');
+    const btnBadge = document.getElementById('qbankPendingBtnBadge');
+
+    if (pendingCount > 0) {
+      if (alertBanner) alertBanner.classList.remove('hidden');
+      if (bannerCountEl) bannerCountEl.textContent = pendingCount;
+      if (btnBadge) {
+        btnBadge.classList.remove('hidden');
+        btnBadge.textContent = `${pendingCount} pending`;
+      }
+    } else {
+      if (alertBanner) alertBanner.classList.add('hidden');
+      if (btnBadge) btnBadge.classList.add('hidden');
+    }
+
+    if (renderAfter) {
+      renderQuestionBankList();
+    }
+  } catch (err) {
+    console.error('Error fetching question bank:', err);
+  }
+}
+
+function openQuestionBankModal(cat) {
+  const modal = document.getElementById('modalQuestionBank');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  if (cat) {
+    activeQBankCategory = cat;
+    document.querySelectorAll('.qbank-cat-pill').forEach((p) => {
+      if (p.getAttribute('data-cat') === cat) {
+        p.classList.add('active');
+      } else {
+        p.classList.remove('active');
+      }
+    });
+  }
+
+  fetchQuestionBank(true);
+}
+
+function closeQuestionBankModal(e) {
+  if (e && e.target && e.target !== e.currentTarget && !e.target.classList.contains('close-x') && !e.target.classList.contains('modal-close-btn') && !e.target.classList.contains('close-dialog-btn') && !e.target.closest('.close-dialog-btn')) {
+    return;
+  }
+  const modal = document.getElementById('modalQuestionBank');
+  if (modal) modal.classList.add('hidden');
+}
+
+function setQuestionBankCategory(cat, btn) {
+  activeQBankCategory = cat;
+  document.querySelectorAll('.qbank-cat-pill').forEach((p) => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderQuestionBankList();
+}
+
+function filterQuestionBankList() {
+  const input = document.getElementById('qbankSearchInput');
+  qbankSearchFilter = (input ? input.value : '').toLowerCase().trim();
+  renderQuestionBankList();
+}
+
+function renderQuestionBankList() {
+  const listEl = document.getElementById('qbankQuestionsList');
+  if (!listEl) return;
+
+  if (!questionBankData || !questionBankData.questions) {
+    listEl.innerHTML = '<div class="qbank-loading"><span class="spinner-sm"></span> Loading questions...</div>';
+    return;
+  }
+
+  let questions = questionBankData.questions;
+
+  // Filter by category
+  if (activeQBankCategory === 'unanswered') {
+    questions = questions.filter((q) => !q.answer || !q.answer.trim());
+  } else if (activeQBankCategory !== 'all') {
+    questions = questions.filter((q) => q.category === activeQBankCategory);
+  }
+
+  // Filter by search keyword
+  if (qbankSearchFilter) {
+    questions = questions.filter((q) =>
+      q.question.toLowerCase().includes(qbankSearchFilter) ||
+      (q.answer && q.answer.toLowerCase().includes(qbankSearchFilter))
+    );
+  }
+
+  // Update footer statistics
+  const progressEl = document.getElementById('qbankAnsweredProgress');
+  if (progressEl && questionBankData) {
+    progressEl.innerHTML = `<strong>${questionBankData.answered_count}</strong> of <strong>${questionBankData.total_count}</strong> questions answered`;
+  }
+
+  if (questions.length === 0) {
+    listEl.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+        <span style="font-size: 1.8rem; display: block; margin-bottom: 0.5rem;">🔍</span>
+        <strong style="color: #cbd5e1;">No questions match your filter</strong>
+        <p style="font-size: 0.76rem; margin-top: 0.25rem;">Try selecting a different category or clearing the search keyword.</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = questions.map((q) => {
+    const isAnswered = Boolean(q.answer && q.answer.trim());
+    const occTag = q.occurrences > 1
+      ? `<span class="qbank-badge qbank-badge-occ" title="Captured across ${q.occurrences} different jobs">From ${q.occurrences} jobs</span>`
+      : '';
+    const stdTag = q.is_standard
+      ? `<span class="qbank-badge qbank-badge-standard" title="Standard Candidate Profile Question">Standard</span>`
+      : '';
+    const catTag = `<span class="qbank-badge qbank-badge-cat">${escapeHtml(q.category || 'general')}</span>`;
+    const ansBadge = isAnswered
+      ? `<span class="qbank-badge qbank-badge-answered">✓ Answered</span>`
+      : `<span class="qbank-badge qbank-badge-pending">⚠️ Pending Answer</span>`;
+
+    const sampleJobInfo = !q.is_standard && q.sample_jobs && q.sample_jobs.length > 0
+      ? `<div class="qbank-sample-jobs">
+           <span style="font-weight: 600; color: var(--text-dim); font-size: 0.72rem;">Found on:</span>
+           ${q.sample_jobs.slice(0, 2).map(j => {
+             const jStr = String(j || '').trim();
+             let rComp = jStr;
+             let rLoc = '';
+             if (jStr.includes(' • 📍 ')) {
+               const pts = jStr.split(' • 📍 ');
+               rComp = (pts[0] || '').trim();
+               rLoc = (pts[1] || '').trim();
+             } else if (jStr.includes(' • ')) {
+               const pts = jStr.split(' • ');
+               rComp = (pts[0] || '').trim();
+               rLoc = (pts[1] || '').trim();
+             }
+             const tip = rLoc ? `Click to view '${escapeHtml(rComp)}' (📍 ${escapeHtml(rLoc)}) on Easy Apply section` : `Click to view '${escapeHtml(rComp)}' on Easy Apply section`;
+             return `<button type="button" class="sample-job-tag is-clickable" data-job="${escapeHtml(rComp)}" data-loc="${escapeHtml(rLoc)}" onclick="handleSampleJobClick(this, event)" title="${tip}"><span style="opacity: 0.85; flex-shrink: 0;">💼</span><span class="sample-job-name">${escapeHtml(rComp)}</span>${rLoc ? `<span class="sample-job-location-badge">📍 ${escapeHtml(rLoc)}</span>` : ''}<span class="sample-job-arrow" aria-hidden="true">↗</span></button>`;
+           }).join('')}
+         </div>`
+      : '';
+
+    const inputVal = q.answer || '';
+    const placeholder = q.default_placeholder || 'Enter your default answer...';
+
+    return `
+      <div class="qbank-card" data-key="${escapeHtml(q.key)}">
+        <div class="qbank-card-header">
+          <div class="qbank-question-label">${escapeHtml(q.question)}</div>
+          <div class="qbank-badges">
+            ${stdTag}
+            ${catTag}
+            ${occTag}
+            ${ansBadge}
+          </div>
+        </div>
+        <input
+          type="text"
+          class="qbank-answer-input"
+          data-key="${escapeHtml(q.key)}"
+          placeholder="${escapeHtml(placeholder)}"
+          value="${escapeHtml(inputVal)}"
+        />
+        ${sampleJobInfo}
+      </div>
+    `;
+  }).join('');
+}
+
+async function saveQuestionBankAnswers() {
+  const btn = document.getElementById('btnSaveQuestionBank');
+  const inputs = document.querySelectorAll('.qbank-answer-input');
+  const answers = {};
+
+  inputs.forEach((inp) => {
+    const key = inp.getAttribute('data-key');
+    const val = inp.value.trim();
+    if (key) {
+      answers[key] = val;
+    }
+  });
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-sm"></span> <span>Saving...</span>`;
+  }
+
+  try {
+    const res = await fetch('/api/easy-apply/questions/answers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+
+    if (res.ok) {
+      showToast('✓ Answers saved to Question Bank!', 'success');
+      await fetchQuestionBank(true);
+    } else {
+      const err = await res.json();
+      showAlert('Save Error', err.detail || 'Could not save answers.');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>Save Answers</span>`;
+    }
+  }
+}
+
+// --- Safeguard Rate Limit Watchdog & Banner ---
+async function checkRateLimitSafeguard() {
+  const banner = document.getElementById('easyRateLimitBanner');
+  const msgEl = document.getElementById('easyRateLimitMsg');
+  const timerEl = document.getElementById('easyRateLimitTimer');
+  if (!banner) return;
+
+  try {
+    const res = await fetch('/api/easy-apply/rate-limit-status');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.is_paused && data.seconds_remaining > 0) {
+      banner.classList.remove('hidden');
+      if (data.is_daily_limit) {
+        if (msgEl) {
+          msgEl.innerHTML = `<strong>You reached today’s Easy Apply limit:</strong> Great effort applying today. Automation paused until tomorrow to protect your account. <a href="javascript:void(0)" onclick="showDailyLimitModal()" style="color:#60a5fa; text-decoration:underline; font-weight:600; margin-left:4px;">View details</a>`;
+        }
+      } else {
+        if (msgEl) msgEl.textContent = data.safeguard_reason || 'LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.';
+      }
+
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+
+      let remaining = data.seconds_remaining;
+      const updateTimer = () => {
+        if (remaining <= 0) {
+          banner.classList.add('hidden');
+          if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+          return;
+        }
+        if (data.is_daily_limit) {
+          const h = Math.floor(remaining / 3600);
+          const m = Math.floor((remaining % 3600) / 60);
+          if (timerEl) timerEl.textContent = `(Resets in ${h}h ${m}m)`;
+        } else {
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          if (timerEl) timerEl.textContent = `(${m}m ${s < 10 ? '0' : ''}${s}s)`;
+        }
+        remaining--;
+      };
+      updateTimer();
+      rateLimitTimerInterval = setInterval(updateTimer, 1000);
+    } else {
+      banner.classList.add('hidden');
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+    }
+  } catch (err) {
+    console.warn('Error checking rate limit status:', err);
+  }
+}
+
+async function resumeEasyApplySafeguard() {
+  const confirmed = await showConfirm(
+    'Resume Easy Apply Now?',
+    'Are you sure you want to clear the safeguard pause? If LinkedIn recently displayed an automated activity warning, resuming too quickly may risk restrictions. Ensure you use Safe or Extra Slow pacing.',
+    { confirmText: 'Resume Easy Apply' }
+  );
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch('/api/easy-apply/rate-limit-resume', { method: 'POST' });
+    if (res.ok) {
+      const banner = document.getElementById('easyRateLimitBanner');
+      if (banner) banner.classList.add('hidden');
+      if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
+      showToast('✓ Safeguard pause cleared. Easy Apply resumed.', 'success');
+    }
+  } catch (err) {
+    showAlert('Error', err.message);
+  }
+}
+
+// Auto-fetch question bank count on script execution
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => fetchQuestionBank(false));
+  } else {
+    fetchQuestionBank(false);
   }
 }
 
@@ -1035,6 +2214,7 @@ window.toggleSelectEasyJob = toggleSelectEasyJob;
 window.toggleSelectAllEasyJobs = toggleSelectAllEasyJobs;
 window.batchCopyEasyLinks = batchCopyEasyLinks;
 window.batchDismissEasyJobs = batchDismissEasyJobs;
+window.dismissSingleEasyJob = dismissSingleEasyJob;
 window.batchApplySelectedEasyJobs = batchApplySelectedEasyJobs;
 window.toggleEasyStatusMenu = toggleEasyStatusMenu;
 window.closeAllEasyStatusMenus = closeAllEasyStatusMenus;
@@ -1056,4 +2236,17 @@ window.removeBulkKeyword = removeBulkKeyword;
 window.clearBulkKeywords = clearBulkKeywords;
 window.submitBulkEasySearch = submitBulkEasySearch;
 window.applyEasyDateFilter = applyEasyDateFilter;
+window.clearEasyApplyFilters = clearEasyApplyFilters;
+window.openQuestionBankModal = openQuestionBankModal;
+window.closeQuestionBankModal = closeQuestionBankModal;
+window.setQuestionBankCategory = setQuestionBankCategory;
+window.filterQuestionBankList = filterQuestionBankList;
+window.saveQuestionBankAnswers = saveQuestionBankAnswers;
+window.saveSingleInlineAnswer = saveSingleInlineAnswer;
+window.applyToCurrentScreeningPost = applyToCurrentScreeningPost;
+window.triggerRerunScreenedApplications = triggerRerunScreenedApplications;
+window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
+window.checkRateLimitSafeguard = checkRateLimitSafeguard;
+window.navigateToJobInEasyApply = navigateToJobInEasyApply;
+window.handleSampleJobClick = handleSampleJobClick;
 

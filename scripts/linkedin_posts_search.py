@@ -26,7 +26,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from playwright.sync_api import sync_playwright
 from src.services.firefox_connector import launch_firefox_context
 from src.services.experience_extractor import extract_experience
-from src.db import init_db, upsert_post, get_existing_post_identifiers, get_setting
+from src.db import (
+    init_db,
+    upsert_post,
+    get_existing_post_identifiers,
+    get_setting,
+    check_comment_bait,
+    COMMENT_BAIT_PATTERNS,
+)
 
 ARTIFACT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
 LINKEDIN_BASE = "https://www.linkedin.com"
@@ -141,8 +148,8 @@ def is_job_seeker_post(text: str) -> bool:
 
 def is_comment_bait_post(text: str) -> bool:
     """Detect if the post asks users to comment to apply or receive details."""
-    lower_text = text.lower()
-    return any(re.search(p, lower_text) for p in COMMENT_BAIT_PATTERNS)
+    is_bait, _ = check_comment_bait(text)
+    return is_bait
 
 
 def parse_post_hours_ago(post_date: str) -> float:
@@ -467,12 +474,16 @@ def main():
 
         email_posts = []
         draft_posts = []
+        spam_posts = []
         processed_snippets = set()
         skipped_existing_count = 0
         consecutive_older_posts = 0
 
         # Human-like scrolling to collect all posts today from 00:00 midnight until now
-        max_scroll_cycles = 60
+        try:
+            max_scroll_cycles = int(os.environ.get("SCRAPER_CYCLES", 60))
+        except Exception:
+            max_scroll_cycles = 60
         consecutive_no_new = 0
         total_scanned_count = 0
 
@@ -541,15 +552,22 @@ def main():
                 exp_info = data["experience"]
                 exp_label = exp_info["raw_text"] if exp_info["raw_text"] else exp_info["seniority_level"]
 
-                # Categorize: Email Hiring Post vs Draft Post
-                if data["detected_emails"] and not data["is_comment_bait"]:
+                # Categorize: Email Hiring Post vs Draft Post vs Spam / Scam
+                if data["is_comment_bait"]:
+                    data["category"] = "DRAFT_PORTAL"
+                    data["status"] = "REJECTED"
+                    data["rejection_reason"] = "Scam: Comment bait ('comment below' / 'comment interested')"
+                    data["is_potential_spam"] = False
+                    spam_posts.append(data)
+                    print(f"    🚫 [SPAM / SCAM] {data['author_name']} | Exp: {exp_label} | Reason: Comment-to-apply bait ('comment below' / 'comment interested') | Time: {data['post_date']}")
+                elif data["detected_emails"]:
                     data["category"] = "EMAIL_OUTREACH"
                     email_posts.append(data)
                     print(f"    ✓ [EMAIL OUTREACH] {data['author_name']} | Exp: {exp_label} | Emails: {data['detected_emails']} | Time: {data['post_date']}")
                 else:
                     data["category"] = "DRAFT_PORTAL"
                     draft_posts.append(data)
-                    reason = "No email (apply link / portal)" if not data["detected_emails"] else "Comment-to-apply bait"
+                    reason = "No email (apply link / portal)"
                     print(f"    📋 [SAVED AS DRAFT] {data['author_name']} | Exp: {exp_label} | Reason: {reason} | Time: {data['post_date']}")
 
                 if location:
@@ -575,20 +593,22 @@ def main():
             human_scroll(page, distance=random.randint(400, 650), steps=5)
             human_sleep(1.8, 3.0)
 
+        total_new = len(email_posts) + len(draft_posts) + len(spam_posts)
         print("\n[4/4] EXTRACTION SUMMARY:")
         print("=" * 68)
-        print(f"  Total Today's New Posts Added:    {len(email_posts) + len(draft_posts)}")
+        print(f"  Total Today's New Posts Added:    {total_new}")
         print(f"  - Direct Email Outreach Added:    {len(email_posts)}")
         print(f"  - Draft / Portal Posts Added:     {len(draft_posts)}")
+        print(f"  - Spam / Scam Flagged Added:      {len(spam_posts)}")
         print(f"  - Previously Added (Skipped):     {skipped_existing_count}")
         print("=" * 68)
 
-        total_new = len(email_posts) + len(draft_posts)
         crawl_stats = {
             "total_crawled": max(total_scanned_count, total_new + skipped_existing_count),
             "newly_added": total_new,
             "new_email_outreach": len(email_posts),
             "new_draft_portal": len(draft_posts),
+            "new_spam_scam": len(spam_posts),
             "skipped_already_added": skipped_existing_count,
             "skipped_other": max(0, total_scanned_count - total_new - skipped_existing_count)
         }
@@ -606,6 +626,13 @@ def main():
         with open(draft_json_path, "w") as f:
             json.dump(draft_posts, f, indent=2)
         print(f"  ✓ Saved Draft / Other Posts to:   {draft_json_path}")
+
+        # Save spam / scam posts
+        if spam_posts:
+            spam_json_path = os.path.join(ARTIFACT_DIR, "scratch", "spam_scam_posts_today.json")
+            with open(spam_json_path, "w") as f:
+                json.dump(spam_posts, f, indent=2)
+            print(f"  ✓ Saved Spam / Scam Posts to:     {spam_json_path}")
 
         # Save screenshot
         shot_path = os.path.join(ARTIFACT_DIR, "scratch", "linkedin_posts_today_batch.png")

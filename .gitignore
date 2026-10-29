@@ -54,3 +54,9 @@ firefox_profile/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# graphify cache
+graphify-out/cache/
+
+# local native binaries
+.agents/skills/impeccable/scripts/bin/

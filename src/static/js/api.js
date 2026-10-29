@@ -15,6 +15,28 @@ async function fetchHealth() {
     updateHealthPill('healthGmail', state.health.gmail);
     updateHealthPill('healthDatabase', state.health.database);
 
+    // Update Easy Apply Safeguard Health Card
+    try {
+      const easyRes = await fetch('/api/easy-apply/rate-limit-status');
+      if (easyRes.ok) {
+        const easyData = await easyRes.json();
+        const dot = document.getElementById('healthEasyApply');
+        const label = document.getElementById('healthLabelEasyApply');
+        if (dot && label) {
+          dot.classList.remove('ok', 'warn', 'error');
+          if (easyData.paused) {
+            dot.classList.add('warn');
+            label.textContent = `Safeguard Active (${easyData.remaining_seconds}s)`;
+            label.style.color = '#fde68a';
+          } else {
+            dot.classList.add('ok');
+            label.textContent = 'Safe Pacing Active';
+            label.style.color = '#a7f3d0';
+          }
+        }
+      }
+    } catch (_) {}
+
     const banner = document.getElementById('systemAlertBanner');
     const msgEl = document.getElementById('systemAlertMessage');
     const actionsEl = document.getElementById('systemAlertActions');
@@ -161,7 +183,7 @@ async function loadDashboardData() {
       await fetchSentPosts();
     }
   } else if (state.activeTab === 'tabAnalytics') {
-    await loadAnalytics(state.analyticsDays || 30);
+    await loadAnalytics(typeof state.analyticsDays === 'number' ? state.analyticsDays : 30);
   }
 }
 
@@ -204,30 +226,39 @@ async function fetchStats() {
     if (elSent) elSent.textContent = othersCount;
 
     // Sidebar Navigation Badges:
-    // 1. Discovered Jobs: count of yet to generate JDs
+    // 1. Discovered Jobs: All source + yet to generate + Direct email outreach
     const countDiscEl = document.getElementById('countDiscovered');
     if (countDiscEl) {
       countDiscEl.textContent = pendingCount;
       countDiscEl.title = `${pendingCount} direct email outreach jobs yet to generate`;
     }
 
-    // 2. Review & Drafts: count of drafts ready for review
+    // 2. LinkedIn Job Portal & Easy Apply: ready to apply count
+    const countEasyApplyEl = document.getElementById('countEasyApply');
+    if (countEasyApplyEl) {
+      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : 0;
+      countEasyApplyEl.textContent = eaPending;
+      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready to apply`;
+    }
+
+    // 3. Question Bank: unanswered screening questions count
+    const countQBankEl = document.getElementById('countSidebarQuestionBank');
+    if (countQBankEl) {
+      const qbPending = stats.question_bank_pending !== undefined ? stats.question_bank_pending : 0;
+      countQBankEl.textContent = qbPending;
+      countQBankEl.title = `${qbPending} screening questions unanswered`;
+      countQBankEl.style.display = qbPending > 0 ? 'inline-flex' : 'none';
+    }
+
+    // 4. Review & Drafts: drafted count ready for review
     const countRevEl = document.getElementById('countReview');
     if (countRevEl) {
       countRevEl.textContent = draftsReady;
-      countRevEl.title = `${draftsReady} drafts ready for review`;
+      countRevEl.title = `${draftsReady} drafted emails ready for review`;
     }
     const reviewQueueBadge = document.getElementById('reviewQueueCount');
     if (reviewQueueBadge) {
       reviewQueueBadge.textContent = draftsReady;
-    }
-
-    // 2b. LinkedIn Easy Apply badge
-    const countEasyApplyEl = document.getElementById('countEasyApply');
-    if (countEasyApplyEl) {
-      const eaPending = stats.easy_apply_pending !== undefined ? stats.easy_apply_pending : (stats.easy_apply_total || 0);
-      countEasyApplyEl.textContent = eaPending;
-      countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready`;
     }
 
     // 3. Sent & History: Others tab counters
@@ -335,7 +366,7 @@ function refreshActiveTabRealtime(stats) {
     }
   } else if (activeTab === 'tabAnalytics') {
     if (typeof loadAnalytics === 'function') {
-      loadAnalytics(state.analyticsDays || 30);
+      loadAnalytics(typeof state.analyticsDays === 'number' ? state.analyticsDays : 30);
     }
   }
 }
@@ -427,6 +458,19 @@ async function fetchSettings() {
       } else if (state.config.search_location) {
         crawlerLocSelect.value = state.config.search_location;
       }
+    }
+
+    // Restore persistent cycles for Easy Apply and Crawlers
+    const easyCyclesEl = document.getElementById('easyCrawlerCycles');
+    if (easyCyclesEl) {
+      const saved = localStorage.getItem('reach_easy_apply_cycles') || state.config?.easy_apply_cycles;
+      if (saved) easyCyclesEl.value = saved;
+    }
+
+    const crawlerCyclesEl = document.getElementById('crawlerInputCycles');
+    if (crawlerCyclesEl) {
+      const saved = localStorage.getItem('reach_crawler_cycles') || state.config?.crawler_cycles;
+      if (saved) crawlerCyclesEl.value = saved;
     }
 
     if (typeof updateCrawlerSearchPlaceholder === 'function') {

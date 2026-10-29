@@ -8,8 +8,10 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 
 from src.db import (
+    get_connection,
     upsert_post,
     get_post_by_id,
+    get_posts_by_ids,
     get_recently_sent_recipients,
     SEND_COOLDOWN_DAYS,
     get_activity_logs,
@@ -30,6 +32,7 @@ from src.services.automation_tasks import (
     run_linkedin_scraper,
     run_linkedin_easy_apply_scraper,
     run_single_easy_apply,
+    run_batch_easy_apply,
     get_registered_scrapers,
     run_scraper_by_source,
     run_interactive_login,
@@ -40,10 +43,14 @@ from .models import (
     DirectOutreachPayload,
     ScrapePayload,
     EasyApplyBatchScrapePayload,
+    EasyApplyBatchApplyPayload,
     LinkedInBatchScrapePayload,
     BatchScrapePayload,
     ReexecuteBatchPayload,
     DeleteBatchActivityLogsPayload,
+    SaveQuestionAnswersPayload,
+    DeleteQuestionsPayload,
+    CreateQuestionPayload,
     DEFAULT_OPPORTUNITY_SUBJECT,
     DEFAULT_OPPORTUNITY_BODY,
 )
@@ -57,12 +64,7 @@ def check_send_cooldown(post_ids):
     emailed within the cooldown window. Returns (blocked, allowed) lists where
     each blocked entry carries the remaining wait time.
     """
-    posts = []
-    for pid in post_ids:
-        post = get_post_by_id(pid)
-        if post:
-            posts.append(post)
-
+    posts = get_posts_by_ids(post_ids)
     primary_emails = []
     for post in posts:
         emails = post.get("contact_emails") or []
@@ -373,6 +375,7 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
     time_filter = (payload.time_filter or "24h") if payload else "24h"
+    cycles = payload.cycles if payload else None
 
     full_name, short_name, snippet = build_crawler_labels("linkedin", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -381,8 +384,8 @@ def api_trigger_scrape_linkedin(payload: Optional[ScrapePayload] = None):
         short_name=short_name,
         snippet=snippet,
         runner_func=run_linkedin_scraper,
-        args=(query, loc, time_filter),
-        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter},
+        args=(query, loc, time_filter, cycles),
+        metadata={"source": "linkedin", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started in headed Firefox."
     return {"success": True, "message": msg, **res}
@@ -399,6 +402,7 @@ def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
     loc = (payload.location or "").strip() or None
     time_filter = payload.time_filter or "24h"
 
+    cycles = payload.cycles
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin", query=kw, location=loc, time_filter=time_filter)
         res = task_manager.enqueue_task(
@@ -407,8 +411,8 @@ def api_trigger_scrape_linkedin_batch(payload: LinkedInBatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=run_linkedin_scraper,
-            args=(kw, loc, time_filter),
-            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter},
+            args=(kw, loc, time_filter, cycles),
+            metadata={"source": "linkedin", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles},
         )
         queued.append({"keyword": kw, **res})
 
@@ -437,9 +441,13 @@ def api_trigger_scrape_batch(payload: BatchScrapePayload):
         from src.services.automation_tasks import run_linkedin_easy_apply_scraper
         runner = run_linkedin_easy_apply_scraper
         source_key = "linkedin_jobs"
+        task_args_builder = lambda k: (k, loc, time_filter, payload.cycles, payload.pacing)
+        task_meta_builder = lambda k: {"source": source_key, "query": k, "location": loc, "time_filter": time_filter, "cycles": payload.cycles, "pacing": payload.pacing}
     else:
         runner = run_linkedin_scraper
         source_key = "linkedin"
+        task_args_builder = lambda k: (k, loc, time_filter, payload.cycles)
+        task_meta_builder = lambda k: {"source": source_key, "query": k, "location": loc, "time_filter": time_filter, "cycles": payload.cycles}
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels(source_key, query=kw, location=loc, time_filter=time_filter)
@@ -449,8 +457,8 @@ def api_trigger_scrape_batch(payload: BatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=runner,
-            args=(kw, loc, time_filter),
-            metadata={"source": source_key, "query": kw, "location": loc, "time_filter": time_filter},
+            args=task_args_builder(kw),
+            metadata=task_meta_builder(kw),
         )
         queued.append({"keyword": kw, **res})
 
@@ -470,6 +478,11 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
     query = payload.search_query if payload else None
     loc = payload.location if payload else None
     time_filter = (payload.time_filter or "24h") if payload else "24h"
+    cycles = payload.cycles if payload else None
+    pacing = payload.pacing if payload else None
+    max_jobs = (payload.max_jobs or payload.limit) if payload else None
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
 
     full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -478,8 +491,8 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
         short_name=short_name,
         snippet=snippet,
         runner_func=run_linkedin_easy_apply_scraper,
-        args=(query, loc, time_filter),
-        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter},
+        args=(query, loc, time_filter, cycles, pacing, max_jobs),
+        metadata={"source": "linkedin_jobs", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
     )
     msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
     return {"success": True, "message": msg, **res}
@@ -496,6 +509,11 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
     queued = []
     loc = payload.location or "India"
     time_filter = payload.time_filter or "24h"
+    cycles = payload.cycles
+    pacing = payload.pacing
+    max_jobs = payload.max_jobs
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
@@ -505,8 +523,8 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
             short_name=short_name,
             snippet=snippet,
             runner_func=run_linkedin_easy_apply_scraper,
-            args=(kw, loc, time_filter),
-            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter},
+            args=(kw, loc, time_filter, cycles, pacing, max_jobs),
+            metadata={"source": "linkedin_jobs", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
         )
         queued.append({"keyword": kw, **res})
 
@@ -519,9 +537,117 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
     }
 
 
+@router.post("/easy-apply/batch")
+def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
+    """
+    Enqueue sequential batch Easy Apply submissions for either:
+    1. A specified list of post IDs (selected from the UI).
+    2. All posts currently in REQUIRES_QUESTIONNAIRE status (rerun screened applications).
+    """
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    safeguard = get_rate_limit_safeguard_status()
+    if safeguard.get("is_paused"):
+        raise HTTPException(
+            status_code=429,
+            detail=safeguard.get("safeguard_reason") or "Easy Apply is currently paused due to LinkedIn rate limit safeguard."
+        )
+
+    target_ids: List[str] = []
+
+    if payload.all_ready:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No ready-to-apply jobs found in DISCOVERED/READY status."
+            )
+    elif payload.all_screened:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE'
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No screened applications found in REQUIRES_QUESTIONNAIRE status."
+            )
+    elif payload.post_ids:
+        target_ids = [p.strip() for p in payload.post_ids if p and p.strip()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid post IDs provided for batch Easy Apply."
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Must specify post_ids, all_ready=True, or all_screened=True for batch Easy Apply."
+        )
+
+    count = len(target_ids)
+    pacing = payload.pacing or "safe"
+    if payload.all_screened:
+        task_name = f"Batch Easy Apply — Rerun Screened ({count} applications)"
+        snippet = f"{count} screened jobs"
+    elif payload.all_ready:
+        task_name = f"Batch Easy Apply — All Ready Jobs ({count} applications)"
+        snippet = f"{count} ready jobs"
+    else:
+        task_name = f"Batch Easy Apply ({count} applications)"
+        snippet = f"{count} jobs"
+
+    res = task_manager.enqueue_task(
+        task_type="easy_apply_batch",
+        task_name=task_name,
+        short_name="Batch Easy Apply",
+        snippet=snippet,
+        runner_func=run_batch_easy_apply,
+        args=(target_ids, pacing),
+        metadata={
+            "count": count,
+            "all_screened": payload.all_screened,
+            "all_ready": payload.all_ready,
+            "pacing": pacing,
+            "post_ids": target_ids[:50],
+        },
+    )
+    msg = (
+        f"Queued batch Easy Apply for {count} jobs (Position #{res['position']})"
+        if res["queued"]
+        else f"Batch Easy Apply started for {count} jobs."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "count": count,
+        "all_screened": payload.all_screened,
+        "all_ready": payload.all_ready,
+        **res,
+    }
+
+
 @router.post("/easy-apply/{post_id}")
 def api_trigger_single_easy_apply(post_id: str):
     """Enqueue Easy Apply submission for a specific job post."""
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    safeguard = get_rate_limit_safeguard_status()
+    if safeguard.get("is_paused"):
+        raise HTTPException(
+            status_code=429,
+            detail=safeguard.get("safeguard_reason") or "Easy Apply is currently paused due to LinkedIn rate limit safeguard."
+        )
+
     from src.services.automation_tasks import run_single_easy_apply
     post = get_post_by_id(post_id)
     title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
@@ -540,6 +666,88 @@ def api_trigger_single_easy_apply(post_id: str):
     return {"success": True, "message": msg, **res}
 
 
+@router.get("/easy-apply/questions")
+def api_get_easy_apply_questions(
+    category: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    from_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+):
+    """Return aggregated, deduplicated screening questions and persistent answers from Question Bank with optional date range."""
+    from src.services.question_bank_service import get_aggregated_question_bank
+    cat = category if isinstance(category, str) else None
+    s = search if isinstance(search, str) else None
+    stat = status if isinstance(status, str) else None
+    sb = sort_by if isinstance(sort_by, str) else None
+    fd = from_date if isinstance(from_date, str) and from_date.strip() else None
+    td = to_date if isinstance(to_date, str) and to_date.strip() else None
+    return get_aggregated_question_bank(category=cat, search=s, status=stat, sort_by=sb, from_date=fd, to_date=td)
+
+
+@router.post("/easy-apply/questions/create")
+def api_create_easy_apply_question(payload: CreateQuestionPayload):
+    """Manually add or update a screening question in the Question Bank."""
+    from src.services.question_bank_service import create_or_update_question
+    if not payload.question or not payload.question.strip():
+        raise HTTPException(status_code=400, detail="question text cannot be empty.")
+    res = create_or_update_question(
+        question_text=payload.question,
+        category=payload.category,
+        answer=payload.answer,
+        default_placeholder=payload.default_placeholder,
+        options=payload.options,
+    )
+    return {"success": True, "question": res}
+
+
+@router.post("/easy-apply/questions/answers")
+def api_save_easy_apply_answers(payload: SaveQuestionAnswersPayload):
+    """Save and update answers to screening questions in persistent settings."""
+    from src.services.question_bank_service import save_stored_answers
+    if not isinstance(payload.answers, dict):
+        raise HTTPException(status_code=400, detail="answers must be a key-value dictionary.")
+    res = save_stored_answers(payload.answers)
+    return {"success": True, **res}
+
+
+@router.delete("/easy-apply/questions/{key}")
+def api_delete_easy_apply_question(key: str):
+    """Delete a single screening question from the Question Bank."""
+    from src.services.question_bank_service import delete_question
+    if not key or not key.strip():
+        raise HTTPException(status_code=400, detail="Question key or ID must be provided.")
+    deleted = delete_question(key)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Question not found or already deleted.")
+    return {"success": True, "message": f"Question '{key}' deleted successfully."}
+
+
+@router.post("/easy-apply/questions/delete-batch")
+def api_delete_easy_apply_questions_batch(payload: DeleteQuestionsPayload):
+    """Delete multiple screening questions from the Question Bank in batch."""
+    from src.services.question_bank_service import delete_questions_batch
+    if not payload.keys:
+        raise HTTPException(status_code=400, detail="No question keys or IDs provided for batch deletion.")
+    count = delete_questions_batch(payload.keys)
+    return {"success": True, "deleted_count": count, "message": f"Successfully deleted {count} questions."}
+
+
+@router.get("/easy-apply/rate-limit-status")
+def api_get_easy_apply_rate_limit_status():
+    """Return current LinkedIn rate limit / fast pace safeguard pause status."""
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    return get_rate_limit_safeguard_status()
+
+
+@router.post("/easy-apply/rate-limit-resume")
+def api_resume_easy_apply_rate_limit():
+    """Clear LinkedIn safeguard pause and allow resuming Easy Apply immediately."""
+    from src.services.question_bank_service import reset_rate_limit_safeguard
+    return reset_rate_limit_safeguard()
+
+
 @router.get("/scrapers")
 def api_get_scrapers():
     """Return list of registered website scrapers for the crawler source selector."""
@@ -548,11 +756,13 @@ def api_get_scrapers():
 
 @router.post("/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Enqueue scraper by source using the extensible scraper registry with optional query, location, and time_filter."""
+    """Enqueue scraper by source using the extensible scraper registry with optional query, location, cycles, and max_jobs."""
     src = "linkedin"
     query = None
     loc = None
     time_filter = "24h"
+    cycles = None
+    max_jobs = None
     if payload:
         if payload.source:
             src = payload.source
@@ -560,6 +770,8 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
         loc = payload.location
         if payload.time_filter:
             time_filter = payload.time_filter
+        cycles = payload.cycles
+        max_jobs = payload.max_jobs or payload.limit
     elif source:
         src = source
 
@@ -571,8 +783,8 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
             short_name=short_name,
             snippet=snippet,
             runner_func=run_scraper_by_source,
-            args=(src, query, loc, time_filter),
-            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter},
+            args=(src, query, loc, time_filter, cycles, max_jobs),
+            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "max_jobs": max_jobs},
         )
         msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
         return {"success": True, "message": msg, **res}
@@ -593,6 +805,33 @@ def api_clear_task():
     """Reset task state to idle."""
     task_manager.clear_task()
     return {"success": True, "message": "Task state cleared."}
+
+
+@router.post("/tasks/pause")
+def api_pause_active_task():
+    """Pause the currently executing automation task."""
+    paused = task_manager.pause_active_task()
+    if not paused:
+        return {"success": False, "message": "No automation task is currently running to pause."}
+    return {"success": True, "message": "Ongoing task has been paused."}
+
+
+@router.post("/tasks/resume")
+def api_resume_task(task_id: Optional[str] = None):
+    """Resume a paused automation task."""
+    resumed = task_manager.resume_task(task_id=task_id)
+    if not resumed:
+        return {"success": False, "message": "No paused automation task found to resume."}
+    return {"success": True, "message": "Task has been resumed."}
+
+
+@router.post("/tasks/paused/cancel/{task_id}")
+def api_cancel_paused_task(task_id: str):
+    """Cancel and cleanup a paused automation task."""
+    cancelled = task_manager.cancel_paused_task(task_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Paused task not found or already terminated.")
+    return {"success": True, "message": f"Paused task {task_id} cancelled."}
 
 
 @router.post("/tasks/cancel")

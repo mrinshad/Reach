@@ -26,7 +26,7 @@ const chartDefaultOptions = {
   },
 };
 
-function renderDailyAppliedChart(timeline) {
+function renderDailyAppliedChart(timeline, isToday = false) {
   const canvas = document.getElementById('chartDailyApplied');
   if (!canvas || typeof Chart === 'undefined') return;
   if (state.charts.dailyApplied) {
@@ -44,7 +44,7 @@ function renderDailyAppliedChart(timeline) {
       labels: timeline.map((d) => d.label),
       datasets: [
         {
-          label: 'Applications Applied',
+          label: isToday ? 'Applications Applied Today (Hourly)' : 'Applications Applied',
           data: timeline.map((d) => d.count),
           borderColor: '#10b981',
           backgroundColor: gradient,
@@ -54,7 +54,7 @@ function renderDailyAppliedChart(timeline) {
           pointBackgroundColor: '#10b981',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 1.5,
-          pointRadius: timeline.length > 30 ? 2 : 4,
+          pointRadius: timeline.length > 30 ? 2 : (isToday ? 3.5 : 4),
           pointHoverRadius: 6,
         },
       ],
@@ -64,7 +64,17 @@ function renderDailyAppliedChart(timeline) {
       scales: {
         x: {
           grid: { color: 'rgba(255, 255, 255, 0.05)' },
-          ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 },
+          ticks: {
+            color: '#94a3b8',
+            font: { size: 10 },
+            maxRotation: 45,
+            callback: function (val, index) {
+              if (isToday && timeline.length > 14) {
+                return index % 2 === 0 ? timeline[index]?.label : '';
+              }
+              return timeline[index]?.label || '';
+            },
+          },
         },
         y: {
           beginAtZero: true,
@@ -72,11 +82,26 @@ function renderDailyAppliedChart(timeline) {
           ticks: { color: '#94a3b8', font: { size: 10 }, precision: 0 },
         },
       },
+      plugins: {
+        ...(chartDefaultOptions.plugins || {}),
+        tooltip: {
+          ...(chartDefaultOptions.plugins?.tooltip || {}),
+          callbacks: {
+            title: function (items) {
+              if (isToday && items[0]) {
+                const item = timeline[items[0].dataIndex];
+                return item ? `Today at ${item.label}` : '';
+              }
+              return items[0]?.label || '';
+            },
+          },
+        },
+      },
     },
   });
 }
 
-function renderDailyScrapedChart(timeline) {
+function renderDailyScrapedChart(timeline, isToday = false) {
   const canvas = document.getElementById('chartDailyScraped');
   if (!canvas || typeof Chart === 'undefined') return;
   if (state.charts.dailyScraped) {
@@ -90,7 +115,7 @@ function renderDailyScrapedChart(timeline) {
       labels: timeline.map((d) => d.label),
       datasets: [
         {
-          label: 'JDs Discovered',
+          label: isToday ? 'JDs Discovered Today (Hourly)' : 'JDs Discovered',
           data: timeline.map((d) => d.count),
           backgroundColor: 'rgba(14, 165, 233, 0.75)',
           hoverBackgroundColor: '#38bdf8',
@@ -103,12 +128,37 @@ function renderDailyScrapedChart(timeline) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 45 },
+          ticks: {
+            color: '#94a3b8',
+            font: { size: 10 },
+            maxRotation: 45,
+            callback: function (val, index) {
+              if (isToday && timeline.length > 14) {
+                return index % 2 === 0 ? timeline[index]?.label : '';
+              }
+              return timeline[index]?.label || '';
+            },
+          },
         },
         y: {
           beginAtZero: true,
           grid: { color: 'rgba(255, 255, 255, 0.05)' },
           ticks: { color: '#94a3b8', font: { size: 10 }, precision: 0 },
+        },
+      },
+      plugins: {
+        ...(chartDefaultOptions.plugins || {}),
+        tooltip: {
+          ...(chartDefaultOptions.plugins?.tooltip || {}),
+          callbacks: {
+            title: function (items) {
+              if (isToday && items[0]) {
+                const item = timeline[items[0].dataIndex];
+                return item ? `Today at ${item.label}` : '';
+              }
+              return items[0]?.label || '';
+            },
+          },
         },
       },
     },
@@ -234,60 +284,57 @@ function renderExperienceBreakdownChart(experiences) {
   });
 }
 
-function renderRejectionReasonsChart(reasons) {
-  const canvas = document.getElementById('chartRejectionReasons');
+function renderTopLocationsChart(locations) {
+  const canvas = document.getElementById('chartTopLocations');
   if (!canvas || typeof Chart === 'undefined') return;
-  if (state.charts.rejectionReasons) {
-    state.charts.rejectionReasons.destroy();
+  if (state.charts.topLocations) {
+    state.charts.topLocations.destroy();
   }
-  const cleanReasons = (reasons && reasons.length > 0) ? reasons : [{ reason: 'No cancellations recorded', count: 0 }];
+  const cleanLocations = (locations && locations.length > 0) ? locations : [{ location: 'No locations recorded', count: 0 }];
 
-  const container = document.getElementById('chartReasonsContainer');
-  const dynamicHeight = Math.max(260, cleanReasons.length * 36);
-  if (container) {
-    container.style.height = `${dynamicHeight}px`;
-  }
-
-  const listEl = document.getElementById('reasonsAnalyticsList');
+  const listEl = document.getElementById('locationsAnalyticsList');
   if (listEl) {
-    const totalCancellations = cleanReasons.reduce((acc, r) => acc + (r.count || 0), 0);
-    if (!reasons || reasons.length === 0 || totalCancellations === 0) {
-      listEl.innerHTML = '<div style="font-size:0.78rem; color:#64748b; padding:0.5rem;">No cancellation reasons recorded yet.</div>';
+    const totalCount = cleanLocations.reduce((acc, l) => acc + (l.count || 0), 0);
+    if (!locations || locations.length === 0 || totalCount === 0) {
+      listEl.innerHTML = '<div style="font-size:0.78rem; color:#64748b; padding:0.5rem;">No location data for selected period.</div>';
     } else {
-      listEl.innerHTML = cleanReasons.map((r, idx) => {
-        const pct = totalCancellations > 0 ? Math.round((r.count / totalCancellations) * 100) : 0;
+      listEl.innerHTML = cleanLocations.map((l, idx) => {
+        const pct = totalCount > 0 ? Math.round((l.count / totalCount) * 100) : 0;
         return `
-          <div class="reasons-analytics-row">
-            <span class="reasons-rank-badge">#${idx + 1}</span>
-            <span class="reasons-name" title="${escapeHtml(r.reason)}">${escapeHtml(r.reason)}</span>
-            <div class="reasons-stats">
-              <span class="reasons-pct-badge">${pct}%</span>
-              <span class="reasons-count-badge">${r.count}</span>
-              <button class="reasons-filter-btn" onclick="filterOthersByReason('${escapeHtml(r.reason).replace(/'/g, "\\'")}')" title="Filter applications in Others by this reason">
-                Filter Others ↗
-              </button>
-            </div>
-          </div>
+          <button class="location-hub-pill" onclick="filterDiscoveredByLocation('${escapeHtml(l.location).replace(/'/g, "\\'")}')" title="Filter Discovered Jobs in ${escapeHtml(l.location)}">
+            <span class="hub-rank">#${idx + 1}</span>
+            <span class="hub-name">${escapeHtml(l.location)}</span>
+            <span class="hub-count">${l.count}</span>
+            <span class="hub-pct">${pct}%</span>
+          </button>
         `;
       }).join('');
     }
   }
 
-  const truncLabel = (s) => (s.length > 35 ? s.slice(0, 32).trimEnd() + '...' : s);
-  const fullLabels = cleanReasons.map((r) => r.reason);
-  const displayLabels = fullLabels.map(truncLabel);
+  const labels = cleanLocations.map((l) => l.location);
+  const data = cleanLocations.map((l) => l.count);
 
-  state.charts.rejectionReasons = new Chart(canvas, {
+  state.charts.topLocations = new Chart(canvas, {
     type: 'bar',
     data: {
-      labels: displayLabels,
+      labels: labels,
       datasets: [
         {
-          label: 'Screened / Cancelled Count',
-          data: cleanReasons.map((r) => r.count),
-          backgroundColor: 'rgba(244, 63, 94, 0.75)',
-          hoverBackgroundColor: '#fb7185',
+          label: 'Discovered Jobs',
+          data: data,
+          backgroundColor: [
+            'rgba(14, 165, 233, 0.85)',
+            'rgba(99, 102, 241, 0.85)',
+            'rgba(16, 185, 129, 0.85)',
+            'rgba(245, 158, 11, 0.85)',
+            'rgba(236, 72, 153, 0.85)',
+            'rgba(139, 92, 246, 0.85)',
+            'rgba(20, 184, 166, 0.85)',
+            'rgba(249, 115, 22, 0.85)',
+          ],
           borderRadius: 4,
+          maxBarThickness: 24,
         },
       ],
     },
@@ -295,14 +342,6 @@ function renderRejectionReasonsChart(reasons) {
       ...chartDefaultOptions,
       maintainAspectRatio: false,
       indexAxis: 'y',
-      plugins: {
-        ...(chartDefaultOptions.plugins || {}),
-        tooltip: {
-          callbacks: {
-            title: (items) => fullLabels[items[0].dataIndex] || displayLabels[items[0].dataIndex],
-          },
-        },
-      },
       scales: {
         x: {
           beginAtZero: true,
@@ -314,12 +353,102 @@ function renderRejectionReasonsChart(reasons) {
           ticks: { color: '#cbd5e1', font: { size: 11 } },
         },
       },
+      plugins: {
+        ...(chartDefaultOptions.plugins || {}),
+        legend: { display: false },
+      },
     },
   });
 }
 
-async function loadAnalytics(days = 30) {
+function filterDiscoveredByLocation(loc) {
+  if (window.state) {
+    window.state.locationFilter = loc;
+  }
+  const locSelect = document.getElementById('filterLocation');
+  if (locSelect) {
+    locSelect.value = loc;
+  }
+  if (typeof switchTab === 'function') {
+    switchTab('tabDiscovered');
+  }
+  if (typeof fetchDiscoveredPosts === 'function') {
+    fetchDiscoveredPosts();
+  }
+}
+
+function formatCompactNumber(num) {
+  const n = Number(num) || 0;
+  if (Math.abs(n) >= 1_000_000_000) {
+    return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (Math.abs(n) >= 1_000_000) {
+    return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (Math.abs(n) >= 10_000) {
+    return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  if (Math.abs(n) >= 1_000) {
+    return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return n.toLocaleString();
+}
+
+function animateCountUp(elementId, targetVal, duration = 600) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const target = Number(targetVal) || 0;
+  el.title = target.toLocaleString();
+
+  const startVal = Number(el.dataset.rawVal !== undefined ? el.dataset.rawVal : 0);
+  el.dataset.rawVal = target;
+
+  if (startVal === target) {
+    el.textContent = formatCompactNumber(target);
+    return;
+  }
+
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = progress * (2 - progress); // Ease out quad
+    const current = Math.round(startVal + (target - startVal) * ease);
+    el.textContent = formatCompactNumber(current);
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      el.textContent = formatCompactNumber(target);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function renderRejectionReasonsChart(reasons) {
+  const canvas = document.getElementById('chartRejectionReasons');
+  if (!canvas || typeof Chart === 'undefined') return;
+  if (state.charts.rejectionReasons) {
+    state.charts.rejectionReasons.destroy();
+  }
+}
+
+async function loadAnalytics(days) {
+  if (days === undefined || days === null) {
+    days = typeof state.analyticsDays === 'number' ? state.analyticsDays : 30;
+  }
   state.analyticsDays = days;
+
+  // Sync active timeframe pill in the UI
+  const pills = document.querySelectorAll('#timeframePills .pill');
+  if (pills && pills.length) {
+    pills.forEach((p) => {
+      const pillVal = parseInt(p.getAttribute('data-days'), 10);
+      p.classList.toggle('active', pillVal === days);
+    });
+  }
+
+  const isToday = days === 1;
   const param = days && days > 0 ? `days=${days}` : `days=0`;
   try {
     const res = await fetch(`/api/analytics?${param}`);
@@ -327,45 +456,53 @@ async function loadAnalytics(days = 30) {
     const data = await res.json();
     state.analyticsData = data;
 
-    // Update KPI metrics
+    // Update KPI metrics with count-up animation & shortened format
     if (data.summary) {
+      animateCountUp('kpiScraped', data.summary.total_scraped || 0);
+      animateCountUp('kpiEasyApplyApplied', data.summary.easy_apply_applied || 0);
+      animateCountUp('kpiEasyApplyScreened', data.summary.easy_apply_screened || 0);
+      animateCountUp('kpiQuestionBankTotal', data.summary.question_bank_total || 0);
+      animateCountUp('kpiDrafted', data.summary.total_drafted || 0);
+      animateCountUp('kpiRejected', data.summary.total_rejected || 0);
+
       const elApplied = document.getElementById('kpiApplied');
-      if (elApplied) elApplied.textContent = Number(data.summary.total_sent || 0).toLocaleString();
+      if (elApplied) elApplied.textContent = formatCompactNumber(data.summary.total_sent || 0);
       const elConv = document.getElementById('kpiConversionRate');
       if (elConv) elConv.textContent = `${data.summary.sent_conversion_pct || 0}% conversion`;
-      const elScraped = document.getElementById('kpiScraped');
-      if (elScraped) elScraped.textContent = Number(data.summary.total_scraped || 0).toLocaleString();
-      const elRate = document.getElementById('kpiEmailRate');
-      if (elRate) elRate.textContent = `${data.summary.email_rate_pct || 0}% emails found`;
-      const elDirect = document.getElementById('kpiDirectEmails');
-      if (elDirect) elDirect.textContent = Number(data.summary.with_emails || 0).toLocaleString();
-      const elDrafted = document.getElementById('kpiDrafted');
-      if (elDrafted) elDrafted.textContent = Number(data.summary.total_drafted || 0).toLocaleString();
-      const elDraftReady = document.getElementById('kpiDraftReady');
-      if (elDraftReady) elDraftReady.textContent = `${Number(data.summary.total_drafted || 0).toLocaleString()} ready to send`;
-      const elPendingGen = document.getElementById('kpiPendingGen');
-      if (elPendingGen) elPendingGen.textContent = `${Number(data.summary.pending_review || 0).toLocaleString()} pending AI`;
-      const elRejected = document.getElementById('kpiRejected');
-      if (elRejected) elRejected.textContent = Number(data.summary.total_rejected || 0).toLocaleString();
-      const elSpamFlagged = document.getElementById('kpiSpamFlagged');
-      if (elSpamFlagged) elSpamFlagged.textContent = `${Number(data.summary.potential_spam_total || 0).toLocaleString()} potential spam`;
+      const elEasyReady = document.getElementById('kpiEasyApplyReady');
+      if (elEasyReady) elEasyReady.textContent = `${Number(data.summary.easy_apply_ready || 0).toLocaleString()} ready`;
+      const elQBankAnswered = document.getElementById('kpiQuestionBankAnswered');
+      if (elQBankAnswered) elQBankAnswered.textContent = `${Number(data.summary.question_bank_answered || 0).toLocaleString()} answered`;
+      const elQBankRate = document.getElementById('kpiQuestionBankRate');
+      if (elQBankRate) {
+        const qTot = data.summary.question_bank_total || 0;
+        const qAns = data.summary.question_bank_answered || 0;
+        const qPct = qTot > 0 ? Math.round((qAns / qTot) * 100) : 0;
+        elQBankRate.textContent = `${qPct}% saved answers`;
+      }
     }
 
-    // Update timeline badges
+    // Update timeline badges with timeframe context
     const totalAppliedInPeriod = (data.timeline_applied || []).reduce((acc, curr) => acc + curr.count, 0);
     const totalScrapedInPeriod = (data.timeline_scraped || []).reduce((acc, curr) => acc + curr.count, 0);
+    
+    let periodSuffix = '';
+    if (days === 1) periodSuffix = ' (Today)';
+    else if (days === 0) periodSuffix = ' (All Time)';
+    else periodSuffix = ` (${days}d)`;
+
     const badgeApplied = document.getElementById('chartAppliedTotalBadge');
-    if (badgeApplied) badgeApplied.textContent = `${totalAppliedInPeriod} Applications`;
+    if (badgeApplied) badgeApplied.textContent = `${totalAppliedInPeriod} Applications${periodSuffix}`;
     const badgeScraped = document.getElementById('chartScrapedTotalBadge');
-    if (badgeScraped) badgeScraped.textContent = `${totalScrapedInPeriod} Discovered`;
+    if (badgeScraped) badgeScraped.textContent = `${totalScrapedInPeriod} Discovered${periodSuffix}`;
 
     // Render Charts
-    renderDailyAppliedChart(data.timeline_applied || []);
-    renderDailyScrapedChart(data.timeline_scraped || []);
+    renderDailyAppliedChart(data.timeline_applied || [], isToday);
+    renderDailyScrapedChart(data.timeline_scraped || [], isToday);
     renderStatusBreakdownChart(data.status_breakdown || []);
     renderSourceBreakdownChart(data.source_breakdown || []);
     renderExperienceBreakdownChart(data.experience_breakdown || []);
-    renderRejectionReasonsChart(data.rejection_reasons || []);
+    renderTopLocationsChart(data.top_locations || []);
   } catch (err) {
     console.error('Analytics load error:', err);
   }
@@ -375,7 +512,7 @@ function setAnalyticsTimeframe(days) {
   state.analyticsDays = days;
   const pills = document.querySelectorAll('#timeframePills .pill');
   pills.forEach((p) => {
-    p.classList.toggle('active', parseInt(p.getAttribute('data-days')) === days);
+    p.classList.toggle('active', parseInt(p.getAttribute('data-days'), 10) === days);
   });
   loadAnalytics(days);
 }
@@ -386,6 +523,10 @@ window.renderDailyScrapedChart = renderDailyScrapedChart;
 window.renderStatusBreakdownChart = renderStatusBreakdownChart;
 window.renderSourceBreakdownChart = renderSourceBreakdownChart;
 window.renderExperienceBreakdownChart = renderExperienceBreakdownChart;
+window.renderTopLocationsChart = renderTopLocationsChart;
+window.filterDiscoveredByLocation = filterDiscoveredByLocation;
 window.renderRejectionReasonsChart = renderRejectionReasonsChart;
+window.formatCompactNumber = formatCompactNumber;
+window.animateCountUp = animateCountUp;
 window.loadAnalytics = loadAnalytics;
 window.setAnalyticsTimeframe = setAnalyticsTimeframe;

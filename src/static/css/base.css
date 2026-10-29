@@ -388,3 +388,28 @@ body {
   .input-date-clean::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
   }
+
+  /* Universal Clear Filters Button */
+  .btn-clear-filters {
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    color: #fda4af;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 0.32rem 0.68rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .btn-clear-filters:hover {
+    background: rgba(244, 63, 94, 0.18);
+    border-color: rgba(244, 63, 94, 0.45);
+    color: #fff;
+    transform: translateY(-1px);
+  }

@@ -31,24 +31,105 @@ async function pollTaskStatus() {
 
     if (!card || !titleEl || !subEl || !countEl || !fillEl || !logsEl) return;
 
-    // Toggle visibility of stop/cancel and retry buttons
+    // Toggle visibility of stop/cancel, pause/resume and retry buttons
     const cancelBtn = document.getElementById('btnCancelActiveTask');
     const retryBtn = document.getElementById('btnRetryActiveTask');
     const logsCancelBtns = document.querySelectorAll('.logs-cancel-btn');
-    const isRunning = task.status === 'running';
+    const pauseBtn = document.getElementById('btnPauseActiveTask');
+    const logsPauseBtn = document.getElementById('logsPauseBtn');
+    const iconPause = document.getElementById('iconPauseTask');
+    const iconResume = document.getElementById('iconResumeTask');
+    const labelPause = document.getElementById('labelPauseTask');
+    const logsPauseLabel = document.getElementById('logsPauseLabel');
+    const pulseRing = document.querySelector('.pulse-ring');
 
-    if (cancelBtn) cancelBtn.style.display = isRunning ? 'inline-flex' : 'none';
-    logsCancelBtns.forEach(btn => btn.style.display = isRunning ? 'inline-flex' : 'none');
+    const isRunning = task.status === 'running';
+    const isPaused = task.status === 'paused';
+    const isActive = isRunning || isPaused;
+
+    if (cancelBtn) cancelBtn.style.display = isActive ? 'inline-flex' : 'none';
+    logsCancelBtns.forEach(btn => btn.style.display = isActive ? 'inline-flex' : 'none');
+
+    if (pauseBtn) {
+      pauseBtn.style.display = isActive ? 'inline-flex' : 'none';
+      if (isPaused) {
+        pauseBtn.classList.add('paused');
+        if (iconPause) iconPause.classList.add('hidden');
+        if (iconResume) iconResume.classList.remove('hidden');
+        if (labelPause) labelPause.textContent = 'Resume';
+      } else {
+        pauseBtn.classList.remove('paused');
+        if (iconPause) iconPause.classList.remove('hidden');
+        if (iconResume) iconResume.classList.add('hidden');
+        if (labelPause) labelPause.textContent = 'Pause';
+      }
+    }
+
+    if (logsPauseBtn) {
+      logsPauseBtn.style.display = isActive ? 'inline-flex' : 'none';
+      if (isPaused) {
+        logsPauseBtn.classList.add('paused');
+        if (logsPauseLabel) logsPauseLabel.textContent = 'Resume';
+      } else {
+        logsPauseBtn.classList.remove('paused');
+        if (logsPauseLabel) logsPauseLabel.textContent = 'Pause';
+      }
+    }
+
+    if (pulseRing) {
+      if (isPaused) {
+        pulseRing.classList.add('paused');
+      } else {
+        pulseRing.classList.remove('paused');
+      }
+    }
 
     if (task.log_id) {
       state.lastTaskLogId = task.log_id;
     }
 
     if (retryBtn) {
-      if (!isRunning && (task.status === 'error' || task.status === 'stopped') && state.lastTaskLogId) {
+      if (!isActive && (task.status === 'error' || task.status === 'stopped') && state.lastTaskLogId) {
         retryBtn.classList.remove('hidden');
       } else {
         retryBtn.classList.add('hidden');
+      }
+    }
+
+    // Render Paused Tasks Section
+    const pausedSection = document.getElementById('taskPausedSection');
+    const pausedBadge = document.getElementById('taskPausedCountBadge');
+    const pausedList = document.getElementById('taskPausedList');
+    const pausedTasks = task.paused_tasks || [];
+
+    if (pausedSection && pausedList) {
+      if (pausedTasks.length > 0) {
+        pausedSection.classList.remove('hidden');
+        if (pausedBadge) pausedBadge.textContent = pausedTasks.length;
+        pausedList.innerHTML = pausedTasks.map(item => `
+          <div class="task-paused-card" id="pausedTask_${escapeHtml(item.id)}">
+            <div class="task-queue-card-left">
+              <span class="queue-pos-badge" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">⏸️ Paused</span>
+              <div class="queue-card-info">
+                <span class="queue-card-name" title="${escapeHtml(item.task_name)}">${escapeHtml(item.short_name || item.task_name)}</span>
+                <span class="queue-card-snippet">${escapeHtml(item.current_step || (item.completed_items + ' / ' + item.total_items + ' completed'))}</span>
+              </div>
+            </div>
+            <div class="task-queue-card-right">
+              <button class="btn-resume-paused-task" onclick="resumeTask('${escapeHtml(item.id)}')" title="Resume this paused task">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <span>Resume</span>
+              </button>
+              <button class="btn-cancel-queue-item" onclick="cancelPausedTask('${escapeHtml(item.id)}')" title="Cancel and discard paused task">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        pausedSection.classList.add('hidden');
+        if (pausedBadge) pausedBadge.textContent = '0';
+        pausedList.innerHTML = '';
       }
     }
 
@@ -89,20 +170,23 @@ async function pollTaskStatus() {
     const etaPill = document.getElementById('taskEtaPill');
     const etaText = document.getElementById('taskEtaText');
 
-    if (task.status === 'running') {
+    if (isRunning || isPaused) {
       if (!state.pollingTimer) {
         state.pollingTimer = setInterval(pollTaskStatus, 1500);
       }
       card.classList.remove('hidden');
-      titleEl.textContent = task.task_name;
-      subEl.textContent = task.current_step;
+      titleEl.textContent = isPaused ? `${task.task_name || 'Task'} [Paused]` : task.task_name;
+      subEl.textContent = isPaused ? (task.current_step || 'Task Paused — you can run other tasks in parallel') : task.current_step;
 
       const total = task.total_items || 1;
       const done = task.completed_items || 0;
       countEl.textContent = `${done} / ${total}`;
 
       if (etaPill && etaText) {
-        if (task.eta_display) {
+        if (isPaused) {
+          etaText.textContent = 'Paused';
+          etaPill.classList.remove('hidden');
+        } else if (task.eta_display) {
           etaText.textContent = task.eta_display;
           etaPill.classList.remove('hidden');
         } else {
@@ -118,8 +202,17 @@ async function pollTaskStatus() {
       // Real-time update of all dashboard metrics & active tab view during task execution
       if (typeof fetchStats === 'function') fetchStats();
 
+      // Dynamic table reload during progress (e.g. batch Easy Apply advancing completed items)
+      if (state.lastCompletedItems !== done) {
+        state.lastCompletedItems = done;
+        if (state.activeTab === 'tabEasyApply' && typeof fetchEasyApplyPosts === 'function') {
+          fetchEasyApplyPosts();
+        }
+      }
+
       state.lastHandledTaskKey = null;
-    } else if (task.status === 'completed' || task.status === 'error') {
+    } else if (task.status === 'completed' || task.status === 'error' || task.status === 'stopped') {
+      state.lastCompletedItems = null;
       if (etaPill) etaPill.classList.add('hidden');
       if (task.logs && task.logs.length > 0) {
         renderTaskLogs(task.logs);
@@ -152,34 +245,77 @@ async function pollTaskStatus() {
               type: 'success',
             });
           }
-        } else {
-          const firstLine = (task.error || 'Operation failed').split('\n')[0];
-          subEl.textContent = `Failed: ${firstLine}`;
-
+        } else if (task.status === 'stopped') {
+          subEl.textContent = 'Task stopped';
           if (typeof sendAppNotification === 'function') {
             sendAppNotification({
-              title: task.task_name || 'Task Failed',
-              message: firstLine,
-              type: 'error',
+              title: task.task_name || 'Task Stopped',
+              message: 'Automation task was stopped.',
+              type: 'warning',
             });
           }
+        } else {
+          const rawError = task.error || 'Operation failed';
+          const firstLine = rawError.split('\n')[0];
+          const isDailyLimit = (
+            rawError.toLowerCase().includes("today’s easy apply limit") ||
+            rawError.toLowerCase().includes("today's easy apply limit") ||
+            rawError.toLowerCase().includes("daily_limit") ||
+            rawError.toLowerCase().includes("continue applying tomorrow") ||
+            rawError.toLowerCase().includes("limit easy apply submissions")
+          );
 
-          if (typeof showSnackbar === 'function') {
-            showSnackbar({
-              title: `Task Error: ${task.task_name || 'Automation'}`,
-              message: firstLine,
-              details: task.error,
-              type: 'error',
-            });
-          }
-          if (typeof showCenterAlert === 'function') {
-            showCenterAlert(
-              `Automation Stopped: ${task.task_name || 'Task'}`,
-              task.error || 'The automation task encountered an issue and stopped.'
-            );
+          if (isDailyLimit) {
+            subEl.textContent = "Reached today's Easy Apply limit (Paused until tomorrow)";
+            if (typeof sendAppNotification === 'function') {
+              sendAppNotification({
+                title: "You reached today’s Easy Apply limit",
+                message: "Great effort applying today. Easy Apply is paused until tomorrow to protect your account.",
+                type: 'warning',
+              });
+            }
+            if (typeof showSnackbar === 'function') {
+              showSnackbar({
+                title: "You reached today’s Easy Apply limit",
+                message: "Great effort applying today. Automation paused until tomorrow to protect your account.",
+                details: rawError,
+                type: 'warn',
+              });
+            }
+            if (typeof showDailyLimitModal === 'function') {
+              showDailyLimitModal(rawError);
+            }
+          } else {
+            subEl.textContent = `Failed: ${firstLine}`;
+
+            if (typeof sendAppNotification === 'function') {
+              sendAppNotification({
+                title: task.task_name || 'Task Failed',
+                message: firstLine,
+                type: 'error',
+              });
+            }
+
+            if (typeof showSnackbar === 'function') {
+              showSnackbar({
+                title: `Task Error: ${task.task_name || 'Automation'}`,
+                message: firstLine,
+                details: task.error,
+                type: 'error',
+              });
+            }
+            if (typeof showCenterAlert === 'function') {
+              showCenterAlert(
+                `Automation Stopped: ${task.task_name || 'Task'}`,
+                task.error || 'The automation task encountered an issue and stopped.'
+              );
+            }
           }
         }
         if (typeof loadDashboardData === 'function') loadDashboardData();
+        if (state.activeTab === 'tabEasyApply' && typeof fetchEasyApplyPosts === 'function') {
+          fetchEasyApplyPosts();
+        }
         if (typeof fetchHealth === 'function') fetchHealth();
       }
 
@@ -217,6 +353,73 @@ async function pollTaskStatus() {
   } catch (err) {
     console.error('Task poll error:', err);
     stopTaskPolling();
+  }
+}
+
+async function togglePauseActiveTask() {
+  try {
+    const statusRes = await fetch('/api/tasks/status');
+    if (!statusRes.ok) return;
+    const task = await statusRes.json();
+
+    if (task.status === 'paused') {
+      const res = await fetch('/api/tasks/resume', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('▶️ Task resumed', 'success');
+        pollTaskStatus();
+      } else {
+        showToast(data.message || 'Failed to resume task', 'warn');
+      }
+    } else if (task.status === 'running') {
+      const res = await fetch('/api/tasks/pause', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('⏸️ Task paused — you can run other tasks in parallel', 'info');
+        pollTaskStatus();
+      } else {
+        showToast(data.message || 'No task is currently running to pause', 'warn');
+      }
+    }
+  } catch (err) {
+    showToast('Error toggling pause: ' + err.message, 'error');
+  }
+}
+
+async function resumeTask(taskId) {
+  try {
+    const url = taskId ? `/api/tasks/resume?task_id=${encodeURIComponent(taskId)}` : '/api/tasks/resume';
+    const res = await fetch(url, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('▶️ Task resumed', 'success');
+      pollTaskStatus();
+    } else {
+      showToast(data.message || 'Failed to resume task', 'warn');
+    }
+  } catch (err) {
+    showToast('Error resuming task: ' + err.message, 'error');
+  }
+}
+
+async function cancelPausedTask(taskId) {
+  const confirmed = await showConfirm(
+    'Cancel Paused Task',
+    'Are you sure you want to discard this paused task? Its progress will be terminated.',
+    { confirmText: 'Discard Task', danger: true }
+  );
+  if (!confirmed) return;
+  try {
+    const res = await fetch(`/api/tasks/paused/cancel/${encodeURIComponent(taskId)}`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('✓ Paused task cancelled', 'info');
+      pollTaskStatus();
+    } else {
+      showToast(data.message || 'Failed to cancel paused task', 'warn');
+    }
+  } catch (err) {
+    showToast('Error cancelling paused task: ' + err.message, 'error');
   }
 }
 
@@ -285,6 +488,7 @@ function showCrawlSummaryModal(taskName, stats) {
   const draftPortal = stats.new_draft_portal !== undefined ? stats.new_draft_portal : 0;
   const skippedInDb = stats.skipped_already_added !== undefined ? stats.skipped_already_added : 0;
   const skippedOther = stats.skipped_other !== undefined ? stats.skipped_other : 0;
+  const spamScam = stats.new_spam_scam !== undefined ? stats.new_spam_scam : 0;
 
   grid.innerHTML = `
     <div class="crawl-stat-card" style="border-left: 3px solid #38bdf8;">
@@ -303,6 +507,11 @@ function showCrawlSummaryModal(taskName, stats) {
       <div class="crawl-stat-val" style="color: #f59e0b;">${draftPortal}</div>
       <div class="crawl-stat-lbl">Drafts & Portals</div>
     </div>
+    ${spamScam > 0 ? `
+    <div class="crawl-stat-card" style="border-left: 3px solid #fda4af;">
+      <div class="crawl-stat-val" style="color: #fda4af;">${spamScam}</div>
+      <div class="crawl-stat-lbl">Spam / Scam Flagged</div>
+    </div>` : ''}
     <div class="crawl-stat-card" style="border-left: 3px solid #94a3b8;">
       <div class="crawl-stat-val" style="color: #94a3b8;">${skippedInDb}</div>
       <div class="crawl-stat-lbl">Skipped (Already in DB)</div>
@@ -401,6 +610,9 @@ async function retryLastFailedTask() {
 window.startTaskPolling = startTaskPolling;
 window.stopTaskPolling = stopTaskPolling;
 window.pollTaskStatus = pollTaskStatus;
+window.togglePauseActiveTask = togglePauseActiveTask;
+window.resumeTask = resumeTask;
+window.cancelPausedTask = cancelPausedTask;
 window.cancelActiveTask = cancelActiveTask;
 window.retryLastFailedTask = retryLastFailedTask;
 window.cancelQueuedTask = cancelQueuedTask;

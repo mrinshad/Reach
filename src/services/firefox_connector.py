@@ -12,6 +12,8 @@ import time
 import shutil
 import sqlite3
 import signal
+import tempfile
+import threading
 import subprocess
 from typing import Optional, List, Dict, Any
 from playwright.sync_api import Playwright, BrowserContext, Page
@@ -24,6 +26,39 @@ def get_default_firefox_profile_dir() -> str:
     """Return the default path to the persistent Firefox profile directory."""
     os.makedirs(DEFAULT_PROFILE_DIR, exist_ok=True)
     return DEFAULT_PROFILE_DIR
+
+
+def is_profile_in_use(profile_dir: str) -> bool:
+    """Check if any active process is currently running with this profile directory."""
+    current_pid = os.getpid()
+    parent_pid = os.getppid()
+    try:
+        res = subprocess.run(
+            ["pgrep", "-f", profile_dir],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if res.returncode == 0 and res.stdout:
+            pids = [int(p) for p in res.stdout.strip().split() if p.isdigit()]
+            stale_pids = [p for p in pids if p != current_pid and p != parent_pid]
+            return len(stale_pids) > 0
+    except Exception:
+        pass
+    return False
+
+
+def create_cloned_profile_dir(source_profile_dir: str) -> str:
+    """Create an isolated temporary profile directory with copied cookies and credentials."""
+    tmp_dir = tempfile.mkdtemp(prefix="ff_parallel_profile_")
+    for fname in ["cookies.sqlite", "key4.db", "logins.db", "cert9.db"]:
+        src_path = os.path.join(source_profile_dir, fname)
+        if os.path.exists(src_path):
+            try:
+                shutil.copy2(src_path, os.path.join(tmp_dir, fname))
+            except Exception:
+                pass
+    return tmp_dir
 
 
 def find_desktop_firefox_profile() -> Optional[str]:
@@ -170,6 +205,26 @@ def cleanup_stale_profile_locks(profile_dir: str, force: bool = False):
                 pass
 
 
+def get_desktop_firefox_user_agent() -> str:
+    """Retrieve or construct the matching User-Agent string for desktop Firefox."""
+    profile_path = find_desktop_firefox_profile()
+    version = "157.0"
+    if profile_path:
+        compat_file = os.path.join(profile_path, "compatibility.ini")
+        if os.path.exists(compat_file):
+            try:
+                with open(compat_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("LastVersion="):
+                            raw_ver = line.split("=")[1].strip().split("_")[0]
+                            if raw_ver:
+                                version = raw_ver
+                            break
+            except Exception:
+                pass
+    return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:{version}) Gecko/20100101 Firefox/{version}"
+
+
 def get_headless_mode() -> bool:
     """Return whether headless mode is enabled in user configuration."""
     try:
@@ -208,36 +263,72 @@ def launch_firefox_context(
         except Exception:
             headless = False
 
+    is_temp_profile = False
+    default_dir = get_default_firefox_profile_dir()
+
     if profile_dir is None:
-        profile_dir = get_default_firefox_profile_dir()
+        if is_profile_in_use(default_dir):
+            print(f"  ⚡ Primary Firefox profile is currently active/paused. Allocating isolated parallel profile...")
+            profile_dir = create_cloned_profile_dir(default_dir)
+            is_temp_profile = True
+        else:
+            profile_dir = default_dir
+            cleanup_stale_profile_locks(profile_dir)
     else:
         os.makedirs(profile_dir, exist_ok=True)
+        if not is_profile_in_use(profile_dir):
+            cleanup_stale_profile_locks(profile_dir)
 
-    cleanup_stale_profile_locks(profile_dir)
+    ua = get_desktop_firefox_user_agent()
+    firefox_prefs = {
+        "dom.webdriver.enabled": False,
+        "useAutomationExtension": False,
+    }
 
     print(f"Launching Firefox persistent context...")
     print(f"  Profile directory: {profile_dir}")
     print(f"  Headless: {headless}")
+    print(f"  User-Agent: {ua}")
 
     try:
         context = playwright.firefox.launch_persistent_context(
             user_data_dir=profile_dir,
             headless=headless,
+            user_agent=ua,
+            firefox_user_prefs=firefox_prefs,
             viewport={"width": 1280, "height": 800},
         )
     except Exception as e:
         err_msg = str(e)
-        if "Failed to launch the browser process" in err_msg or "exitCode=0" in err_msg:
-            print(f"Warning: Persistent context launch failed ({err_msg}). Forcing process cleanup and retrying...")
-            cleanup_stale_profile_locks(profile_dir, force=True)
-            time.sleep(1.0)
+        if ("Failed to launch the browser process" in err_msg or "exitCode=0" in err_msg) and not is_temp_profile:
+            print(f"Warning: Persistent context launch failed ({err_msg}). Allocating isolated parallel profile...")
+            profile_dir = create_cloned_profile_dir(default_dir)
+            is_temp_profile = True
             context = playwright.firefox.launch_persistent_context(
                 user_data_dir=profile_dir,
                 headless=headless,
+                user_agent=ua,
+                firefox_user_prefs=firefox_prefs,
                 viewport={"width": 1280, "height": 800},
             )
         else:
             raise
+
+    if is_temp_profile:
+        def _cleanup_profile():
+            time.sleep(1.0)
+            shutil.rmtree(profile_dir, ignore_errors=True)
+        context.on("close", lambda: threading.Thread(target=_cleanup_profile, daemon=True).start())
+
+    # Mask navigator.webdriver in all newly spawned pages and iframes
+    try:
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            });
+        """)
+    except Exception:
+        pass
 
     if sync_cookies_domains:
         desktop_cookies = extract_desktop_cookies(sync_cookies_domains)

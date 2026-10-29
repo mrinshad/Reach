@@ -2,6 +2,7 @@
 PostgreSQL Posts Data Access & Workflow State Operations.
 """
 
+import re
 import hashlib
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any, Optional, Set, Tuple
@@ -146,6 +147,94 @@ def is_post_already_saved(
     return False
 
 
+def normalize_job_title(title: Optional[str]) -> str:
+    """Normalize job title for consistent matching against dismissed roles."""
+    if not title:
+        return ""
+    t = title.strip().lower()
+    # Strip common LinkedIn tag patterns like (Verified job), (Hybrid), (Remote), etc.
+    t = re.sub(r"\((verified job|hybrid|remote|on-site|onsite|wfh|full-time|part-time|contract|entry level|immediate joiner[s]?)\)", "", t, flags=re.I)
+    # Strip common noise symbols and punctuation
+    t = re.sub(r"[\(\)\[\]\{\}\-\–\—\•\|\:\,\/]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def get_dismissed_role_titles(db_url: str = DEFAULT_DB_URL) -> Set[str]:
+    """
+    Fetch all unique normalized job titles from posts with status='REJECTED'.
+    Used by scrapers to automatically dismiss matching newly discovered roles.
+    """
+    dismissed = set()
+    query = "SELECT DISTINCT author_headline FROM posts WHERE status = 'REJECTED' AND author_headline IS NOT NULL;"
+    try:
+        with get_connection(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(query)
+                for (headline,) in cur.fetchall():
+                    if headline:
+                        norm = normalize_job_title(headline)
+                        if norm:
+                            dismissed.add(norm)
+    except Exception as e:
+        print(f"Notice fetching dismissed role titles: {e}")
+    return dismissed
+
+
+def check_title_previously_dismissed(
+    title: str,
+    dismissed_set: Optional[Set[str]] = None,
+    db_url: str = DEFAULT_DB_URL,
+) -> Tuple[bool, Optional[str]]:
+    """Check if title matches any previously dismissed role."""
+    if not title:
+        return False, None
+    if dismissed_set is None:
+        dismissed_set = get_dismissed_role_titles(db_url)
+    norm = normalize_job_title(title)
+    if norm in dismissed_set:
+        return True, f"Auto-dismissed: Matches previously dismissed role '{title}'"
+    return False, None
+
+
+# Patterns indicating comment-bait / comment to get link / engagement farming
+COMMENT_BAIT_PATTERNS = [
+    # Comment below / down below / in comments
+    r"comment\s+(down\s+)?below",
+    r"(drop|leave|put|post)\s+(a\s+)?comment\s+(down\s+)?below",
+    r"comment\s+in\s+(the\s+)?comments?",
+    r"comment\s+(your\s+)?(email|resume|cv|details|contact|id|portfolio|profile)\s+(down\s+)?below",
+    # Comment interested / yes / info / etc.
+    r"comment\s+['\"]?(interested|yes|apply|ready|send|link|details|info|email|here|cfbr|fsd)['\"]?",
+    r"comment\s+(if\s+|when\s+)?['\"]?interested['\"]?",
+    r"please\s+comment\s+['\"]?interested['\"]?",
+    r"interested\s*[,.]?\s*(please\s+)?comment\b",
+    # Drop/share email or resume in comments
+    r"(drop|share|leave|put|post)\s+(your\s+)?(email|resume|cv|contact|details|id)\s+(in\s+)?(the\s+)?comments?",
+    # Type interested in comments
+    r"type\s+['\"]?interested['\"]?",
+    r"type\s+['\"]?(interested|yes|apply|info)['\"]?\s+(in\s+)?(the\s+)?comments?",
+    r"write\s+['\"]?interested[\'\"]?\s+(in\s+)?(the\s+)?comments?",
+    # Comment to / for apply / link / details
+    r"comment\s+(to\s+|for\s+)(apply|get\s+link|receive|details|referral|the\s+link|link|info)",
+    r"leave\s+(a\s+)?comment\s+(below|with|to|for)",
+]
+
+
+def check_comment_bait(text: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """
+    Detect if the post text contains comment-to-apply bait ('comment below', 'comment interested', etc.).
+    Returns: (is_bait, bait_reason)
+    """
+    if not text:
+        return False, None
+    lower_text = text.lower()
+    for p in COMMENT_BAIT_PATTERNS:
+        if re.search(p, lower_text):
+            return True, "Scam: Comment bait ('comment below' / 'comment interested')"
+    return False, None
+
+
 def upsert_post(
     post_data: Dict[str, Any],
     skip_if_exists: bool = True,
@@ -193,8 +282,48 @@ def upsert_post(
             category = post_data.get("category", "EMAIL_OUTREACH")
 
             is_scam, is_potential_spam, scam_reason, potential_spam_reason = check_email_spam(emails, cur)
-            initial_status = "REJECTED" if is_scam else "DISCOVERED"
-            initial_reason = scam_reason if is_scam else None
+
+            # Check comment bait spam
+            is_bait, bait_reason = check_comment_bait(full_text)
+            if is_bait and not is_scam:
+                is_scam = True
+                scam_reason = bait_reason
+
+            # Auto-dismiss check if role headline matches a previously dismissed role
+            headline = post_data.get("author_headline", "")
+            is_dismissed = False
+            dismissed_reason = None
+            if headline and post_data.get("status") in (None, "DISCOVERED"):
+                norm_h = normalize_job_title(headline)
+                if norm_h:
+                    cur.execute(
+                        "SELECT author_headline FROM posts WHERE status = 'REJECTED' AND author_headline IS NOT NULL "
+                        "AND LOWER(REGEXP_REPLACE(author_headline, '\\s+', ' ', 'g')) = %s LIMIT 1;",
+                        (norm_h,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        is_dismissed = True
+                        dismissed_reason = f"Auto-dismissed: Matches previously dismissed role '{row[0]}'"
+
+            if is_scam:
+                initial_status = "REJECTED"
+                initial_reason = scam_reason
+            elif is_dismissed:
+                initial_status = "REJECTED"
+                initial_reason = dismissed_reason
+            elif post_data.get("status"):
+                initial_status = post_data["status"]
+                initial_reason = post_data.get("rejection_reason")
+            else:
+                initial_status = "DISCOVERED"
+                initial_reason = None
+
+            if post_data.get("is_potential_spam") is not None:
+                is_potential_spam = bool(post_data["is_potential_spam"])
+            if post_data.get("potential_spam_reason") is not None:
+                potential_spam_reason = post_data["potential_spam_reason"]
+
             location = (post_data.get("location") or "").strip() or None
 
             insert_sql = """
@@ -240,6 +369,35 @@ def upsert_post(
             conn.commit()
             created_id = res[0] if res else record_id
             return (created_id, res is not None)
+
+
+def backfill_comment_bait_spam(db_url: str = DEFAULT_DB_URL) -> int:
+    """
+    Find existing DISCOVERED posts whose full_text matches comment bait patterns
+    and update them to status = 'REJECTED' with rejection_reason = "Scam: Comment bait ('comment below' / 'comment interested')".
+    Returns the count of updated posts.
+    """
+    count = 0
+    with get_connection(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, full_text FROM posts WHERE status = 'DISCOVERED';")
+            rows = cur.fetchall()
+            ids_to_update = []
+            for post_id, full_text in rows:
+                is_bait, _ = check_comment_bait(full_text)
+                if is_bait:
+                    ids_to_update.append(post_id)
+            if ids_to_update:
+                cur.execute(
+                    "UPDATE posts SET status = 'REJECTED', "
+                    "rejection_reason = 'Scam: Comment bait (''comment below'' / ''comment interested'')', "
+                    "updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ANY(%s);",
+                    (ids_to_update,)
+                )
+                count = len(ids_to_update)
+            conn.commit()
+    return count
 
 
 def _apply_date_filter(
@@ -657,6 +815,17 @@ def get_post_by_id(post_id: str, db_url: str = DEFAULT_DB_URL) -> Optional[Dict[
             return dict(row) if row else None
 
 
+def get_posts_by_ids(post_ids: List[str], db_url: str = DEFAULT_DB_URL) -> List[Dict[str, Any]]:
+    """Retrieve multiple post records by their IDs in a single batch query."""
+    if not post_ids:
+        return []
+    sql = "SELECT * FROM posts WHERE id = ANY(%s);"
+    with get_connection(db_url) as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, (list(post_ids),))
+            return [dict(row) for row in cur.fetchall()]
+
+
 def update_post_status(
     post_id: str,
     new_status: str,
@@ -670,10 +839,15 @@ def update_post_status(
     params = [new_status]
 
     if rejection_reason is not None:
-        from src.services.chatgpt_service import clean_and_truncate_reason
-        cleaned_reason = clean_and_truncate_reason(rejection_reason)
-        set_clauses.append("rejection_reason = %s")
-        params.append(cleaned_reason)
+        if new_status == "REQUIRES_QUESTIONNAIRE":
+            # Preserve raw screening questions intact — do not truncate or normalize
+            set_clauses.append("rejection_reason = %s")
+            params.append(rejection_reason)
+        else:
+            from src.services.chatgpt_service import clean_and_truncate_reason
+            cleaned_reason = clean_and_truncate_reason(rejection_reason)
+            set_clauses.append("rejection_reason = %s")
+            params.append(cleaned_reason)
 
         if is_potential_spam is None and ("potential scam" in rejection_reason.lower() or "potential spam" in rejection_reason.lower()):
             is_potential_spam = True

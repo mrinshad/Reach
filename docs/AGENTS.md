@@ -9,7 +9,7 @@ This directory contains high-level architecture designs, system workflow diagram
 | Document | Description | Key Content Areas |
 |---|---|---|
 | [`file_architecture.md`](file:///Users/apple/Byten/linkedInScrapper/docs/file_architecture.md) | Comprehensive structural map of the entire repository. | Full directory tree, subsystem tables, backend routers, database schemas, frontend asset mappings, and architectural diagrams. |
-| [`workflows.md`](file:///Users/apple/Byten/linkedInScrapper/docs/workflows.md) | End-to-end user workflows and operational lifecycle diagrams. | Multi-platform crawling, sequential task queuing, AI Custom GPT email drafting, interactive review, Gmail dispatch, spam flagging, and mobile push notifications. |
+| [`workflows.md`](file:///Users/apple/Byten/linkedInScrapper/docs/workflows.md) | End-to-end user workflows and operational lifecycle diagrams. | Multi-platform crawling, sequential task queuing, AI Custom GPT email drafting, interactive review, Gmail dispatch, spam flagging, mobile push notifications, LinkedIn Easy Apply automation, safe pacing & anti-abuse safeguard, centralized Question & Answer Bank, and activity run logs with retries. |
 | [`implementation_plan.md`](file:///Users/apple/Byten/linkedInScrapper/docs/implementation_plan.md) | Development roadmap, milestone tracker, and safety standards. | Account safety pacing rules, Headless mode configuration, completed architectural milestones (1 through 7), and ongoing enhancement roadmaps. |
 
 ---

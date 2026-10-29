@@ -18,15 +18,56 @@ from urllib.parse import quote
 from playwright.sync_api import sync_playwright, Page, BrowserContext
 from src.services.firefox_connector import launch_firefox_context
 from src.services.experience_extractor import extract_experience
-from src.db.posts import upsert_post, get_post_by_id, update_post_status
+from src.db.posts import (
+    upsert_post,
+    get_post_by_id,
+    update_post_status,
+    get_dismissed_role_titles,
+    check_title_previously_dismissed,
+)
 from src.db.settings import get_setting
+from src.db.question_bank import lookup_answer_for_question, upsert_screening_question
+from src.services.chatgpt_service import ask_chatgpt_for_question_answer
 from src.config import load_config
 
 LINKEDIN_BASE = "https://www.linkedin.com"
 
+# Known LinkedIn geoId mapping to preserve location filters across redirects
+COMMON_GEO_IDS: Dict[str, str] = {
+    "dubai": "106204383",
+    "united arab emirates": "104305787",
+    "uae": "104305787",
+    "abu dhabi": "104117822",
+    "india": "102713980",
+    "kochi": "106155005",
+    "cochin": "106155005",
+    "kerala": "104301646",
+    "bangalore": "105214831",
+    "bengaluru": "105214831",
+    "hyderabad": "105556968",
+    "delhi": "103644278",
+    "mumbai": "102856477",
+    "chennai": "104621916",
+    "pune": "103671728",
+    "singapore": "102454443",
+    "united states": "103644278",
+    "usa": "103644278",
+    "united kingdom": "101165590",
+    "uk": "101165590",
+    "london": "102257491",
+    "germany": "101282230",
+    "berlin": "106967730",
+    "canada": "101174742",
+    "toronto": "100025096",
+    "remote": "108411089",
+    "qatar": "104170880",
+    "saudi arabia": "100459316",
+    "riyadh": "104769905",
+}
+
 
 def build_easy_apply_search_url(keywords: str, location: str = "India", time_filter: str = "24h") -> str:
-    """Build a LinkedIn job search URL with Easy Apply (f_AL=true) filter."""
+    """Build a LinkedIn job search URL with Easy Apply (f_AL=true) filter and geoId."""
     kw = (keywords or "").strip()
     loc = (location or "India").strip()
 
@@ -39,45 +80,287 @@ def build_easy_apply_search_url(keywords: str, location: str = "India", time_fil
     }
     tpr = time_map.get(time_filter.lower(), "r86400")
 
-    url = f"{LINKEDIN_BASE}/jobs/search/?keywords={quote(kw)}&location={quote(loc)}&f_AL=true"
+    # Use raw keywords without quotes so LinkedIn searches all relevant openings
+    kw_query = kw.strip()
+
+    url = f"{LINKEDIN_BASE}/jobs/search-results/?keywords={quote(kw_query)}&location={quote(loc)}&f_AL=true"
+    
+    # Append geoId if known to prevent LinkedIn stripping location parameter
+    loc_lower = loc.lower()
+    geo_id = None
+    for k, gid in COMMON_GEO_IDS.items():
+        if k in loc_lower or loc_lower in k:
+            geo_id = gid
+            break
+    if geo_id:
+        url += f"&geoId={geo_id}"
+
     if tpr:
         url += f"&f_TPR={tpr}"
     return url
 
 
-def human_sleep(min_s: float = 1.5, max_s: float = 3.0):
-    """Sleep for random human-like pacing."""
-    time.sleep(random.uniform(min_s, max_s))
+def is_job_title_relevant(title: str, query: str) -> Tuple[bool, str]:
+    """
+    Relevance check disabled per user preference — all jobs accepted for review in dashboard.
+    """
+    return True, "Relevance filter disabled (all jobs accepted for user review)"
+
+
+def human_sleep(min_s: float = 1.5, max_s: float = 3.0, cancel_check=None):
+    """Sleep for random human-like pacing with optional cancellation check."""
+    target = random.uniform(min_s, max_s)
+    if cancel_check is None:
+        time.sleep(target)
+    else:
+        elapsed = 0.0
+        while elapsed < target:
+            if cancel_check():
+                break
+            step = min(1.0, target - elapsed)
+            time.sleep(step)
+            elapsed += step
+
+
+def ensure_search_location(page: Page, target_location: str, logger=print):
+    """
+    Verify that the active LinkedIn search page reflects the requested location.
+    If LinkedIn redirected or stripped the location param (defaulting to user profile country),
+    interactively open the location filter popover and update it.
+    """
+    if not target_location or target_location.lower() in ["all", "any"]:
+        return
+
+    target_low = target_location.lower().strip()
+    try:
+        # Check current location pill text
+        loc_btn = page.locator("button[aria-label*='Location filter'], button[aria-label*='location filter']").first
+        if loc_btn.count() > 0:
+            btn_txt = loc_btn.inner_text().lower().strip()
+            # If target location is in button text, we're good
+            if target_low in btn_txt:
+                return
+
+            logger(f"  📍 Location filter shows '{btn_txt}'. Updating to target '{target_location}'...")
+            loc_btn.click()
+            page.wait_for_timeout(800)
+
+            # Find input in dropdown/popover
+            loc_input = page.locator(
+                "div[role='dialog'] input[type='text'], "
+                "div[role='dialog'] div[role='textbox'], "
+                "input[role='combobox'][aria-label*='Location'], "
+                "input[aria-label*='City, state, or zip code'], "
+                "input[placeholder*='City, state, or zip code']"
+            ).first
+
+            if loc_input.count() > 0:
+                loc_input.click()
+                page.wait_for_timeout(200)
+                # Clear existing text
+                loc_input.press("Meta+a")
+                loc_input.press("Backspace")
+                loc_input.press("Control+a")
+                loc_input.press("Backspace")
+                loc_input.press_sequentially(target_location, delay=40)
+                page.wait_for_timeout(1000)
+
+                # Select first autocomplete suggestion if available
+                suggestions = page.locator("[role='listbox'] [role='option'], .basic-typeahead__selectable-list li").all()
+                if suggestions:
+                    try:
+                        suggestions[0].click()
+                    except Exception:
+                        loc_input.press("ArrowDown")
+                        loc_input.press("Enter")
+                else:
+                    loc_input.press("Enter")
+                page.wait_for_timeout(500)
+
+                # Click apply or show results button
+                apply_btn = page.locator(
+                    "div[role='dialog'] button[data-test-apply-button], "
+                    "div[role='dialog'] button:has-text('Apply'), "
+                    "div[role='dialog'] button:has-text('Show results')"
+                ).first
+                if apply_btn.count() > 0 and apply_btn.is_visible():
+                    apply_btn.click()
+                    page.wait_for_timeout(2500)
+    except Exception as e:
+        logger(f"  Notice verifying location filter: {e}")
+
+
+def wait_for_job_cards_loaded(page: Page, timeout_ms: int = 15000, logger=print) -> bool:
+    """
+    Wait for LinkedIn job cards to finish loading, replacing asynchronous skeleton loaders.
+    """
+    start = time.time()
+    max_s = timeout_ms / 1000.0
+    while time.time() - start < max_s:
+        # Check if real cards / links are visible
+        cards_count = page.evaluate("""() => {
+            const ckeys = document.querySelectorAll('[componentkey*="job-card-component-ref-"]');
+            if (ckeys.length > 0) return ckeys.length;
+            const links = document.querySelectorAll('a[href*="/jobs/view/"]');
+            return links.length;
+        }""")
+        if cards_count > 0:
+            return True
+
+        # Check legacy selectors (actual card containers only, not empty column shells)
+        if page.locator("[data-occludable-job-id], li.jobs-search-results__list-item, div.job-card-container").count() > 0:
+            return True
+
+        page.wait_for_timeout(500)
+    return False
+
+
+def extract_all_search_job_cards(page: Page, max_jobs: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Extract job card metadata from search results using 2026 atomic componentkey layout,
+    legacy links, and container fallback selectors. Deduplicates by job_id.
+    """
+    jobs = page.evaluate("""() => {
+        const results = [];
+        const seen = new Set();
+
+        // Method 1: Modern 2026 ComponentKey cards
+        const cardEls = Array.from(document.querySelectorAll('[componentkey*="job-card-component-ref-"]'));
+        for (const c of cardEls) {
+            const ckey = c.getAttribute('componentkey') || '';
+            const jid = ckey.replace('job-card-component-ref-', '').trim();
+            if (!jid || seen.has(jid)) continue;
+            seen.add(jid);
+
+            const lines = (c.innerText || '').split('\\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) continue;
+
+            let title = lines[0].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            if (title.toLowerCase().startsWith('selected') && lines.length > 1) {
+                title = lines[1].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            } else if (lines.length > 1 && lines[1].toLowerCase().includes(title.toLowerCase().slice(0, 8))) {
+                title = lines[1].replace(/\\(Verified job\\)/i, '').replace(/^[\\W_]+/, '').trim();
+            }
+
+            let company = 'Company';
+            let loc = '';
+            for (let i = 1; i < Math.min(lines.length, 6); i++) {
+                const line = lines[i];
+                if (line === title || line.toLowerCase().includes('(verified job)') || line === '·') continue;
+                if (!company || company === 'Company') {
+                    company = line;
+                } else if (!loc) {
+                    loc = line;
+                    break;
+                }
+            }
+
+            results.push({
+                job_id: jid,
+                title: title,
+                company: company || 'Company',
+                location: loc || '',
+                url: `https://www.linkedin.com/jobs/view/${jid}/`
+            });
+        }
+
+        // Method 2: Find all links pointing to /jobs/view/ (if Method 1 returned fewer than expected)
+        if (results.length === 0) {
+            const links = Array.from(document.querySelectorAll('a[href*="/jobs/view/"]'));
+            for (const l of links) {
+                const href = l.getAttribute('href') || '';
+                const match = href.match(/\\/jobs\\/view\\/(\\d+)/);
+                if (!match) continue;
+                const jid = match[1];
+                if (seen.has(jid)) continue;
+
+                const title = (l.innerText || '').split('\\n')[0].trim();
+                if (!title || title.length < 2) continue;
+
+                seen.add(jid);
+
+                // Find containing card element for company & location
+                const container = l.closest('li') || l.closest('[data-view-name*="job-card"]') || l.parentElement;
+                let company = '';
+                let loc = '';
+                if (container) {
+                    const compEl = container.querySelector('[class*="company"], .artdeco-entity-lockup__subtitle, h4, .job-card-container__company-name');
+                    if (compEl) company = compEl.innerText.split('\\n')[0].trim();
+
+                    const locEl = container.querySelector('[class*="location"], [class*="caption"], .artdeco-entity-lockup__caption, .job-card-container__metadata-item');
+                    if (locEl) loc = locEl.innerText.split('\\n')[0].trim();
+                }
+
+                results.push({
+                    job_id: jid,
+                    title: title,
+                    company: company || 'Company',
+                    location: loc || '',
+                    url: `https://www.linkedin.com/jobs/view/${jid}/`
+                });
+            }
+        }
+
+        // Method 3: Legacy fallback if still 0
+        if (results.length === 0) {
+            const legacyCards = Array.from(document.querySelectorAll('[data-occludable-job-id], [data-job-id], li.jobs-search-results__list-item'));
+            for (const c of legacyCards) {
+                const jid = c.getAttribute('data-occludable-job-id') || c.getAttribute('data-job-id') || '';
+                const a = c.querySelector('a.job-card-container__link, a.job-card-list__title--link, a[href*="/view/"]');
+                if (!a) continue;
+                const title = (a.innerText || '').split('\\n')[0].trim();
+                const href = a.getAttribute('href') || '';
+                const idFromHref = (href.match(/\\/view\\/(\\d+)/) || [])[1] || jid;
+                if (!idFromHref || seen.has(idFromHref)) continue;
+                seen.add(idFromHref);
+
+                const compEl = c.querySelector('.artdeco-entity-lockup__subtitle, .job-card-container__company-name');
+                const locEl = c.querySelector('.artdeco-entity-lockup__caption, .job-card-container__metadata-item');
+
+                results.push({
+                    job_id: idFromHref,
+                    title: title,
+                    company: compEl ? compEl.innerText.split('\\n')[0].trim() : 'Company',
+                    location: locEl ? locEl.innerText.split('\\n')[0].trim() : '',
+                    url: `https://www.linkedin.com/jobs/view/${idFromHref}/`
+                });
+            }
+        }
+
+        return results;
+    }""")
+
+    return jobs[:max_jobs] if (jobs and max_jobs) else (jobs or [])
 
 
 def extract_job_card_metadata(card) -> Dict[str, Any]:
-    """Extract summary metadata from a visible job card."""
+    """Extract summary metadata from a visible job card (supports both legacy and modern layouts)."""
     job_id = card.evaluate("el => el.getAttribute('data-occludable-job-id') || el.getAttribute('data-job-id') || ''")
 
     # Title & Link
-    title_link = card.locator("a.job-card-container__link, a.job-card-list__title--link")
+    title_link = card.locator("a.job-card-container__link, a.job-card-list__title--link, a[href*='/jobs/view/'], a[href*='/view/']").first
     title = ""
     href = ""
     if title_link.count() > 0:
-        raw_title = title_link.first.inner_text().strip()
+        raw_title = title_link.inner_text().strip()
         title = raw_title.split("\n")[0].strip()
-        href = title_link.first.get_attribute("href") or ""
+        href = title_link.get_attribute("href") or ""
         if href.startswith("/"):
             href = LINKEDIN_BASE + href
         elif href and not href.startswith("http"):
             href = f"{LINKEDIN_BASE}/{href}"
 
     # Company
-    company_el = card.locator(".artdeco-entity-lockup__subtitle, .job-card-container__company-name")
+    company_el = card.locator(".artdeco-entity-lockup__subtitle, .job-card-container__company-name, [class*='company-name']").first
     company = ""
     if company_el.count() > 0:
-        company = company_el.first.inner_text().strip()
+        company = company_el.inner_text().strip().split("\n")[0].strip()
 
     # Location
-    location_el = card.locator(".artdeco-entity-lockup__caption, .job-card-container__metadata-item")
+    location_el = card.locator(".artdeco-entity-lockup__caption, .job-card-container__metadata-item, [class*='metadata-item']").first
     location = ""
     if location_el.count() > 0:
-        location = location_el.first.inner_text().strip().split("\n")[0].strip()
+        location = location_el.inner_text().strip().split("\n")[0].strip()
 
     # Fallback job_id from href
     if not job_id and "/view/" in href:
@@ -104,68 +387,318 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
     """
     Inspect the Easy Apply modal dialog for multi-step questions and determine
     if it can be auto-submitted or if it requires custom questionnaire answers.
+    Collects all questions including basic profile questions (phone, email, etc.).
     """
     questions = []
+    custom_questions = []
+
+    # Filter out pure UI chrome / non-questions
     standard_skip = [
-        "phone", "mobile", "email", "first name", "last name", "resume",
-        "select language", "search", "location", "city", "country code",
-        "contact info", "work experience", "additional", "photo",
-        "cover letter", "headline", "summary", "website", "terms"
+        "select language", "search", "photo", "terms", "agree", "privacy", "drag and drop", "upload resume"
+    ]
+    
+    # Common standard profile items that LinkedIn usually auto-fills from user account
+    basic_profile_terms = [
+        "first name", "last name", "phone", "mobile", "email", "resume",
+        "country code", "contact info", "headline", "summary",
+        "city", "location", "address", "state", "postal", "zip"
     ]
 
+    def add_question(raw_label: str):
+        cleaned = raw_label.strip()
+        if not cleaned or len(cleaned) < 2:
+            return
+        cleaned_low = cleaned.lower()
+        # NEVER treat resume files or documents as questions
+        if any(ext in cleaned_low for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt", ".txt"]):
+            return
+        if any(skip in cleaned_low for skip in standard_skip):
+            return
+        if any(r in cleaned_low for r in ["choose a resume", "select a resume", "uploaded resume", "choose resume"]):
+            return
+        if cleaned not in questions:
+            questions.append(cleaned)
+        # Check if it is a custom question (not auto-filled standard basic info)
+        is_basic = any(b in cleaned_low for b in basic_profile_terms)
+        if not is_basic and cleaned not in custom_questions:
+            custom_questions.append(cleaned)
+
     # Check visible form labels
-    labels = page.locator("label:visible").all()
-    for l in labels:
-        try:
-            txt = l.inner_text().strip()
-            txt_low = txt.lower()
-            if not txt or any(skip in txt_low for skip in standard_skip):
-                continue
-            if txt not in questions:
-                questions.append(txt)
-        except Exception:
-            pass
+    try:
+        labels = page.locator("label:visible").all()
+        for l in labels:
+            try:
+                txt = l.inner_text().strip()
+                add_question(txt)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
     # Check visible inputs, selects, and textareas with custom aria labels
-    inputs = page.locator("input:visible, select:visible, textarea:visible").all()
-    for inp in inputs:
-        try:
-            aria = inp.get_attribute("aria-label") or inp.get_attribute("placeholder") or ""
-            aria_low = aria.lower()
-            if not aria or any(skip in aria_low for skip in standard_skip):
-                continue
-            if aria not in questions:
-                questions.append(aria)
-        except Exception:
-            pass
+    try:
+        inputs = page.locator("input:visible, select:visible, textarea:visible").all()
+        for inp in inputs:
+            try:
+                inp_id = inp.get_attribute("id") or ""
+                placeholder = inp.get_attribute("placeholder") or ""
+                if inp_id == "_r_3_" or "search" in placeholder.lower() or "search" in inp_id.lower() or "global-nav" in inp_id.lower():
+                    continue
+                aria = inp.get_attribute("aria-label") or placeholder or ""
+                add_question(aria)
+            except Exception:
+                pass
+    except Exception:
+        pass
 
-    # Check fieldsets
-    radio_groups = page.locator("fieldset:visible").all()
-    for rg in radio_groups:
-        try:
-            legend = rg.locator("legend")
-            if legend.count() > 0:
-                ltxt = legend.first.inner_text().strip()
-                if ltxt and not any(skip in ltxt.lower() for skip in standard_skip):
-                    if ltxt not in questions:
-                        questions.append(ltxt)
-        except Exception:
-            pass
+    # Check fieldsets / radio groups
+    try:
+        radio_groups = page.locator("fieldset:visible, [role='radiogroup']:visible").all()
+        for rg in radio_groups:
+            try:
+                # If radio labels contain document files, skip (resume picker)
+                radio_labels = rg.locator("div[role='radio']:visible, label:visible, p:visible").all()
+                if any(any(ext in (ro.inner_text() or "").lower() for ext in [".pdf", ".docx", ".doc"]) for ro in radio_labels):
+                    continue
 
-    requires_questionnaire = len(questions) > 0
+                ltxt = ""
+                legend = rg.locator("legend")
+                if legend.count() > 0:
+                    ltxt = legend.first.inner_text().strip()
+                if not ltxt:
+                    ltxt = rg.get_attribute("aria-label") or ""
+                if not ltxt:
+                    r = rg.locator("div[role='radio'][aria-label], input[type='radio'][aria-label]").first
+                    if r.count() > 0:
+                        ltxt = r.get_attribute("aria-label") or ""
+                if not ltxt:
+                    pre_el = rg.locator("xpath=preceding::p[1] | preceding::h3[1] | preceding::label[1]").first
+                    if pre_el.count() > 0:
+                        ltxt = pre_el.inner_text().strip()
+                if ltxt:
+                    add_question(ltxt)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    requires_questionnaire = len(custom_questions) > 0
     return {
         "has_modal": True,
         "requires_questionnaire": requires_questionnaire,
         "questions": questions,
+        "custom_questions": custom_questions,
     }
 
 
-def dismiss_easy_apply_modal(page: Page):
-    """Safely dismiss and discard an open Easy Apply modal without saving partial drafts."""
+def check_linkedin_rate_limit(page: Page) -> Optional[str]:
+    """
+    Check if LinkedIn has displayed a daily submission limit or fast-pace safeguard warning.
+    Returns the exact message if detected, or None.
+    Differentiates between DAILY_LIMIT and FAST_PACE.
+    """
+    daily_limit_keywords = [
+        "reached today’s easy apply limit",
+        "reached today's easy apply limit",
+        "reached today's easy apply",
+        "reached today’s easy apply",
+        "limit easy apply submissions",
+        "continue applying tomorrow",
+        "save this job and continue applying tomorrow",
+        "great effort applying today",
+    ]
+    fast_pace_keywords = [
+        "applying at a fast pace",
+        "briefly paused easy apply",
+        "safeguard against automated",
+        "automated inauthentic activities",
+        "risk of restriction",
+        "paused easy apply",
+        "unusual activity from your account",
+    ]
+
     try:
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
+        # Check active dialogs and modal overlays first for high precision
+        dialog_texts = []
+        dialogs = page.locator("div[role='dialog'], .artdeco-modal, .artdeco-toast, [data-test-modal]").all()
+        for d in dialogs:
+            try:
+                if d.is_visible():
+                    txt = d.inner_text().strip()
+                    if txt:
+                        dialog_texts.append(txt)
+            except Exception:
+                pass
+
+        combined_text = " ".join(dialog_texts)
+        if not combined_text:
+            combined_text = page.locator("body").inner_text(timeout=2000)
+
+        combined_lower = combined_text.lower()
+
+        # 1. Daily Limit Check
+        for kw in daily_limit_keywords:
+            if kw in combined_lower:
+                return (
+                    "You reached today’s Easy Apply limit\n\n"
+                    "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                    "Save this job and continue applying tomorrow. Learn more"
+                )
+
+        # 2. Fast Pace Cooldown Check
+        for kw in fast_pace_keywords:
+            if kw in combined_lower:
+                return "LinkedIn Safeguard: Easy Apply briefly paused due to fast pace. Automation halted to protect account."
+
+    except Exception:
+        pass
+
+    return None
+
+
+def detect_closed_job_reason(page: Page) -> Optional[str]:
+    """
+    Check if the LinkedIn job page indicates the job is closed or no longer accepting applications.
+    Returns the exact reason string (e.g. 'No longer accepting applications', 'Not currently accepting applications',
+    'This job is no longer available', etc.) if found, or None if the job is open.
+    """
+    # 1. Closed job flavor elements (e.g. figcaption.closed-job__flavor--closed)
+    try:
+        flavor_loc = page.locator('.closed-job__flavor--closed, figcaption.closed-job__flavor--closed, figure.closed-job')
+        if flavor_loc.count() > 0:
+            for i in range(flavor_loc.count()):
+                txt = flavor_loc.nth(i).inner_text().strip()
+                if txt:
+                    return txt
+    except Exception:
+        pass
+
+    # 2. Exact known phrases across visible text
+    phrases = [
+        "Not currently accepting applications",
+        "No longer accepting applications",
+        "This job is no longer available",
+        "This job has expired",
+        "This job is closed",
+        "This posting is closed",
+    ]
+    for p in phrases:
+        try:
+            loc = page.locator(f'text="{p}"')
+            if loc.count() > 0 and loc.first.is_visible():
+                txt = loc.first.inner_text().strip()
+                return txt or p
+        except Exception:
+            pass
+
+    # 3. Top-card header container check
+    try:
+        top_cards = page.locator('.jobs-details__top-card, .topcard, .job-details-jobs-unified-top-card, header, .job-view-layout, .artdeco-inline-feedback--error')
+        if top_cards.count() > 0:
+            top_text = top_cards.first.inner_text()
+            for p in phrases:
+                if p.lower() in top_text.lower():
+                    return p
+    except Exception:
+        pass
+
+    # 4. Check page body text if it explicitly matches closed phrases
+    try:
+        body_text = page.locator("body").inner_text(timeout=1500)
+        for p in phrases:
+            pattern = re.compile(rf"(?:^|\n|[\.\!\?]\s*)({re.escape(p)})(?:[\.\!\?]|[\n\r]|$)", re.IGNORECASE)
+            m = pattern.search(body_text)
+            if m:
+                return m.group(1).strip()
+    except Exception:
+        pass
+
+    return None
+
+
+def detect_already_applied(page: Page) -> Optional[str]:
+    """
+    Check if the LinkedIn job page indicates the application has already been submitted.
+    Returns detail string (e.g. 'Application submitted', 'Already applied previously on LinkedIn') if found, or None.
+    """
+    # 1. Classic button or badge indicators
+    try:
+        badge_loc = page.locator(
+            ".jobs-s-apply__status--applied, "
+            ".jobs-applied-internally, "
+            ".jobs-apply-button--disabled, "
+            "button:has-text('Applied'), "
+            "[aria-label*='Applied to this job'], "
+            "[aria-label*='Application submitted']"
+        )
+        if badge_loc.count() > 0:
+            for i in range(badge_loc.count()):
+                el = badge_loc.nth(i)
+                if el.is_visible():
+                    txt = el.inner_text().strip()
+                    return txt or "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 2. Semantic Application status elements / headings / links
+    try:
+        app_sub_loc = page.locator(
+            "p:has-text('Application submitted'), "
+            "span:has-text('Application submitted'), "
+            "h2:has-text('Application status'), "
+            "h3:has-text('Application status'), "
+            "a:has-text('View resume')"
+        )
+        if app_sub_loc.count() > 0 and app_sub_loc.first.is_visible():
+            return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 3. Target top-card or application status cards
+    try:
+        top_cards = page.locator(
+            '.jobs-details__top-card, .topcard, .job-details-jobs-unified-top-card, '
+            '.jobs-s-apply, .jobs-apply-button--top-card, header, .job-view-layout'
+        )
+        if top_cards.count() > 0:
+            top_text = top_cards.first.inner_text()
+            if "application submitted" in top_text.lower() or "application status" in top_text.lower() or "view resume" in top_text.lower():
+                return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    # 4. Regex search in body text for explicit application submitted sentences
+    try:
+        body_text = page.locator("body").inner_text(timeout=1500)
+        patterns = [
+            r"(?:^|\n|[\.\!\?]\s*)(Application submitted)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(Application status)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(You applied to this job)(?:[\.\!\?]|[\n\r]|$)",
+            r"(?:^|\n|[\.\!\?]\s*)(Already applied)(?:[\.\!\?]|[\n\r]|$)"
+        ]
+        for pat in patterns:
+            m = re.search(pat, body_text, re.IGNORECASE)
+            if m:
+                return "Application submitted previously on LinkedIn"
+    except Exception:
+        pass
+
+    return None
+
+
+def dismiss_easy_apply_modal(page: Page):
+    """Safely dismiss and discard an open Easy Apply modal or limit dialog without saving partial drafts."""
+    try:
+        dismiss_btn = page.locator(
+            "button[aria-label='Dismiss'], "
+            "button[aria-label='Close'], "
+            "button.artdeco-modal__dismiss, "
+            "[data-test-modal-close-btn], "
+            "button:has-text('Got it'), "
+            "button:has-text('Done')"
+        ).first
         if dismiss_btn.count() > 0 and dismiss_btn.is_visible():
-            dismiss_btn.click()
+            dismiss_btn.click(force=True)
             page.wait_for_timeout(800)
 
             # Confirm discard dialog if it appears
@@ -174,7 +707,7 @@ def dismiss_easy_apply_modal(page: Page):
                 "button:has-text('Discard')"
             ).first
             if discard_btn.count() > 0 and discard_btn.is_visible():
-                discard_btn.click()
+                discard_btn.click(force=True)
                 page.wait_for_timeout(600)
     except Exception:
         pass
@@ -232,68 +765,827 @@ def upload_or_select_resume(page: Page, resume_path: Optional[str]):
         pass
 
 
-def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], logger=print) -> Tuple[str, str]:
+def resolve_field_value(
+    prompt: str,
+    raw_answer: Optional[str] = None,
+    itype: str = "text",
+    inputmode: str = "",
+    maxlength: Optional[str] = None,
+    max_attr: Optional[str] = None,
+    pattern: str = "",
+    is_dummy_mode: bool = False,
+) -> str:
     """
-    Attempt to submit an Easy Apply application for a given job URL.
-    Returns (status, detail_message) where status is:
-      - 'APPLIED': Successfully submitted
-      - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
-      - 'FAILED': Modal failed to open or encountered an unhandled issue
-      - 'ALREADY_APPLIED': LinkedIn indicates you've already applied
+    Resolve and sanitize field values to prevent validation and 'exceeded limit' errors on LinkedIn.
+    Supports:
+    - Phone / Mobile / Tel: Exactly 10 digits (e.g. '9895612423').
+    - Postal code: Exactly 6 digits (e.g. '676505').
+    - Years of experience / numeric / notice / salary:
+      Extracts clean numbers, handles 'no experience' -> '0', clamps 0..30 for years,
+      respects maxlength, and ensures no non-digits are sent to numeric inputs.
+    - URLs / portfolios: Valid URL, truncated to maxlength.
+    - City / location: Clean string, truncated to maxlength.
+    - Generic text / textareas: Clean short string, truncated to maxlength.
+    - Compliant placeholder values when is_dummy_mode=True to allow advancing through multi-step forms.
     """
-    try:
-        page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
-        
-        # Check if already applied
-        applied_badge = page.locator(
-            ".jobs-s-apply__status--applied, "
-            ".artdeco-inline-feedback--success, "
-            ".jobs-apply-button--disabled, "
-            "button:has-text('Applied')"
-        )
-        if applied_badge.count() > 0:
-            logger("  ℹ️ Already applied to this position on LinkedIn.")
-            return "APPLIED", "Already applied previously on LinkedIn"
+    p_low = (prompt or "").lower().strip()
+    ans = (raw_answer or "").strip() if raw_answer is not None else ""
+    itype_low = (itype or "text").lower().strip()
+    imode_low = (inputmode or "").lower().strip()
 
-        # Wait for Easy Apply button
+    max_len = None
+    if maxlength:
         try:
-            page.wait_for_selector(
-                "button:has-text('Easy Apply'), [aria-label*='Easy Apply'], button.jobs-apply-button",
-                timeout=7000
-            )
+            max_len = int(maxlength)
         except Exception:
             pass
 
-        apply_btn = page.locator(
-            "button:has-text('Easy Apply'), "
-            "[aria-label*='Easy Apply'], "
-            "button.jobs-apply-button"
-        ).first
+    max_val = None
+    if max_attr:
+        try:
+            max_val = int(max_attr)
+        except Exception:
+            pass
+
+    # 1. Phone / Tel / Mobile (10 digits)
+    if itype_low == "tel" or any(k in p_low for k in ["phone", "mobile", "contact number", "telephone"]):
+        if ans and not is_dummy_mode:
+            digits = re.sub(r"\D", "", ans)
+            if len(digits) >= 10:
+                val = digits[-10:]
+            elif digits:
+                val = "9895612423"
+            else:
+                val = "9895612423"
+        else:
+            val = "9895612423"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 2. Postal / Zip Code (6 digits)
+    if any(k in p_low for k in ["postal", "zip", "pin code", "pincode"]):
+        if ans and not is_dummy_mode:
+            digits = re.sub(r"\D", "", ans)
+            val = digits[:6] if digits else "676505"
+        else:
+            val = "676505"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 3. Numeric / Experience / Notice / Salary / Years
+    is_numeric_field = (
+        itype_low == "number"
+        or imode_low == "numeric"
+        or ("[0-9]" in pattern)
+        or (max_len is not None and max_len <= 4)
+        or any(k in p_low for k in [
+            "year", "years", "experience", "how many", "how much", "in days",
+            "notice", "notice period", "months", "ctc", "salary", "compensation",
+            "lpa", "inr", "pricing execution", "pricing"
+        ])
+    )
+
+    if is_numeric_field:
+        # A. Notice Period
+        if "notice" in p_low or "in days" in p_low or "days" in p_low:
+            if ans and not is_dummy_mode:
+                if any(w in ans.lower() for w in ["immediate", "ready", "0", "zero", "none"]):
+                    val = "0"
+                else:
+                    digits = re.findall(r"\d+", ans)
+                    val = digits[0][:3] if digits else "30"
+            else:
+                val = "30"
+            if max_len:
+                val = val[:max_len]
+            return val
+
+        # B. Salary / CTC / Compensation
+        if any(k in p_low for k in ["ctc", "salary", "lpa", "compensation"]):
+            if ans and not is_dummy_mode:
+                digits = re.findall(r"\d+", ans)
+                val = digits[0] if digits else "1200000"
+            else:
+                val = "1200000"
+            if max_len:
+                val = val[:max_len]
+            return val
+
+        # C. Years of Experience (General or Specific skill like Pricing Execution Engine)
+        if any(k in p_low for k in ["year", "experience", "how many", "pricing", "pricing execution"]) or (max_len is not None and max_len <= 3):
+            if ans and not is_dummy_mode:
+                # Check for explicit negation first: "no experience", "0", "none", "haven't"
+                low_ans = ans.lower()
+                has_negation = bool(re.search(r"\b(no|none|never|zero|0|fresher|haven't|not\s+have|without)\b", low_ans))
+                if has_negation and ("no experience" in low_ans or "0" in low_ans or "none" in low_ans or "without" in low_ans):
+                    val = "0"
+                else:
+                    digits = re.findall(r"\d+", ans)
+                    if digits:
+                        num = int(digits[0])
+                        # Clamp to reasonable range 0..30
+                        num = min(max(0, num), 30)
+                        val = str(num)
+                    else:
+                        val = "0"
+            else:
+                # Compliant small integer dummy to move to next
+                val = "2"
+            if max_val is not None:
+                try:
+                    val = str(min(int(val), max_val))
+                except Exception:
+                    pass
+            if max_len:
+                val = val[:max_len]
+            return val or "0"
+
+        # D. Generic numbers
+        if ans and not is_dummy_mode:
+            digits = re.findall(r"\d+", ans)
+            val = digits[0][:4] if digits else "1"
+        else:
+            val = "1"
+        if max_len:
+            val = val[:max_len]
+        return val or "1"
+
+    # 4. URL / Website / Portfolio / LinkedIn / GitHub
+    if any(k in p_low for k in ["website", "portfolio", "github", "linkedin", "profile link", "url"]) or itype_low == "url":
+        if ans and not is_dummy_mode:
+            val = ans
+        elif "github" in p_low:
+            val = "https://github.com/mrinshad"
+        elif "linkedin" in p_low:
+            val = "https://www.linkedin.com/in/rinshad"
+        else:
+            val = "https://github.com/mrinshad"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 5. City / Location / Address
+    if any(k in p_low for k in ["city", "location", "address", "state"]):
+        if ans and not is_dummy_mode:
+            val = ans
+        else:
+            val = "Malappuram"
+        if max_len:
+            val = val[:max_len]
+        return val
+
+    # 6. Generic Text / Textarea
+    if ans and not is_dummy_mode:
+        val = ans
+    else:
+        # Compliant dummy string
+        if any(p_low.startswith(w) for w in ["are you", "do you", "can you", "will you", "have you", "is"]):
+            val = "Yes"
+        else:
+            val = "Yes"
+    if max_len:
+        val = val[:max_len]
+    return val
+
+
+def handle_screening_form_step(
+    page: Page,
+    job_label: Optional[str] = None,
+    fill_dummies_to_advance: bool = True,
+    logger=print
+) -> Dict[str, Any]:
+    """
+    Inspect the current step of the Easy Apply modal for questionnaire elements:
+    - Text and numeric inputs
+    - Dropdowns (<select>)
+    - Radio button groups (<fieldset>)
+    - Checkboxes
+
+    For each element:
+    1. Extracts the question prompt.
+    2. Checks if the field is already satisfied.
+    3. Looks up the answer in the DB Question Bank.
+    4. If answered, auto-fills / selects / checks the matching option with sanitized values.
+    5. If unanswered:
+       - Records the question in PostgreSQL screening_questions with status='PENDING'.
+       - If fill_dummies_to_advance=True: fills compliant, properly-typed placeholder values
+         (10 digits for phone, small integer for experience, clean string for text, valid option for selects/radios)
+         to allow clicking 'Next' and discovering remaining questions across all steps.
+    """
+    answered = []
+    unanswered = []
+    filled_placeholders = []
+
+    # Standard items to skip as questions
+    standard_skip = [
+        "select language", "search", "photo", "terms", "agree", "privacy", "drag and drop", "upload resume"
+    ]
+    # Basic items already handled by fill_contact_info
+    basic_profile_terms = [
+        "first name", "last name", "phone", "mobile", "email", "resume",
+        "country code", "contact info", "headline", "summary",
+        "city", "location", "address", "state", "postal", "zip"
+    ]
+
+    def is_skip(text: str) -> bool:
+        t = (text or "").lower().strip()
+        if not t or len(t) < 2:
+            return True
+        # NEVER treat resume files, documents, or uploads as questions
+        if any(ext in t for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt", ".txt"]):
+            return True
+        if any(s in t for s in standard_skip):
+            return True
+        if any(s in t for s in ["resume", "choose a resume", "select a resume", "uploaded resume", "choose resume", "cv"]):
+            return True
+        return False
+
+    # 1. Inspect Fieldsets (Radio Groups)
+    try:
+        fieldsets = page.locator("fieldset:visible, [role='radiogroup']:visible").all()
+        for fs in fieldsets:
+            try:
+                legend_el = fs.locator("legend").first
+                prompt = legend_el.inner_text().strip() if legend_el.count() > 0 else ""
+                if not prompt:
+                    prompt = fs.get_attribute("aria-label") or ""
+                if not prompt:
+                    r = fs.locator("div[role='radio'][aria-label], input[type='radio'][aria-label]").first
+                    if r.count() > 0:
+                        prompt = r.get_attribute("aria-label") or ""
+                if not prompt:
+                    pre_el = fs.locator("xpath=preceding::p[1] | preceding::h3[1] | preceding::label[1]").first
+                    if pre_el.count() > 0:
+                        prompt = pre_el.inner_text().strip()
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # If prompt is a document file, skip entire fieldset
+                if any(ext in prompt.lower() for ext in [".pdf", ".docx", ".doc"]):
+                    continue
+
+                # Collect available options from radio group
+                radio_labels = fs.locator("div[role='radio']:visible, label:visible, .fb-radio-label:visible, .artdeco-radio-button__label:visible").all()
+                extracted_options = []
+                for ro in radio_labels:
+                    try:
+                        p_el = ro.locator("p").first
+                        txt = p_el.inner_text().strip() if p_el.count() > 0 else ro.inner_text().strip()
+                        if txt and len(txt) < 80 and txt not in extracted_options:
+                            extracted_options.append(txt)
+                    except Exception:
+                        pass
+
+                # If options contain document files, skip fieldset (it's the resume picker)
+                if any(any(ext in o.lower() for ext in [".pdf", ".docx", ".doc"]) for o in extracted_options):
+                    continue
+
+                # Check DB Question Bank for answer first
+                ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left radio choice empty for '{prompt}' as configured")
+                    continue
+
+                if not ans and not is_explicit_empty:
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=extracted_options, logger=logger
+                        )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
+                clicked = False
+                if ans:
+                    ans_low = ans.lower().strip()
+
+                    # Exact text match first
+                    for opt in radio_labels:
+                        p_el = opt.locator("p").first
+                        opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
+                        if opt_txt == ans_low:
+                            is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
+                            if not is_checked:
+                                opt.click(force=True)
+                            clicked = True
+                            break
+
+                    # Substring match if exact didn't match
+                    if not clicked:
+                        for opt in radio_labels:
+                            p_el = opt.locator("p").first
+                            opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
+                            if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
+                                is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
+                                if not is_checked:
+                                    opt.click(force=True)
+                                clicked = True
+                                break
+
+                    # Keyword match for Yes / No
+                    if not clicked:
+                        if any(w in ans_low for w in ["yes", "true", "comfortable", "immediate", "open"]) or (ans_low.isdigit() and int(ans_low) > 0):
+                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                            if yes_opt.count() > 0:
+                                yes_opt.click(force=True)
+                                clicked = True
+                        elif any(w in ans_low for w in ["no", "false", "not comfortable"]) or (ans_low.isdigit() and int(ans_low) == 0):
+                            no_opt = fs.locator("div[role='radio']:has-text('No'), label:has-text('No'), input[value='No'], div[role='radio'][aria-label*='No']").first
+                            if no_opt.count() > 0:
+                                no_opt.click(force=True)
+                                clicked = True
+
+                    if clicked:
+                        answered.append(f"{prompt} -> {ans}")
+                        logger(f"  ✓ Radio selected for '{prompt[:60]}': {ans}")
+                        page.wait_for_timeout(250)
+                    else:
+                        if prompt not in unanswered:
+                            upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                            unanswered.append(prompt)
+                        if fill_dummies_to_advance:
+                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                            if yes_opt.count() > 0:
+                                yes_opt.click(force=True)
+                                clicked = True
+                            elif radio_labels:
+                                radio_labels[0].click(force=True)
+                                clicked = True
+                            if clicked:
+                                filled_placeholders.append(prompt)
+                                logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
+                                page.wait_for_timeout(250)
+                else:
+                    # Neither DB nor ChatGPT had an answer (or user_response_needed)
+                    checked_count = fs.locator("input[type='radio']:checked, div[role='radio'][aria-checked='true']").count()
+                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+                    if not is_basic and prompt not in unanswered:
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
+                    # If still not clicked and dummy mode enabled to advance step
+                    if checked_count == 0 and fill_dummies_to_advance:
+                        yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                        if yes_opt.count() > 0:
+                            yes_opt.click(force=True)
+                            clicked = True
+                        elif radio_labels:
+                            radio_labels[0].click(force=True)
+                            clicked = True
+                        if clicked:
+                            filled_placeholders.append(prompt)
+                            logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
+                            page.wait_for_timeout(250)
+            except Exception as e:
+                logger(f"  Notice inspecting fieldset: {e}")
+    except Exception:
+        pass
+
+    # 2. Inspect Dropdowns (<select>)
+    try:
+        selects = page.locator("select:visible").all()
+        for sel in selects:
+            try:
+                # Find prompt
+                sel_id = sel.get_attribute("id") or ""
+                prompt = ""
+                if sel_id:
+                    lbl = page.locator(f"label[for='{sel_id}']").first
+                    if lbl.count() > 0:
+                        prompt = lbl.inner_text().strip()
+                if not prompt:
+                    prompt = sel.get_attribute("aria-label") or sel.locator("xpath=preceding::label[1]").inner_text().strip()
+
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # Collect dropdown options
+                sel_opts = sel.locator("option").all()
+                extracted_options = []
+                for so in sel_opts:
+                    try:
+                        txt = so.inner_text().strip()
+                        if txt and txt.lower() not in ["", "select", "select an option", "please select"] and len(txt) < 80 and txt not in extracted_options:
+                            extracted_options.append(txt)
+                    except Exception:
+                        pass
+
+                # Check DB Question Bank for answer first
+                ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left dropdown empty for '{prompt}' as configured")
+                    continue
+
+                if not ans and not is_explicit_empty:
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=extracted_options, logger=logger
+                        )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                        unanswered.append(prompt)
+
+                matched_opt_val = None
+                if ans:
+                    ans_low = ans.lower().strip()
+                    for opt in sel_opts:
+                        otxt = opt.inner_text().strip().lower()
+                        oval = (opt.get_attribute("value") or "").strip().lower()
+                        if (
+                            otxt == ans_low
+                            or oval == ans_low
+                            or (ans_low and ans_low in otxt)
+                            or (otxt and otxt in ans_low)
+                            or (ans_low.replace("+", "") and ans_low.replace("+", "") in otxt)
+                        ):
+                            matched_opt_val = opt.get_attribute("value")
+                            break
+
+                    if matched_opt_val is not None:
+                        if sel.input_value() != matched_opt_val:
+                            sel.select_option(value=matched_opt_val)
+                        answered.append(f"{prompt} -> {ans}")
+                        logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
+                        page.wait_for_timeout(250)
+                    else:
+                        curr_val = sel.input_value()
+                        curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
+                        has_selection = curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]
+                        is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+                        if not has_selection and not is_basic:
+                            if prompt not in unanswered:
+                                upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                                unanswered.append(prompt)
+                else:
+                    # Neither DB nor ChatGPT had an answer (or user_response_needed)
+                    curr_val = sel.input_value()
+                    curr_text = sel.locator("option:checked").inner_text().strip() if sel.locator("option:checked").count() > 0 else ""
+                    has_selection = curr_val and curr_text.lower() not in ["", "select", "select an option", "please select"]
+                    is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+
+                    if not has_selection and not is_basic:
+                        if prompt not in unanswered:
+                            upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
+                            unanswered.append(prompt)
+
+                    # Fallback to advance step if unselected
+                    if not has_selection and fill_dummies_to_advance:
+                        fallback_val = None
+                        for opt in sel_opts:
+                            otxt = opt.inner_text().strip().lower()
+                            oval = (opt.get_attribute("value") or "").strip()
+                            if oval and otxt not in ["", "select", "select an option", "please select"]:
+                                if "yes" in otxt:
+                                    fallback_val = oval
+                                    break
+                                if fallback_val is None:
+                                    fallback_val = oval
+                        if fallback_val is not None:
+                            sel.select_option(value=fallback_val)
+                            filled_placeholders.append(prompt)
+                            logger(f"  ℹ️ Selected compliant placeholder dropdown option for '{prompt}' to advance step")
+                            page.wait_for_timeout(250)
+            except Exception as e:
+                logger(f"  Notice inspecting select: {e}")
+    except Exception:
+        pass
+
+    # 3. Inspect Text, Number, Tel, and Textarea Inputs
+    try:
+        inputs = page.locator(
+            "input[type='text']:visible, "
+            "input[type='number']:visible, "
+            "input[type='tel']:visible, "
+            "textarea:visible"
+        ).all()
+
+        for inp in inputs:
+            try:
+                itype = (inp.get_attribute("type") or "text").lower()
+                if itype in ["radio", "checkbox", "file", "hidden"]:
+                    continue
+
+                inp_id = inp.get_attribute("id") or ""
+                placeholder = inp.get_attribute("placeholder") or ""
+                if inp_id == "_r_3_" or "search" in placeholder.lower() or "search" in inp_id.lower() or "global-nav" in inp_id.lower():
+                    continue
+
+                prompt = ""
+                if inp_id:
+                    lbl = page.locator(f"label[for='{inp_id}']").first
+                    if lbl.count() > 0:
+                        prompt = lbl.inner_text().strip()
+                if not prompt:
+                    prompt = inp.get_attribute("aria-label") or placeholder
+
+                if not prompt or is_skip(prompt):
+                    continue
+
+                # Attributes for strict validation adherence
+                inputmode = inp.get_attribute("inputmode") or ""
+                maxlength = inp.get_attribute("maxlength") or ""
+                max_attr = inp.get_attribute("max") or ""
+                pattern = inp.get_attribute("pattern") or ""
+
+                ans, qdict = lookup_answer_for_question(prompt)
+                is_explicit_empty = (ans == "__EMPTY__") or (qdict and qdict.get("status") == "ANSWERED" and not ans)
+
+                if is_explicit_empty:
+                    if inp.input_value().strip():
+                        inp.click(force=True)
+                        inp.fill("")
+                    answered.append(f"{prompt} -> (empty)")
+                    logger(f"  ✓ Left input empty for '{prompt}' as configured")
+                    page.wait_for_timeout(150)
+                    continue
+
+                curr_val = inp.input_value().strip()
+                is_basic = any(b in prompt.lower() for b in basic_profile_terms)
+
+                if not ans and not is_explicit_empty and not curr_val and not is_basic:
+                    if qdict and qdict.get("status") == "AI_SUGGESTED" and qdict.get("answer"):
+                        chat_ans = qdict.get("answer")
+                        status = "OK"
+                        logger(f"  🤖 Using existing AI suggestion for '{prompt[:60]}': {chat_ans}")
+                    else:
+                        logger(f"  🤖 Question not in DB, asking ChatGPT for '{prompt[:60]}'...")
+                        chat_ans, status = ask_chatgpt_for_question_answer(
+                            page.context, prompt, options=None, logger=logger
+                        )
+                    if status == "WTF":
+                        logger(f"  🚫 ChatGPT classified question as unreasonable ('WTF') for '{prompt[:60]}'! Halting application.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None, status='UNREASONABLE')
+                        return {
+                            "can_proceed": False,
+                            "is_unreasonable": True,
+                            "unreasonable_prompt": prompt,
+                            "had_unanswered": True,
+                            "answered": answered,
+                            "unanswered": unanswered,
+                            "filled_placeholders": filled_placeholders,
+                        }
+                    elif status == "DONT_KNOW":
+                        logger(f"  ⚠️ ChatGPT responded 'DONT_KNOW' for '{prompt[:60]}'. Flagging for manual questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None)
+                        unanswered.append(prompt)
+                    elif status == "OK" and chat_ans:
+                        logger(f"  🤖 Learned answer from ChatGPT for '{prompt[:60]}': {chat_ans} (Saved as AI_SUGGESTED)")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None, answer=chat_ans, status='AI_SUGGESTED')
+                        unanswered.append(prompt)
+                    else:
+                        logger(f"  ⚠️ Could not retrieve answer from ChatGPT for '{prompt[:60]}'. Flagging for questionnaire.")
+                        upsert_screening_question(prompt, sample_job=job_label, options=None)
+                        unanswered.append(prompt)
+
+                if ans:
+                    fill_val = resolve_field_value(
+                        prompt,
+                        raw_answer=ans,
+                        itype=itype,
+                        inputmode=inputmode,
+                        maxlength=maxlength,
+                        max_attr=max_attr,
+                        pattern=pattern,
+                        is_dummy_mode=False
+                    )
+                    curr_val = inp.input_value().strip()
+                    if curr_val != fill_val:
+                        inp.click(force=True)
+                        inp.fill("")
+                        inp.press_sequentially(fill_val, delay=15)
+                    answered.append(f"{prompt} -> {fill_val}")
+                    logger(f"  ✓ Filled input for '{prompt}': {fill_val}")
+                    page.wait_for_timeout(200)
+                else:
+                    curr_val = inp.input_value().strip()
+
+                    # Fix existing overflow if any
+                    if curr_val and maxlength and len(curr_val) > int(maxlength):
+                        clean_val = curr_val[:int(maxlength)]
+                        inp.click(force=True)
+                        inp.fill("")
+                        inp.press_sequentially(clean_val, delay=15)
+
+                    if not is_basic and not curr_val and prompt not in unanswered:
+                        upsert_screening_question(prompt, sample_job=job_label)
+                        unanswered.append(prompt)
+
+                    if not curr_val and fill_dummies_to_advance:
+                        fill_val = resolve_field_value(
+                            prompt,
+                            raw_answer=None,
+                            itype=itype,
+                            inputmode=inputmode,
+                            maxlength=maxlength,
+                            max_attr=max_attr,
+                            pattern=pattern,
+                            is_dummy_mode=True
+                        )
+                        inp.click(force=True)
+                        inp.fill("")
+                        inp.press_sequentially(fill_val, delay=15)
+                        filled_placeholders.append(prompt)
+                        logger(f"  ℹ️ Filled placeholder for '{prompt}': {fill_val} to advance step")
+                        page.wait_for_timeout(200)
+            except Exception as e:
+                logger(f"  Notice inspecting input: {e}")
+    except Exception:
+        pass
+
+    return {
+        "can_proceed": True,
+        "had_unanswered": len(unanswered) > 0,
+        "answered": answered,
+        "unanswered": unanswered,
+        "filled_placeholders": filled_placeholders,
+    }
+
+
+def execute_easy_apply(
+    page: Page,
+    job_url: str,
+    resume_path: Optional[str],
+    logger=print,
+    job_label: Optional[str] = None
+) -> Tuple[str, str]:
+    """
+    Attempt to submit an Easy Apply application for a given job URL.
+    Auto-fills screening questions from DB Question Bank.
+    If unhandled or unanswered questions appear, harvests questions across all steps
+    using compliant placeholders to advance without exceeding limits, saves them
+    to DB screening_questions with status='PENDING', and safely dismisses the modal
+    WITHOUT submitting dummy values.
+    Returns (status, detail_message) where status is:
+      - 'APPLIED': Successfully submitted
+      - 'NOT_FOUND': Position is closed or no longer accepting applications
+      - 'REQUIRES_QUESTIONNAIRE': Saved for screening due to custom questionnaire
+      - 'FAILED': Modal failed to open or encountered an unhandled issue
+      - 'ALREADY_APPLIED': LinkedIn indicates you've already applied
+      - 'RATE_LIMITED': LinkedIn displayed fast pace safeguard pause notice
+    """
+    try:
+        page.goto(job_url, wait_until="domcontentloaded", timeout=30000)
+
+        # Check for LinkedIn fast pace safeguard notice
+        rate_limit_msg = check_linkedin_rate_limit(page)
+        if rate_limit_msg:
+            logger(f"  🚨 {rate_limit_msg}")
+            return "RATE_LIMITED", rate_limit_msg
+        
+        # Check if already applied
+        applied_reason = detect_already_applied(page)
+        if applied_reason:
+            logger(f"  ℹ️ {applied_reason}")
+            return "APPLIED", applied_reason
+
+        # Check if job is closed / no longer accepting applications
+        closed_reason = detect_closed_job_reason(page)
+        if closed_reason:
+            logger(f"  🚫 Position is closed: {closed_reason}")
+            return "NOT_FOUND", closed_reason
+
+        # Wait for Easy Apply button
+        apply_btn_selector = (
+            "[aria-label*='Easy Apply to']:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "[aria-label*='Easy Apply']:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "button.jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "a.jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            ".jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            ".jobs-s-apply button, .jobs-s-apply a, "
+            "div.jobs-apply-button--top-card button, div.jobs-apply-button--top-card a, "
+            "button:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search']), "
+            "a:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search']), "
+            "[role='button']:has-text('Easy Apply')"
+        )
+        try:
+            page.wait_for_selector(apply_btn_selector, timeout=7000)
+        except Exception:
+            pass
+
+        apply_btn = page.locator(apply_btn_selector).first
 
         if apply_btn.count() == 0 or not apply_btn.is_visible():
-            if page.locator("button:has-text('Applied')").count() > 0:
-                logger("  ℹ️ Already applied to this position on LinkedIn.")
-                return "APPLIED", "Already applied previously on LinkedIn"
-            logger("  ⚠️ No Easy Apply button found on page.")
-            return "FAILED", "No Easy Apply button visible"
+            applied_reason = detect_already_applied(page)
+            if applied_reason:
+                logger(f"  ℹ️ {applied_reason}")
+                return "APPLIED", applied_reason
+            # Re-check for closed job indicators before declaring failed
+            closed_reason = detect_closed_job_reason(page)
+            if closed_reason:
+                logger(f"  🚫 Position is closed: {closed_reason}")
+                return "NOT_FOUND", closed_reason
+
+            # Check for external apply only
+            external_btn = page.locator("a[aria-label*='Apply on company website'], a:has-text('Apply on company website'), a.jobs-apply-button[href*='external']").first
+            if external_btn.count() > 0 and external_btn.is_visible():
+                logger("  ℹ️ External company apply only (non-Easy Apply).")
+                return "NOT_FOUND", "External apply only (non-Easy Apply)"
+
+            logger("  ⚠️ Easy Apply button not visible on page.")
+            return "FAILED", "Easy Apply button not visible on page"
 
         logger("  Clicking 'Easy Apply' button...")
-        apply_btn.click()
+        try:
+            apply_btn.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
+        try:
+            apply_btn.click(timeout=4000)
+        except Exception:
+            apply_btn.click(force=True, timeout=4000)
+
         try:
             page.wait_for_selector(
-                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text']",
+                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text'], button[aria-label='Dismiss']",
                 timeout=9000
             )
         except Exception:
             page.wait_for_timeout(3000)
 
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss").first
+        # Check rate limit right after opening dialog
+        rate_limit_msg = check_linkedin_rate_limit(page)
+        if rate_limit_msg:
+            logger(f"  🚨 {rate_limit_msg}")
+            dismiss_easy_apply_modal(page)
+            return "RATE_LIMITED", rate_limit_msg
+
+        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
         if dismiss_btn.count() == 0:
             logger("  ⚠️ Easy Apply dialog did not open.")
             return "FAILED", "Easy Apply dialog did not open"
 
-        # Multi-step wizard loop (up to 7 steps max)
-        for step in range(1, 8):
+        all_unanswered_questions: List[str] = []
+        had_unanswered = False
+
+        # Multi-step wizard loop (up to 8 steps max)
+        for step in range(1, 9):
+            # Check rate limit on each step
+            rate_limit_msg = check_linkedin_rate_limit(page)
+            if rate_limit_msg:
+                logger(f"  🚨 {rate_limit_msg}")
+                dismiss_easy_apply_modal(page)
+                return "RATE_LIMITED", rate_limit_msg
+
             # Wait for content or step transition to stabilize
             try:
                 page.wait_for_selector(
@@ -303,17 +1595,46 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
             except Exception:
                 page.wait_for_timeout(1500)
 
-            inspection = inspect_easy_apply_modal(page)
-
-            # If custom questionnaire questions detected:
-            if inspection["requires_questionnaire"]:
-                q_summary = "; ".join(inspection["questions"][:3])
-                logger(f"  📋 Custom questionnaire detected ({q_summary}). Saving link for screening...")
-                dismiss_easy_apply_modal(page)
-                return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
-
+            # Auto-fill standard contact info
             fill_contact_info(page)
             upload_or_select_resume(page, resume_path)
+
+            # Check and auto-fill custom screening questions on this step
+            screening_result = handle_screening_form_step(
+                page, job_label=job_label, fill_dummies_to_advance=True, logger=logger
+            )
+            if screening_result.get("is_unreasonable"):
+                unreasonable_prompt = screening_result.get("unreasonable_prompt") or "Unreasonable question"
+                logger(f"  🚫 Application halted immediately: Unreasonable question detected ('{unreasonable_prompt}'). Dismissing modal.")
+                dismiss_easy_apply_modal(page)
+                return "UNREASONABLE_QUESTION", f"Unreasonable screening question: {unreasonable_prompt}"
+
+            if screening_result.get("unanswered"):
+                for uq in screening_result["unanswered"]:
+                    if uq not in all_unanswered_questions:
+                        all_unanswered_questions.append(uq)
+                had_unanswered = True
+
+            if screening_result.get("answered"):
+                ans_list = screening_result["answered"]
+                logger(f"  ✓ Step {step}: Auto-filled {len(ans_list)} screening question(s) from Question Bank")
+
+            # Check and resolve any inline feedback errors (e.g. exceeded limit or invalid format)
+            try:
+                err_inputs = page.locator("input.artdeco-inline-feedback--error, [data-test-form-element-error-messages]").all()
+                for err_el in err_inputs:
+                    try:
+                        inp_box = err_el.locator("xpath=preceding::input[1]").first
+                        if inp_box.count() > 0:
+                            inp_box.click()
+                            inp_box.fill("0")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # Natural human pause before next action
+            page.wait_for_timeout(random.randint(1000, 1800))
 
             # Check for Submit application button
             submit_btn = page.locator(
@@ -328,12 +1649,28 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                 except Exception:
                     pass
                 if submit_btn.is_visible():
+                    # CRITICAL SAFETY GUARD: If application contained unanswered questions that were
+                    # filled with placeholders to traverse steps, DO NOT SUBMIT TO RECRUITER.
+                    if had_unanswered or len(all_unanswered_questions) > 0:
+                        q_summary = "; ".join(all_unanswered_questions)
+                        logger(f"  📋 Successfully traversed all steps and cataloged {len(all_unanswered_questions)} screening question(s): {q_summary}")
+                        logger("  🛑 Dismissing modal without submitting to protect applicant integrity. Questions saved to Question Bank.")
+                        dismiss_easy_apply_modal(page)
+                        return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
+
                     logger("  Submitting application...")
                     try:
                         submit_btn.click(timeout=5000)
                     except Exception:
                         submit_btn.click(force=True, timeout=5000)
                     page.wait_for_timeout(2500)
+
+                    # Check for LinkedIn daily limit or rate limit immediately after clicking submit
+                    rate_limit_msg = check_linkedin_rate_limit(page)
+                    if rate_limit_msg:
+                        logger(f"  🚨 {rate_limit_msg}")
+                        dismiss_easy_apply_modal(page)
+                        return "RATE_LIMITED", rate_limit_msg
 
                     # Check confirmation
                     done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
@@ -360,7 +1697,7 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                         review_btn.click(timeout=5000)
                     except Exception:
                         review_btn.click(force=True, timeout=5000)
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
             # Check for Next step button
@@ -380,16 +1717,32 @@ def execute_easy_apply(page: Page, job_url: str, resume_path: Optional[str], log
                         next_btn.click(timeout=5000)
                     except Exception:
                         next_btn.click(force=True, timeout=5000)
-                    page.wait_for_timeout(1500)
+                    page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
             # If neither Next, Review, nor Submit is visible, inspect if stuck
-            logger(f"  Step {step}: Unhandled form state, saving for screening.")
+            inspection = inspect_easy_apply_modal(page)
+            all_q = inspection["questions"] or inspection["custom_questions"]
+            if all_q:
+                for q in all_q:
+                    upsert_screening_question(q, sample_job=job_label)
+                    if q not in all_unanswered_questions:
+                        all_unanswered_questions.append(q)
+            q_summary = "; ".join(all_unanswered_questions) if all_unanswered_questions else "Multi-step form required manual input"
+            logger(f"  Step {step}: Multi-step questionnaire saved for screening ({q_summary}).")
             dismiss_easy_apply_modal(page)
-            return "REQUIRES_QUESTIONNAIRE", "Multi-step form required manual input"
+            return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
+        inspection = inspect_easy_apply_modal(page)
+        all_q = inspection["questions"] or inspection["custom_questions"]
+        if all_q:
+            for q in all_q:
+                upsert_screening_question(q, sample_job=job_label)
+                if q not in all_unanswered_questions:
+                    all_unanswered_questions.append(q)
+        q_summary = "; ".join(all_unanswered_questions) if all_unanswered_questions else "Questions: Screening Questionnaire required"
         dismiss_easy_apply_modal(page)
-        return "REQUIRES_QUESTIONNAIRE", "Exceeded step limit, saved for screening"
+        return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
     except Exception as e:
         logger(f"  ✗ Easy Apply execution error: {e}")
@@ -401,30 +1754,45 @@ def run_easy_apply_crawler(
     keywords: str = "Full Stack Developer",
     location: str = "India",
     time_filter: str = "24h",
-    max_jobs: int = 20,
+    max_jobs: Optional[int] = None,
+    cycles: Optional[int] = 8,
+    pacing: Optional[str] = "safe",
+    auto_apply: bool = False,
     task_manager=None,
 ) -> Dict[str, Any]:
     """
     Main background crawler entrypoint:
     1. Searches LinkedIn jobs with Easy Apply filter (f_AL=true).
-    2. Extracts job cards and full specifications.
-    3. Saves jobs to database with category='EASY_APPLY'.
-    4. Submits Easy Apply or saves for screening when questionnaires are detected.
+    2. Extracts job cards and full specifications with dynamic scroll cycles and pagination.
+    3. Strictly filters job titles for relevance to search keywords.
+    4. Saves matching jobs to database with category='EASY_APPLY', status='DISCOVERED' (Ready to Apply).
+    5. If auto_apply=True, immediately submits applications; otherwise saves for user review.
     """
     logger = task_manager.log if task_manager else print
     config = load_config()
     resume_path = config.get("resume_path", "")
 
+    scroll_cycles = int(cycles) if cycles and int(cycles) > 0 else 8
+    target_max_jobs = int(max_jobs) if (max_jobs and int(max_jobs) > 0) else max(50, scroll_cycles * 5)
+    pacing_mode = (pacing or "safe").lower()
+
     search_url = build_easy_apply_search_url(keywords, location, time_filter)
     logger("=" * 60)
-    logger(f"🚀 Starting LinkedIn Easy Apply Autonomous Crawler")
+    if auto_apply:
+        logger(f"🚀 Starting LinkedIn Easy Apply Autonomous Crawler")
+    else:
+        logger(f"🚀 Starting LinkedIn Easy Apply Job Collector")
     logger(f"  Keywords: '{keywords}' | Location: '{location}' | Filter: {time_filter}")
+    logger(f"  Discovery Cycles: {scroll_cycles} | Target Max Jobs: {target_max_jobs} | Mode: {'Auto-Apply' if auto_apply else 'Collect Only (Ready to Apply)'}")
+    if auto_apply:
+        logger(f"  Pacing Mode: {pacing_mode}")
     logger(f"  URL: {search_url}")
     logger("=" * 60)
 
     applied_count = 0
     questionnaire_count = 0
     discovered_count = 0
+    filtered_unrelated_count = 0
     failed_count = 0
 
     with sync_playwright() as playwright:
@@ -437,8 +1805,8 @@ def run_easy_apply_crawler(
         page = context.pages[0] if context.pages else context.new_page()
 
         logger("[2/4] Navigating to LinkedIn Job Portal search...")
-        page.goto(search_url, wait_until="commit", timeout=35000)
-        page.wait_for_timeout(5000)
+        page.goto(search_url, wait_until="domcontentloaded", timeout=45000)
+        page.wait_for_timeout(3000)
 
         # Check login
         if page.locator("form.login__form, input[name='session_key']").count() > 0:
@@ -449,34 +1817,83 @@ def run_easy_apply_crawler(
             context.close()
             return {"success": False, "error": msg}
 
-        # Scroll to load job cards
-        logger("[3/4] Scanning job listings...")
-        for _ in range(8):
-            page.evaluate("""() => {
-                const el = document.querySelector('.scaffold-layout__list-container') ||
-                           document.querySelector('.jobs-search-results-list');
-                if (el) el.scrollTop += 700;
-                else window.scrollBy(0, 700);
-            }""")
-            page.wait_for_timeout(900)
+        # Verify and lock in requested location
+        ensure_search_location(page, location, logger=logger)
 
-        job_cards = page.locator("[data-occludable-job-id], li.jobs-search-results__list-item")
-        total_cards = min(job_cards.count(), max_jobs)
-        logger(f"  Found {job_cards.count()} job cards. Processing up to {total_cards}...")
+        # Wait for job cards to load (replacing skeleton placeholder)
+        logger("  Waiting for job cards to load...")
+        wait_for_job_cards_loaded(page, timeout_ms=15000, logger=logger)
+
+        # Cumulative discovery across cycles & pagination
+        logger(f"[3/4] Scanning job listings ({scroll_cycles} cycles, target: {target_max_jobs} jobs)...")
+        collected_jobs_map = {}
+        for c in extract_all_search_job_cards(page, max_jobs=target_max_jobs):
+            collected_jobs_map[c["job_id"]] = c
+
+        page_num = 0
+        no_new_cycles = 0
+        cycle_idx = 0
+
+        while cycle_idx < scroll_cycles and len(collected_jobs_map) < target_max_jobs:
+            cycle_idx += 1
+            logger(f"  [Cycle {cycle_idx}/{scroll_cycles}] Scrolling/discovering cards ({len(collected_jobs_map)}/{target_max_jobs} collected)...")
+            page.evaluate("""() => {
+                const el = document.querySelector('div[data-testid="lazy-column"]') ||
+                           document.querySelector('.scaffold-layout__list-container') ||
+                           document.querySelector('.jobs-search-results-list');
+                if (el) el.scrollTop += 600;
+                else window.scrollBy(0, 600);
+            }""")
+            page.wait_for_timeout(800)
+
+            prev_count = len(collected_jobs_map)
+            for c in extract_all_search_job_cards(page, max_jobs=target_max_jobs):
+                collected_jobs_map[c["job_id"]] = c
+
+            if len(collected_jobs_map) >= target_max_jobs:
+                break
+
+            if len(collected_jobs_map) == prev_count:
+                no_new_cycles += 1
+                if no_new_cycles >= 2:
+                    page_num += 1
+                    start_offset = page_num * 25
+                    next_url = f"{search_url}&start={start_offset}"
+                    logger(f"  📄 Advancing to LinkedIn search results page {page_num + 1} (start={start_offset})...")
+                    try:
+                        page.goto(next_url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(2000)
+                        wait_for_job_cards_loaded(page, timeout_ms=8000, logger=logger)
+                        
+                        new_page_cards = extract_all_search_job_cards(page, max_jobs=target_max_jobs)
+                        before_add = len(collected_jobs_map)
+                        for c in new_page_cards:
+                            collected_jobs_map[c["job_id"]] = c
+                        
+                        if len(collected_jobs_map) == before_add:
+                            logger("  ℹ️ No more jobs found on subsequent pages; reached end of search results.")
+                            break
+                        no_new_cycles = 0
+                    except Exception as e:
+                        logger(f"  ⚠️ Pagination error: {e}")
+                        break
+            else:
+                no_new_cycles = 0
+
+        extracted_jobs = list(collected_jobs_map.values())[:target_max_jobs]
+        total_cards = len(extracted_jobs)
+        logger(f"  Found {total_cards} job cards across {page_num + 1} page(s). Processing {total_cards} jobs...")
 
         if task_manager and hasattr(task_manager, "set_total_posts"):
             task_manager.set_total_posts(total_cards)
 
-        extracted_jobs = []
-        for i in range(total_cards):
-            card = job_cards.nth(i)
-            meta = extract_job_card_metadata(card)
-            if meta["title"] and meta["url"]:
-                extracted_jobs.append(meta)
-
-        logger(f"[4/4] Processing {len(extracted_jobs)} Easy Apply opportunities...")
+        logger(f"[4/4] Processing {len(extracted_jobs)} Easy Apply listings...")
+        dismissed_titles = get_dismissed_role_titles()
+        auto_dismissed_count = 0
 
         for idx, job in enumerate(extracted_jobs, start=1):
+            if task_manager:
+                task_manager.check_pause()
             if task_manager and task_manager.is_cancel_requested():
                 logger("🛑 Task cancelled by user.")
                 break
@@ -486,21 +1903,51 @@ def run_easy_apply_crawler(
             loc = job["location"] or location
             job_url = job["url"]
 
-            logger(f"\n[{idx}/{len(extracted_jobs)}] Processing: {title} @ {company}")
+            logger(f"\n[{idx}/{len(extracted_jobs)}] {title} @ {company}")
             if task_manager:
                 task_manager.update_progress(idx - 1, f"[{idx}/{len(extracted_jobs)}] {title} @ {company}")
+
+            # Check if this role was previously dismissed by the user
+            is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(title, dismissed_titles)
+            if is_prev_dismissed:
+                logger(f"  ✕ {dismiss_reason}")
+                post_id_seed = f"easy_apply_{job.get('job_id') or hashlib.sha256(job_url.encode()).hexdigest()[:12]}"
+                post_record = {
+                    "id": post_id_seed,
+                    "post_url": job_url,
+                    "author_name": company,
+                    "author_headline": title,
+                    "location": loc,
+                    "full_text": f"Role: {title}\nCompany: {company}\nLocation: {loc}\nDirect Application Link: {job_url}",
+                    "category": "EASY_APPLY",
+                    "status": "REJECTED",
+                    "rejection_reason": dismiss_reason,
+                }
+                upsert_post(post_record)
+                auto_dismissed_count += 1
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
 
             # Click job card or navigate to load full details
             full_text = ""
             try:
-                card_link = page.locator(f"a[href*='{job['job_id']}']").first if job.get("job_id") else None
+                card_link = page.locator(f"[componentkey*='{job['job_id']}'], a[href*='{job['job_id']}']").first if job.get("job_id") else None
                 if card_link and card_link.count() > 0:
-                    card_link.click()
-                    page.wait_for_timeout(2000)
+                    card_link.click(force=True)
+                    page.wait_for_timeout(1800)
 
-                desc_el = page.locator(".jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container").first
-                if desc_el.count() > 0:
-                    full_text = desc_el.inner_text().strip()
+                desc_text = page.evaluate("""() => {
+                    const all = Array.from(document.querySelectorAll('div, h2, h3, section'));
+                    const aboutHeader = all.find(el => (el.innerText || '').trim() === 'About the job');
+                    if (aboutHeader && aboutHeader.parentElement) {
+                        return aboutHeader.parentElement.innerText.replace(/^About the job\\s*/i, '').trim();
+                    }
+                    const descEl = document.querySelector('.jobs-description-content__text, .jobs-box__html-content, article.jobs-description__container, .jobs-description__content');
+                    return descEl ? descEl.innerText.trim() : '';
+                }""")
+                if desc_text:
+                    full_text = desc_text
             except Exception:
                 pass
 
@@ -536,17 +1983,40 @@ def run_easy_apply_crawler(
             upsert_post(post_record)
             discovered_count += 1
 
-            # Attempt Easy Apply
-            status, detail = execute_easy_apply(page, job_url, resume_path, logger=logger)
+            if not auto_apply:
+                logger(f"  ✓ Saved to queue as Ready to Apply (DISCOVERED)")
+                page.wait_for_timeout(random.randint(600, 1200))
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
+
+            # Auto-Apply mode requested: attempt Easy Apply
+            status, detail = execute_easy_apply(
+                page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+            )
 
             if status == "APPLIED":
                 update_post_status(post_id, "APPLIED")
                 applied_count += 1
                 logger(f"  🎉 Status updated to APPLIED")
+            elif status == "RATE_LIMITED":
+                from src.db.settings import set_setting
+                # Pause Easy Apply and alert
+                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
+                set_setting("easy_apply_safeguard_reason", detail)
+                logger(f"  🚨 {detail}")
+                logger("  🛑 LinkedIn safeguard pause detected. Halting crawl immediately to protect your account.")
+                if task_manager:
+                    task_manager.fail_task(detail)
+                break
             elif status == "REQUIRES_QUESTIONNAIRE":
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
                 questionnaire_count += 1
                 logger(f"  📌 Saved for screening under REQUIRES_QUESTIONNAIRE: {detail}")
+            elif status == "UNREASONABLE_QUESTION":
+                update_post_status(post_id, "REJECTED", rejection_reason=detail)
+                failed_count += 1
+                logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
             else:
                 update_post_status(post_id, "DISCOVERED", rejection_reason=detail)
                 failed_count += 1
@@ -555,22 +2025,42 @@ def run_easy_apply_crawler(
             if task_manager:
                 task_manager.update_progress(idx)
 
-            # Human delay pause between jobs
+            # Safe human delay pause between jobs to protect against rate limits
             if idx < len(extracted_jobs):
-                human_sleep(4.0, 8.0)
+                cancel_fn = task_manager.is_cancel_requested if task_manager else None
+                if pacing_mode == "slow":
+                    logger(f"  ⏳ Extra slow pacing safeguard: Pausing 75–120 seconds before next job...")
+                    human_sleep(75.0, 120.0, cancel_check=cancel_fn)
+                elif pacing_mode == "standard":
+                    logger(f"  ⏳ Moderate pacing: Pausing 30–45 seconds before next job...")
+                    human_sleep(30.0, 45.0, cancel_check=cancel_fn)
+                else:  # safe (default)
+                    logger(f"  ⏳ Safe human pacing safeguard: Pausing 45–75 seconds before next job...")
+                    human_sleep(45.0, 75.0, cancel_check=cancel_fn)
 
         context.close()
         logger("\n" + "=" * 60)
-        logger(f"✓ Easy Apply Crawler Finished:")
-        logger(f"  • Total Discovered: {discovered_count}")
-        logger(f"  • Successfully Applied: {applied_count}")
-        logger(f"  • Saved for Screening (Questionnaire): {questionnaire_count}")
-        logger(f"  • Other in Queue: {failed_count}")
+        if auto_apply:
+            logger(f"✓ Easy Apply Crawler Finished:")
+            logger(f"  • Total Cards Processed: {len(extracted_jobs)}")
+            logger(f"  • Total Discovered: {discovered_count}")
+            logger(f"  • Auto-Dismissed (Dismissed): {auto_dismissed_count}")
+            logger(f"  • Successfully Applied: {applied_count}")
+            logger(f"  • Saved for Screening (Questionnaire): {questionnaire_count}")
+            logger(f"  • Other in Queue: {failed_count}")
+        else:
+            logger(f"✓ Easy Apply Job Collection Finished:")
+            logger(f"  • Total Cards Processed: {len(extracted_jobs)}")
+            logger(f"  • Saved to Ready Queue: {discovered_count}")
+            logger(f"  • Auto-Dismissed (Dismissed): {auto_dismissed_count}")
         logger("=" * 60)
 
         return {
             "success": True,
+            "total_crawled": len(extracted_jobs),
             "discovered": discovered_count,
+            "ready_in_queue": discovered_count,
+            "auto_dismissed": auto_dismissed_count,
             "applied": applied_count,
             "requires_questionnaire": questionnaire_count,
         }
@@ -606,18 +2096,252 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
         )
         page = context.pages[0] if context.pages else context.new_page()
 
-        status, detail = execute_easy_apply(page, job_url, resume_path, logger=logger)
+        status, detail = execute_easy_apply(
+            page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+        )
         context.close()
 
         if status == "APPLIED":
-            update_post_status(post_id, "APPLIED")
-            logger(f"✓ Application successfully submitted for {title} @ {company}")
+            update_post_status(post_id, "APPLIED", rejection_reason=detail if ("previously" in detail.lower() or "submitted" in detail.lower() or "already" in detail.lower()) else "")
+            logger(f"✓ Application successfully submitted for {title} @ {company}" if ("previously" not in detail.lower() and "submitted" not in detail.lower()) else f"✓ {detail} for {title} @ {company}")
             return {"success": True, "status": "APPLIED", "detail": detail}
+        elif status == "NOT_FOUND":
+            update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
+            logger(f"🚫 Position closed ({detail}). Status -> NOT_FOUND")
+            return {"success": False, "status": "NOT_FOUND", "detail": detail}
+        elif status == "RATE_LIMITED":
+            from src.db.settings import set_setting
+            is_daily = "today’s easy apply limit" in detail.lower() or "today's easy apply limit" in detail.lower() or "continue applying tomorrow" in detail.lower()
+            if is_daily:
+                import datetime
+                now_dt = datetime.datetime.now()
+                tomorrow_1am = (now_dt + datetime.timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                paused_until = max(int(tomorrow_1am.timestamp()), int(time.time() + 8 * 3600))
+                clean_detail = (
+                    "You reached today’s Easy Apply limit\n\n"
+                    "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                    "Save this job and continue applying tomorrow. Learn more"
+                )
+                set_setting("easy_apply_paused_until", str(paused_until))
+                set_setting("easy_apply_safeguard_reason", clean_detail)
+                set_setting("easy_apply_limit_type", "daily_limit")
+            else:
+                paused_until = int(time.time() + 3600)
+                clean_detail = detail
+                set_setting("easy_apply_paused_until", str(paused_until))
+                set_setting("easy_apply_safeguard_reason", clean_detail)
+                set_setting("easy_apply_limit_type", "fast_pace")
+            logger(f"🚨 {clean_detail}")
+            return {"success": False, "status": "RATE_LIMITED", "detail": clean_detail, "is_daily_limit": is_daily}
         elif status == "REQUIRES_QUESTIONNAIRE":
             update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
             logger(f"📌 Custom questionnaire detected. Direct link saved for screening: {detail}")
             return {"success": True, "status": "REQUIRES_QUESTIONNAIRE", "detail": detail}
+        elif status == "UNREASONABLE_QUESTION":
+            update_post_status(post_id, "REJECTED", rejection_reason=detail)
+            logger(f"🚫 Unreasonable screening question detected ({detail}). Status -> REJECTED")
+            return {"success": False, "status": "REJECTED", "detail": detail}
         else:
             logger(f"ℹ️ Easy Apply did not submit: {detail}")
             return {"success": False, "status": status, "detail": detail}
+
+
+def is_cooldown_active() -> bool:
+    """Check if LinkedIn safeguard cooldown is currently active."""
+    try:
+        from src.services.question_bank_service import get_rate_limit_safeguard_status
+        status = get_rate_limit_safeguard_status()
+        return bool(status.get("is_paused", False))
+    except Exception:
+        return False
+
+
+def apply_to_batch_easy_apply_posts(
+    post_ids: List[str],
+    pacing: str = "safe",
+    task_manager: Optional[Any] = None
+) -> Dict[str, Any]:
+    """
+    Sequentially run Easy Apply submissions for a batch of posts using a single persistent Firefox session.
+    Auto-fills screening questions from Question Bank, submits applications when all questions are answered,
+    and paces requests with safe human delays.
+    """
+    total = len(post_ids)
+    if total == 0:
+        return {"success": True, "total": 0, "applied": 0, "questionnaire": 0, "closed": 0, "failed": 0}
+
+    logger = task_manager.log if task_manager else print
+
+    if is_cooldown_active():
+        msg = "LinkedIn Easy Apply is currently paused due to rate-limit safeguard cooldown."
+        logger(f"🚨 {msg}")
+        if task_manager:
+            task_manager.fail_task(msg)
+        return {"success": False, "status": "RATE_LIMITED", "detail": msg}
+
+    config = load_config()
+    resume_path = config.get("resume_path", "")
+    headless = config.get("headless", True)
+
+    applied_count = 0
+    questionnaire_count = 0
+    closed_count = 0
+    failed_count = 0
+
+    if task_manager:
+        task_manager.start_task(f"Batch Easy Apply ({total} jobs)", total_items=total)
+
+    logger("=" * 60)
+    logger(f"🚀 Launching Batch Easy Apply for {total} job(s) in Firefox (pacing={pacing})")
+    logger("=" * 60)
+
+    with sync_playwright() as playwright:
+        logger("Launching Firefox persistent context...")
+        context = launch_firefox_context(
+            playwright,
+            headless=headless,
+            sync_cookies_domains=["linkedin.com"],
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+
+        for idx, post_id in enumerate(post_ids, 1):
+            if task_manager:
+                task_manager.check_pause()
+            if task_manager and task_manager.is_cancel_requested():
+                logger("🛑 Batch Easy Apply stopped upon user request.")
+                break
+
+            # Browser health recovery check
+            try:
+                if page.is_closed():
+                    logger("  🔄 Browser page was closed. Opening a fresh page...")
+                    page = context.new_page()
+            except Exception:
+                try:
+                    logger("  🔄 Browser context was disconnected. Re-launching Firefox context...")
+                    context = launch_firefox_context(
+                        playwright,
+                        headless=headless,
+                        sync_cookies_domains=["linkedin.com"],
+                    )
+                    page = context.pages[0] if context.pages else context.new_page()
+                except Exception as rec_err:
+                    logger(f"  ❌ Failed to recover Firefox session: {rec_err}")
+
+            post = get_post_by_id(post_id)
+            if not post:
+                logger(f"⚠️ Post '{post_id}' not found in database, skipping.")
+                failed_count += 1
+                continue
+
+            job_url = post.get("post_url")
+            title = post.get("author_headline") or f"Job #{post_id[:8]}"
+            company = post.get("author_name") or "Company"
+
+            if not job_url:
+                logger(f"⚠️ Post '{post_id}' does not have a valid LinkedIn URL, skipping.")
+                failed_count += 1
+                continue
+
+            logger("\n" + "-" * 50)
+            logger(f"[{idx}/{total}] Processing Easy Apply: {title} @ {company}")
+            logger(f"  URL: {job_url}")
+
+            try:
+                status, detail = execute_easy_apply(
+                    page, job_url, resume_path, logger=logger, job_label=f"{title} @ {company}"
+                )
+            except Exception as apply_err:
+                logger(f"  ✗ Error executing Easy Apply for {title}: {apply_err}")
+                status, detail = "FAILED", str(apply_err)
+
+            if status == "APPLIED":
+                update_post_status(post_id, "APPLIED", rejection_reason=detail if ("previously" in detail.lower() or "submitted" in detail.lower() or "already" in detail.lower()) else "")
+                applied_count += 1
+                logger(f"  🎉 Application successfully submitted! Status -> APPLIED" if ("previously" not in detail.lower() and "submitted" not in detail.lower()) else f"  🎉 Application marked APPLIED: {detail}")
+            elif status == "NOT_FOUND":
+                update_post_status(post_id, "NOT_FOUND", rejection_reason=detail)
+                closed_count += 1
+                logger(f"  🚫 Position closed: {detail}. Status -> NOT_FOUND")
+            elif status == "RATE_LIMITED":
+                from src.db.settings import set_setting
+                is_daily = "today’s easy apply limit" in detail.lower() or "today's easy apply limit" in detail.lower() or "continue applying tomorrow" in detail.lower()
+                if is_daily:
+                    import datetime
+                    now_dt = datetime.datetime.now()
+                    tomorrow_1am = (now_dt + datetime.timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                    paused_until = max(int(tomorrow_1am.timestamp()), int(time.time() + 8 * 3600))
+                    clean_detail = (
+                        "You reached today’s Easy Apply limit\n\n"
+                        "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                        "Save this job and continue applying tomorrow. Learn more"
+                    )
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "daily_limit")
+                else:
+                    paused_until = int(time.time() + 3600)
+                    clean_detail = detail
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "fast_pace")
+                logger(f"  🚨 Safeguard rate-limit triggered: {clean_detail}")
+                if task_manager:
+                    task_manager.fail_task(clean_detail)
+                break
+            elif status == "REQUIRES_QUESTIONNAIRE":
+                update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
+                questionnaire_count += 1
+                logger(f"  📌 Saved for screening under REQUIRES_QUESTIONNAIRE: {detail}")
+            elif status == "UNREASONABLE_QUESTION":
+                update_post_status(post_id, "REJECTED", rejection_reason=detail)
+                failed_count += 1
+                logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
+            elif status == "FAILED":
+                failed_count += 1
+                logger(f"  ⚠️ Application attempt failed ({detail}). Keeping in Ready to Apply queue.")
+            else:
+                update_post_status(post_id, "NOT_FOUND", rejection_reason=detail or "Application did not submit")
+                failed_count += 1
+                logger(f"  ℹ️ Application did not submit ({detail}). Status -> NOT_FOUND")
+
+            if task_manager:
+                task_manager.update_progress(idx, f"Processed {idx}/{total}: {title} ({status})")
+
+            # Safe human delay between applications
+            if idx < total:
+                cancel_fn = task_manager.is_cancel_requested if task_manager else None
+                if status in ("NOT_FOUND", "REQUIRES_QUESTIONNAIRE", "UNREASONABLE_QUESTION"):
+                    # Natural brief pause when modal is dismissed without submitting
+                    logger("  ⏳ Pacing: Brief 5–10s pause before next job...")
+                    human_sleep(5.0, 10.0, cancel_check=cancel_fn)
+                elif pacing == "slow":
+                    logger("  ⏳ Extra slow pacing safeguard: Pausing 75–120s before next job...")
+                    human_sleep(75.0, 120.0, cancel_check=cancel_fn)
+                elif pacing == "standard":
+                    logger("  ⏳ Moderate pacing: Pausing 25–40s before next job...")
+                    human_sleep(25.0, 40.0, cancel_check=cancel_fn)
+                else:  # safe (default)
+                    logger("  ⏳ Safe human pacing safeguard: Pausing 35–60s before next job...")
+                    human_sleep(35.0, 60.0, cancel_check=cancel_fn)
+
+        context.close()
+
+    summary_msg = f"Batch Easy Apply completed: {applied_count} submitted, {questionnaire_count} need questionnaire answers, {closed_count} closed, {failed_count} skipped/failed."
+    logger("\n" + "=" * 60)
+    logger(f"✨ {summary_msg}")
+    logger("=" * 60)
+
+    if task_manager:
+        task_manager.finish_task(summary_msg)
+
+    return {
+        "success": True,
+        "total": total,
+        "applied": applied_count,
+        "questionnaire": questionnaire_count,
+        "closed": closed_count,
+        "failed": failed_count,
+    }
+
 

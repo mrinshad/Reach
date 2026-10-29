@@ -67,6 +67,7 @@ function showSnackbar({
   type = 'info', // 'info' | 'success' | 'warn' | 'error'
   details = null,
   duration = null,
+  action = null,
 }) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
@@ -100,7 +101,8 @@ function showSnackbar({
 
   let autoDismissMs = duration;
   if (autoDismissMs === null) {
-    if (type === 'error') autoDismissMs = 0;
+    if (action) autoDismissMs = 12000;
+    else if (type === 'error') autoDismissMs = 0;
     else if (type === 'warn') autoDismissMs = 8000;
     else if (type === 'success') autoDismissMs = 4500;
     else autoDismissMs = 4000;
@@ -125,6 +127,12 @@ function showSnackbar({
         ${preview ? `<div class="snackbar-preview">${escapeHtml(preview)}</div>` : ''}
       </div>
       <div class="snackbar-actions">
+        ${action ? `
+          <button class="snackbar-btn snackbar-action-btn" title="${escapeHtml(action.label || 'Undo')}" onclick="event.stopPropagation(); window.triggerSnackbarAction('${id}')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            <span>${escapeHtml(action.label || 'Undo')}</span>
+          </button>
+        ` : ''}
         <button class="snackbar-btn snackbar-copy-btn" title="Copy message" onclick="copySnackbarText('${id}', event)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
@@ -166,6 +174,7 @@ function showSnackbar({
   activeSnackbars.set(id, {
     timer,
     fullText,
+    action,
   });
 
   const items = container.querySelectorAll('.snackbar-item');
@@ -173,6 +182,19 @@ function showSnackbar({
     dismissSnackbar(items[0].id);
   }
 }
+
+function triggerSnackbarAction(id) {
+  const itemData = activeSnackbars.get(id);
+  if (itemData && itemData.action && typeof itemData.action.onClick === 'function') {
+    try {
+      itemData.action.onClick();
+    } catch (e) {
+      console.error('Error executing snackbar action:', e);
+    }
+  }
+  dismissSnackbar(id);
+}
+window.triggerSnackbarAction = triggerSnackbarAction;
 
 function toggleSnackbar(id) {
   const item = document.getElementById(id);
@@ -448,7 +470,40 @@ async function copyEmailDraft() {
   }
 }
 
+// Stepper controller for cycle number inputs
+function stepCycles(inputId, delta) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const min = parseInt(input.getAttribute('min') || '1', 10);
+  const max = parseInt(input.getAttribute('max') || '100', 10);
+  let val = parseInt(input.value || `${min}`, 10);
+  if (isNaN(val)) val = min;
+  val = Math.min(max, Math.max(min, val + delta));
+  input.value = val;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+// Persist cycles setting to backend settings API
+let persistCyclesTimer = null;
+function persistCyclesSetting(key, val) {
+  clearTimeout(persistCyclesTimer);
+  persistCyclesTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [key]: parseInt(val, 10) }),
+      });
+    } catch (e) {
+      console.warn('Could not persist cycles setting to backend:', e);
+    }
+  }, 400);
+}
+
 // Bind utilities globally
+window.stepCycles = stepCycles;
+window.persistCyclesSetting = persistCyclesSetting;
 window.showConfirm = showConfirm;
 window.showCenterAlert = showCenterAlert;
 window.closeCustomDialog = closeCustomDialog;

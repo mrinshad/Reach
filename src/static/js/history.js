@@ -265,7 +265,7 @@ async function fetchSentPosts() {
             <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
               <strong>${escapeHtml(post.author_name)}</strong>
               ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
+              ${post.location ? `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : `<span class="pill-badge badge-location" style="display: inline-flex; align-items: center; gap: 0.2rem; opacity: 0.55;" title="Location not specified in post"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>Not Specified</span>`}
             </div>
             <span class="recruiter-headline">${escapeHtml(post.author_headline || '')}</span>
           </div>
@@ -547,6 +547,41 @@ function openActivityLogsView() {
   switchHistoryView('logs');
 }
 
+function updateActivityLogsClearButton() {
+  const btn = document.getElementById('btnClearActivityLogFilters');
+  if (!btn) return;
+  const isFiltered = (
+    activityLogTypeFilter !== 'ALL' ||
+    activityLogStatusFilter !== 'ALL' ||
+    Boolean(activityLogFromDate) ||
+    Boolean(activityLogToDate)
+  );
+  btn.classList.toggle('hidden', !isFiltered);
+}
+
+function clearActivityLogFilters() {
+  activityLogTypeFilter = 'ALL';
+  activityLogStatusFilter = 'ALL';
+  activityLogFromDate = '';
+  activityLogToDate = '';
+  activityLogsPage = 1;
+
+  document.querySelectorAll('#activityLogPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.dataset.actType === 'ALL');
+  });
+
+  const select = document.getElementById('selectActivityLogStatus');
+  if (select) select.value = 'ALL';
+
+  const fromEl = document.getElementById('activityDateFrom');
+  if (fromEl) fromEl.value = '';
+  const toEl = document.getElementById('activityDateTo');
+  if (toEl) toEl.value = '';
+
+  updateActivityLogsClearButton();
+  fetchActivityLogs();
+}
+
 function setActivityLogTypeFilter(type) {
   activityLogTypeFilter = type;
   activityLogsPage = 1;
@@ -558,6 +593,7 @@ function setActivityLogTypeFilter(type) {
     const select = document.getElementById('selectActivityLogStatus');
     if (select) select.value = 'ALL';
   }
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -570,6 +606,7 @@ function setActivityLogUncompletedFilter() {
   });
   const select = document.getElementById('selectActivityLogStatus');
   if (select) select.value = 'uncompleted';
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -586,6 +623,7 @@ function applyActivityLogStatusFilter() {
       pill.classList.toggle('active', pill.dataset.actType === activityLogTypeFilter);
     }
   });
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -598,6 +636,7 @@ function applyActivityLogDateFilter() {
   activityLogFromDate = fromEl ? fromEl.value.trim() : '';
   activityLogToDate = toEl ? toEl.value.trim() : '';
   activityLogsPage = 1;
+  updateActivityLogsClearButton();
   fetchActivityLogs();
 }
 
@@ -1226,6 +1265,7 @@ function copyRunLogs() {
 
 window.applySentDateFilter = applySentDateFilter;
 window.applyActivityLogDateFilter = applyActivityLogDateFilter;
+window.clearActivityLogFilters = clearActivityLogFilters;
 window.setActivityLogUncompletedFilter = setActivityLogUncompletedFilter;
 window.reexecuteTask = reexecuteTask;
 window.reexecuteAllUncompleted = reexecuteAllUncompleted;

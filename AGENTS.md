@@ -1,3 +1,32 @@
+# Engineering & Design System Guidelines
+
+This workspace is governed by strict agent skillsets, design craft standards, code discipline, and change tracking.
+
+## 1. Project Context & Authoritative Documents
+- **Brand & Services**: docs/PRODUCT.md
+- **Visual Design & Tokens**: docs/DESIGN.md
+- **Agent Orchestration**: docs/ORCHESTRATION.md
+- **Active State & Roadmap**: PROJECT_STATE.md
+- **Version History & Changes**: CHANGELOG.md
+- **Architecture Decisions**: docs/adr/
+- **Codebase Knowledge Graph**: graphify-out/GRAPH_REPORT.md
+
+## 2. Core Agent Rules
+All agents operating in this workspace must respect the rules in `.agents/rules/`:
+1. **UI & UX Craft** (`.agents/rules/ui-craft.md`): Reject generic "AI slop", unprompted gradients, low contrast, and unverified mockups.
+2. **Code Discipline** (`.agents/rules/code-discipline.md`): Enforce the Ponytail 7-step Necessity Ladder. Rely on standard library and native features before adding packages.
+3. **Change Tracking** (`.agents/rules/change-tracking.md`): Log modifications in CHANGELOG.md, keep PROJECT_STATE.md updated, and record ADRs for structural changes.
+4. **Knowledge Graph** (`.agents/rules/graphify.md`): Query `graphify-out/` before answering complex codebase architecture questions.
+
+## 3. Available Skill Commands
+- **UI Craft (Impeccable)**: `/audit`, `/critique`, `/polish`, `/typeset`, `/adapt`, `/bolder`, `/quieter`
+- **UX Strategy (Intent)**: `/strategize`, `/wireframe`, `/articulate`, `/evaluate`, `/fortify`
+- **Code Quality (Ponytail)**: `/ponytail`, `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`
+- **Knowledge Graph (Graphify)**: `/graphify`, `/graphify update`
+- **Change Management**: `/track-changes`
+
+---
+
 # Reach Codebase — Agent Navigation & Routing Guide (AGENTS.md)
 
 This file is the primary directory and navigation guide for AI coding agents and pair programmers working in this repository.
@@ -46,11 +75,13 @@ When tasked with modifying a feature, UI element, workflow, or API, use this tab
 | **Generate Mail from JD Button** | [`tab_review.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_review.html) | [`review.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/review.css) | [`review.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/review.js) (`generateEmailForActiveDraft`) | `src/api/tasks.py` (`POST /api/generate-email/{id}?force=true`) |
 | **Direct Gmail Dispatch** | [`tab_review.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_review.html) | [`review.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/review.css) | [`review.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/review.js) (`sendActiveDraftDirectly`, `openActivePostInGmail`) | `src/api/tasks.py` (`/api/send-direct/{id}`, `/api/open-gmail/{id}`) |
 | **LinkedIn Easy Apply Workspace** | [`tab_easy_apply.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_easy_apply.html) | [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css) | [`easy_apply.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/easy_apply.js) (`fetchEasyApplyPosts`, `setEasyPostStatus`, `batchSetEasyStatus`, `openBulkSearchModal`, `submitBulkEasySearch`, `NOT_FOUND` handling) | `src/api/posts.py` (`POST /api/posts/{id}/status`, `POST /api/posts/status-batch`), `src/api/tasks.py` (`POST /api/scrape/easy-apply`, `POST /api/scrape/easy-apply/batch`, `POST /api/easy-apply/{id}`), `src/services/easy_apply_service.py` |
-| **Screening Questionnaire Modal** | [`tab_easy_apply.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_easy_apply.html) (`#modalScreeningQuestions`) | [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css) | [`easy_apply.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/easy_apply.js) (`openScreeningModal`, `parseScreeningQuestions`, `triggerScreeningRescan`, `markScreeningAsReady`) | `src/services/easy_apply_service.py` (`REQUIRES_QUESTIONNAIRE` questionnaire parsing & extraction) |
+| **Screening Questionnaire Modal** | [`tab_easy_apply.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_easy_apply.html) (`#modalScreeningQuestions`) | [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css) | [`easy_apply.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/easy_apply.js) (`openScreeningModal`, `parseScreeningQuestions`, `triggerScreeningRescan`, `markScreeningAsReady`, `findQuestionBankAnswer`) | `src/services/easy_apply_service.py` (`REQUIRES_QUESTIONNAIRE` questionnaire parsing & extraction) |
+| **Screening Question & Answer Bank (Dedicated Page)** | [`tab_question_bank.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_question_bank.html) | [`question_bank.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/question_bank.css) | [`question_bank.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/question_bank.js) (`loadQuestionBankPage`, `deleteSingleQuestion`, `triggerBatchDeleteQuestions`, `saveSingleQuestionAnswer`, `saveAllQuestionBankPageAnswers`, `submitAddQuestion`) | `src/services/question_bank_service.py`, `src/db/question_bank.py`, `src/api/tasks.py` (`/api/easy-apply/questions`, `DELETE /api/easy-apply/questions/{key}`, `POST /api/easy-apply/questions/delete-batch`, `POST /api/easy-apply/questions/create`, `POST /api/easy-apply/questions/answers`) |
+| **Safe Pacing & Rate Limit Safeguard** | [`tab_easy_apply.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_easy_apply.html) (`#easyRateLimitBanner`) | [`easy_apply.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/easy_apply.css) | [`easy_apply.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/easy_apply.js) (`checkRateLimitSafeguard`, `resumeEasyApplySafeguard`) | `src/services/easy_apply_service.py` (`check_linkedin_rate_limit`), `src/api/tasks.py` (`/api/easy-apply/rate-limit-status`, `/api/easy-apply/rate-limit-resume`) |
 | **Sent & Cancelled History (Others)** | [`tab_sent.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_sent.html) | [`history.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/history.css) | [`history.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/history.js) (`fetchSentPosts`, `revertPostToDraft`, `switchHistoryView`) | `src/api/posts.py` (`status=OTHERS`, `revert`) |
-| **Activity Run Logs & Console Output** | [`tab_sent.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_sent.html), [`modals.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/modals.html) (`#modalRunTerminalLogs`) | [`history.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/history.css) | [`history.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/history.js) (`fetchActivityLogs`, `renderActivityLogs`, `openRunLogsModal`, `copyRunLogs`) | `src/api/tasks.py` (`GET /api/activity-logs`, `GET /api/activity-logs/{id}`), `src/db/activity_logs.py`, `src/services/automation_tasks.py` |
+| **Activity Run Logs & In-Place Retry** | [`tab_sent.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/tab_sent.html), [`modals.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/modals.html) (`#modalRunTerminalLogs`) | [`history.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/history.css) | [`history.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/history.js) (`fetchActivityLogs`, `renderActivityLogs`, `openRunLogsModal`, `deleteRunLogItem`, `retryActivityRun`) | `src/api/tasks.py` (`GET /api/activity-logs`, `DELETE /api/activity-logs/{id}`, `POST /api/activity-logs/{id}/retry`), `src/db/activity_logs.py`, `src/services/automation_tasks.py` |
 | **Task Drawer & Live Logs** | [`task_drawer.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/task_drawer.html) | [`tasks.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/tasks.css) | [`tasks.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/tasks.js) (`pollTaskStatus`, `cancelQueuedTask`) | `src/api/tasks.py` (`/api/tasks/status`, `/api/tasks/queue/*`) |
-| **Dialog Modals (All 7 Dialogs)** | [`modals.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/modals.html) | [`modals.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/modals.css) | [`modals.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/modals.js) (`openPostModal`, `submitManualJd`) | `src/api/posts.py`, `src/api/settings.py` |
+| **Dialog Modals (All 8 Dialogs)** | [`modals.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/partials/modals.html) | [`modals.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/modals.css) | [`modals.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/modals.js) (`openPostModal`, `submitManualJd`) | `src/api/posts.py`, `src/api/settings.py` |
 | **Mobile Sidebar & Drawer** | [`index_layout.html`](file:///Users/apple/Byten/linkedInScrapper/src/static/index_layout.html) | [`responsive.css`](file:///Users/apple/Byten/linkedInScrapper/src/static/css/responsive.css) | [`sidebar.js`](file:///Users/apple/Byten/linkedInScrapper/src/static/js/sidebar.js) (`closeMobileSidebar`) | N/A |
 
 ---
@@ -65,6 +96,8 @@ linkedInScrapper/
 ├── scripts/
 │   ├── AGENTS.md                            # CLI & Scraper Standalone Guide
 │   ├── linkedin_posts_search.py             # Playwright LinkedIn hiring post crawler
+│   ├── linkedin_job_search.py               # LinkedIn Easy Apply discovery crawler
+│   ├── backfill_screening_questions.py      # Screening questions log recovery script
 │   ├── infopark_jobs_search.py              # Infopark Kochi companies-job crawler
 │   └── ...                                  # Batch testing & session diagnostic probes
 ├── docs/
@@ -81,14 +114,15 @@ linkedInScrapper/
     │   ├── __init__.py                      # Aggregates modular routers into api_router
     │   ├── models.py                        # Pydantic request models & constants
     │   ├── posts.py                         # Post querying, filtering, manual ingestion & status
-    │   ├── tasks.py                         # FIFO task queue management & scraper triggers
+    │   ├── tasks.py                         # FIFO queue, scrapers, Easy Apply & activity logs
     │   ├── stats.py                         # Dashboard counters, analytics & session health
     │   └── settings.py                      # Configuration, resume uploads & Headless toggle
     ├── services/
     │   ├── AGENTS.md                        # Automation & Browser Services Guide
     │   ├── __init__.py                      # Services package re-exports
     │   ├── automation_tasks.py              # Sequential FIFO TaskManager & watchdog runners
-    │   ├── easy_apply_service.py            # LinkedIn Easy Apply crawler & modal multi-step questionnaire automation
+    │   ├── easy_apply_service.py            # LinkedIn Easy Apply crawler & modal questionnaire automation
+    │   ├── question_bank_service.py         # Screening question aggregation, deduplication & answers
     │   ├── chatgpt_service.py               # Web ChatGPT Custom GPT orchestrator
     │   ├── gmail_service.py                 # Gmail compose automation & direct dispatch
     │   ├── firefox_connector.py             # Persistent Playwright Firefox context lifecycle

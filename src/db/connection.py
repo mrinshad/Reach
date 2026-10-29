@@ -100,6 +100,25 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_activity_logs_type ON activity_logs(task_type);
     CREATE INDEX IF NOT EXISTS idx_activity_logs_status ON activity_logs(status);
+
+    CREATE TABLE IF NOT EXISTS screening_questions (
+        id VARCHAR(64) PRIMARY KEY,
+        question_key VARCHAR(512) UNIQUE NOT NULL,
+        question_text TEXT NOT NULL,
+        category VARCHAR(64) DEFAULT 'profile',
+        answer TEXT,
+        is_standard BOOLEAN DEFAULT FALSE,
+        default_placeholder TEXT,
+        occurrences INT DEFAULT 1,
+        sample_jobs TEXT[] DEFAULT '{}',
+        options TEXT[] DEFAULT '{}',
+        status VARCHAR(32) DEFAULT 'PENDING',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_screening_questions_key ON screening_questions(question_key);
+    CREATE INDEX IF NOT EXISTS idx_screening_questions_status ON screening_questions(status);
     """
     alter_sql = """
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
@@ -108,6 +127,8 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(128);
     ALTER TABLE posts ALTER COLUMN post_url TYPE TEXT;
     CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
+    ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
+    ALTER TABLE screening_questions ALTER COLUMN question_key TYPE VARCHAR(512);
     """
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
@@ -116,4 +137,6 @@ def init_db(db_url: str = DEFAULT_DB_URL):
         conn.commit()
 
     seed_default_settings(db_url)
-    print("✓ PostgreSQL database initialized (tables: posts, settings, activity_logs).")
+    from src.db.question_bank import init_question_bank
+    init_question_bank(db_url)
+    print("✓ PostgreSQL database initialized (tables: posts, settings, activity_logs, screening_questions).")

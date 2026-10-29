@@ -17,6 +17,7 @@ This directory contains standalone CLI scripts for crawling job boards, running 
 | [`test_chatgpt_conversation.py`](file:///Users/apple/Byten/linkedInScrapper/scripts/test_chatgpt_conversation.py) | Diagnostic test verifying ProseMirror typing and streaming completion listener in ChatGPT Custom GPT. | `python3 scripts/test_chatgpt_conversation.py` |
 | [`test_cdp_connection.py`](file:///Users/apple/Byten/linkedInScrapper/scripts/test_cdp_connection.py) | Diagnostic test verifying Chrome DevTools Protocol (CDP) connectivity on port 9222. | `python3 scripts/test_cdp_connection.py` |
 | [`linkedin_job_search.py`](file:///Users/apple/Byten/linkedInScrapper/scripts/linkedin_job_search.py) | Alternate scraper targeting LinkedIn structured Job search tab rather than feed posts. | `python3 scripts/linkedin_job_search.py` |
+| [`backfill_screening_questions.py`](file:///Users/apple/Byten/linkedInScrapper/scripts/backfill_screening_questions.py) | Diagnostic & maintenance utility to backfill unextracted screening questions from stored Easy Apply jobs into `screening_question_bank`. | `python3 scripts/backfill_screening_questions.py` |
 
 ---
 

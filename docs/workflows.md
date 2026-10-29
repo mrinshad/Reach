@@ -284,3 +284,56 @@ Network stalls or dynamic infinite scroll locks can cause scrapers to hang indef
 - **Client JavaScript Modularity (`src/static/js/`)**: Deconstructed 4,060-line monolith into 12 domain ES modules (`state.js`, `utils.js`, `notifications.js`, `sidebar.js`, `api.js`, `discovered.js`, `review.js`, `history.js`, `crawler.js`, `tasks.js`, `modals.js`, `analytics.js`) orchestrated by a ~60-line `app.js` bootstrapper.
 - **Dynamic Server Assembly**: `get_rendered_index_html()` in `src/app.py` compiles the layout on each server response and keeps `src/static/index.html` synchronized on disk.
 - **Hierarchical Agent Guides**: Dedicated `AGENTS.md` files in every folder across the workspace guide AI coding assistants directly to responsible files without broad directory scans.
+
+---
+
+## 16. LinkedIn Easy Apply Automation, Safe Pacing & Anti-Abuse Watchdog
+
+**Discovered:** Account Safety & Anti-Ban Architecture
+
+### Workflow
+1. **Trigger & Configuration**:
+   - The user selects target roles, locations, search `cycles` (1–50, default: 8), and pacing (`safe` = 45–75s, `slow` = 75–120s, `standard` = 30–45s).
+   - In each cycle, Playwright scrolls the infinite-scroll job list container, loading ~5–8 jobs per pass.
+2. **Submission & Wizard Step Automation**:
+   - For each job card marked Easy Apply, Playwright clicks the button and inspects the modal.
+   - For single-step or standard multi-step forms, candidate profile info and resume PDFs are pre-filled, natural typing micro-delays (1.2–2.5s) are applied, and review/submit is completed.
+3. **Screening Questionnaire Detection**:
+   - If custom recruiter questions are detected or step limits are exceeded, the crawler marks the job as `REQUIRES_QUESTIONNAIRE` in PostgreSQL, preserving full question strings intact in `posts.rejection_reason`.
+4. **Safeguard Detection Watchdog**:
+   - Before and during execution, `check_linkedin_rate_limit(page)` inspects the DOM for LinkedIn's *"We noticed you're applying at a fast pace"* safeguard notices.
+   - If detected: immediately halts the crawl loop, sets `easy_apply_paused_until` timestamp in PostgreSQL `settings`, logs an account safeguard alert, and displays a glowing topbar warning banner with a live countdown timer.
+
+---
+
+## 17. Centralized Screening Question & Answer Bank
+
+**Discovered:** Automated Candidate Profile Memory
+
+### Workflow
+1. **Aggregation & Normalization**:
+   - `get_aggregated_question_bank()` seeds standard candidate profile questions (phone, email, location, total/stack experience, CTC, notice period, English proficiency) and combines them with dynamically extracted questions across all `REQUIRES_QUESTIONNAIRE` jobs in the database.
+   - Questions are normalized using lowercase alphanumeric keys (`re.sub(r'[^a-z0-9]', '', ...)`), deduplicated, and categorized into *Contact*, *Experience*, *Compensation*, *Notice*, or *Profile*.
+2. **Persistent Answer Management (`#modalQuestionBank`)**:
+   - Users view questions with occurrence counters (e.g. `From 3 jobs`) and input default answers.
+   - Answers are saved via `POST /api/easy-apply/questions/answers` into PostgreSQL `settings` (`key='screening_question_bank'`).
+3. **Smart Screening Matching**:
+   - When reviewing a single screened job in `#modalScreeningQuestions`, `findQuestionBankAnswer(label)` performs smart alias and exact normalized matching against the Answer Bank.
+   - Matching answers display green `✓ Saved in Question Bank: [answer]` badges with 1-click clipboard copy.
+
+---
+
+## 18. Activity Run Terminal Logs, Task Deletion & In-Place Retries
+
+**Discovered:** Run Transparency & Terminal History Management
+
+### Workflow
+1. **Activity Log Tracking**:
+   - All background scraper runs, batch ChatGPT operations, and Easy Apply crawls record their start time, completion status, duration, total items, and live stdout/stderr streams in `activity_logs`.
+2. **Terminal Log Inspector (`#modalRunTerminalLogs`)**:
+   - Clicking terminal icon (`>_`) in Sent & History opens a dark terminal modal showing full real-time console logs with 1-click clipboard copy.
+3. **Individual Run Deletion (`DELETE /api/activity-logs/{id}`)**:
+   - Allows users to clean up failed, unretrievable, or unwanted activity records directly from the database without affecting underlying post records.
+4. **In-Place Retries (`POST /api/activity-logs/{id}/retry`)**:
+   - Retrying a stopped or failed activity task re-enqueues the exact operation and updates the existing `activity_logs` entry in-place upon completion, eliminating redundant log rows.
+

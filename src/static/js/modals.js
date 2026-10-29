@@ -33,7 +33,7 @@ function openPostModal(postId) {
   if (metaEl) {
     const email = (post.contact_emails && post.contact_emails[0]) ? `Email: ${post.contact_emails[0]}` : 'No email detected';
     const exp = post.raw_experience ? ` • Exp: ${post.raw_experience}` : '';
-    const loc = post.location ? ` • 📍 Location: ${post.location}` : '';
+    const loc = ` • 📍 Location: ${post.location || 'Not Specified'}`;
     metaEl.textContent = `${email}${exp}${loc}`;
   }
 
@@ -267,6 +267,9 @@ function openSettingsModal() {
   const gptUrlInput = document.getElementById('settingChatGptUrl');
   if (gptUrlInput) gptUrlInput.value = state.config.chatgpt_url || '';
 
+  const gptQuestionUrlInput = document.getElementById('settingChatGptQuestionUrl');
+  if (gptQuestionUrlInput) gptQuestionUrlInput.value = state.config.chatgpt_question_url || '';
+
   updateHeadlessUI(state.config ? state.config.headless_mode : false);
   document.getElementById('settingsModal')?.classList.remove('hidden');
 }
@@ -359,6 +362,7 @@ async function saveSettings() {
     search_query: (document.getElementById('settingSearchQuery')?.value || '').trim(),
     search_location: (document.getElementById('settingSearchLocation')?.value || '').trim(),
     chatgpt_url: (document.getElementById('settingChatGptUrl')?.value || '').trim(),
+    chatgpt_question_url: (document.getElementById('settingChatGptQuestionUrl')?.value || '').trim(),
     headless_mode: !!(document.getElementById('settingHeadlessToggle') && document.getElementById('settingHeadlessToggle').checked),
   };
 
@@ -380,7 +384,46 @@ async function saveSettings() {
   }
 }
 
+// --- LinkedIn Daily Easy Apply Limit Modal ---
+function showDailyLimitModal(details = '') {
+  const modal = document.getElementById('modalDailyLimit');
+  if (!modal) return;
+
+  fetch('/api/easy-apply/rate-limit-status')
+    .then((r) => r.json())
+    .then((data) => {
+      const timerEl = document.getElementById('dailyLimitResetsTimer');
+      if (timerEl) {
+        if (data.seconds_remaining > 0) {
+          const hours = Math.floor(data.seconds_remaining / 3600);
+          const mins = Math.floor((data.seconds_remaining % 3600) / 60);
+          timerEl.textContent = `Tomorrow in ~${hours}h ${mins}m`;
+        } else {
+          timerEl.textContent = 'Tomorrow (~1:00 AM)';
+        }
+      }
+    })
+    .catch(() => {});
+
+  modal.classList.remove('hidden');
+}
+
+function closeDailyLimitModal() {
+  const modal = document.getElementById('modalDailyLimit');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function resumeEasyApplySafeguardFromModal() {
+  closeDailyLimitModal();
+  if (typeof resumeEasyApplySafeguard === 'function') {
+    await resumeEasyApplySafeguard();
+  }
+}
+
 // Global Bindings
+window.showDailyLimitModal = showDailyLimitModal;
+window.closeDailyLimitModal = closeDailyLimitModal;
+window.resumeEasyApplySafeguardFromModal = resumeEasyApplySafeguardFromModal;
 window.openPostModal = openPostModal;
 window.closePostModal = closePostModal;
 window.openAddJdModal = openAddJdModal;

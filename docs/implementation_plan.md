@@ -93,8 +93,29 @@
 
 ### Milestone 8: Full Codebase Restructuring & Hierarchical AGENTS.md Architecture ✅
 - **Modular Database Layer (`src/db/`)**: Decomposed monolithic database logic into `connection.py`, `settings.py`, `posts.py`, `analytics.py`, and `__init__.py` with 100% symbol parity.
-- **Decoupled Automation Services (`src/services/`)**: Moved background workers, FIFO queue manager, and browser connectors to `src/services/` with transparent backward-compatibility shims in `src/*.py`.
+- **Decoupled Automation Services (`src/services/`)**: Moved background workers, FIFO queue manager, and browser connectors to `src/services/` with transparent backward-compatibility shims.
 - **Modular REST API Routers (`src/api/`)**: Split endpoints into dedicated domain routers (`posts.py`, `tasks.py`, `stats.py`, `settings.py`, `models.py`) mounted via unified `api_router`. Refactored `src/app.py` into a clean root app (~140 lines).
-- **Modular Client JavaScript (`src/static/js/`)**: Deconstructed 4,060-line monolithic `app.js` into 12 domain ES modules orchestrated by a ~60-line master bootstrapper.
+- **Modular Client JavaScript (`src/static/js/`)**: Deconstructed 4,060-line monolithic `app.js` into domain ES modules orchestrated by a master bootstrapper.
 - **Hierarchical AGENTS.md Network**: Created specialized routing guides in every repository directory (`/`, `src/`, `src/api/`, `src/db/`, `src/services/`, `src/static/`, `src/static/js/`, `src/static/css/`, `src/static/partials/`, `scripts/`, `docs/`).
 - **Comprehensive Documentation Synchronization**: Synchronized `README.md`, `docs/file_architecture.md`, `docs/workflows.md`, and `docs/implementation_plan.md`.
+
+### Milestone 9: LinkedIn Easy Apply Workspace & Screening Questionnaire Extraction ✅
+- Dedicated Easy Apply workspace (`#tabEasyApply`) with `f_AL=true` crawler, CSV bulk keyword search, and 5-stat KPI ribbon (Ready, Screening, Applied, Failed, Not Found).
+- Multi-step modal question inspector extracting questions, radio options, dropdowns, and checkboxes into `easy_apply_answers`.
+- Elevated job details modal and dedicated Screening Questionnaire Modal (`#modalScreeningQuestions`) with direct status promotion and link copying.
+
+### Milestone 10: Safe Human Pacing & Anti-Abuse Safeguard Watchdog ✅
+- Configurable humanized inter-application pauses (45s–75s) to ensure safe, authentic browsing patterns.
+- Rate-limit banner detection (*"We noticed you're applying at a fast pace..."*) triggering automatic safety cooldown (`easy_apply_rate_limit_until`).
+- Active safeguard monitoring in health checks (`/api/easy-apply/rate-limit-status`) and live dashboard health indicator.
+
+### Milestone 11: Centralized Screening Question & Answer Bank (`screening_question_bank`) ✅
+- Persistent database table (`screening_question_bank`) storing normalized questions, fuzzy aliases, categories, and user answers.
+- Question & Answer Bank UI modal (`#modalQuestionBank`) with category filtering, search, and 1-click answer saving.
+- Automatic synchronization of newly discovered screening questions across crawls.
+
+### Milestone 12: Manual Crawler Cycles, Activity Run Logs & Modernized Dashboard ✅
+- User-configurable crawler cycles (1–50) with interactive hover tooltips explaining cycle mechanics.
+- Activity run logs database model (`activity_logs`) tracking execution history, parameters, stats, and terminal output.
+- Run log management: single/batch deletion, log viewing modal, and 1-click in-place retries.
+- Modernized Analytics Dashboard with Easy Apply KPIs, Question Bank metrics, combined application velocity timeline, and connected services safeguard health tracking.
