@@ -94,17 +94,25 @@ def main():
         or "24h"
     ).strip()
 
-    limit_str = os.environ.get("SCRAPER_LIMIT") or "20"
-    try:
-        max_jobs = args.max_jobs or int(limit_str)
-    except Exception:
-        max_jobs = 20
-
+    limit_str = os.environ.get("SCRAPER_LIMIT")
     cycles_env = os.environ.get("SCRAPER_CYCLES")
+
     try:
         cycles = args.cycles if args.cycles is not None else (int(cycles_env) if cycles_env else 8)
     except Exception:
         cycles = 8
+
+    try:
+        if args.max_jobs is not None:
+            max_jobs = args.max_jobs
+        elif limit_str:
+            max_jobs = int(limit_str)
+        elif cycles and cycles > 10:
+            max_jobs = cycles * 5
+        else:
+            max_jobs = 50
+    except Exception:
+        max_jobs = 50
 
     pacing = (args.pacing or os.environ.get("SCRAPER_PACING") or "safe").lower()
 
@@ -166,24 +174,25 @@ def main():
         print("  Waiting for job cards to load...")
         wait_for_job_cards_loaded(page, timeout_ms=15000, logger=print)
 
-        # Cumulative discovery across cycles
-        print(f"[3/4] Discovering Easy Apply job cards ({cycles} cycles requested)...")
+        # Cumulative discovery across cycles & pagination
+        print(f"[3/4] Discovering Easy Apply job cards ({cycles} cycles requested, target: {max_jobs} jobs)...")
         collected_jobs_map = {}
         for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
             collected_jobs_map[c["job_id"]] = c
 
-        actual_cycles = min(cycles, 15) if max_jobs > len(collected_jobs_map) else 0
+        page_num = 0
         no_new_cycles = 0
-        for cycle_idx in range(actual_cycles):
-            if len(collected_jobs_map) >= max_jobs:
-                break
-            print(f"  [Cycle {cycle_idx + 1}/{actual_cycles}] Scrolling to discover more cards ({len(collected_jobs_map)}/{max_jobs} collected)...")
+        cycle_idx = 0
+
+        while cycle_idx < cycles and len(collected_jobs_map) < max_jobs:
+            cycle_idx += 1
+            print(f"  [Cycle {cycle_idx}/{cycles}] Scrolling/discovering cards ({len(collected_jobs_map)}/{max_jobs} collected)...")
             page.evaluate("""() => {
                 const el = document.querySelector('div[data-testid="lazy-column"]') ||
                            document.querySelector('.scaffold-layout__list-container') ||
                            document.querySelector('.jobs-search-results-list');
-                if (el) el.scrollTop += 500;
-                else window.scrollBy(0, 500);
+                if (el) el.scrollTop += 600;
+                else window.scrollBy(0, 600);
             }""")
             page.wait_for_timeout(800)
 
@@ -191,16 +200,39 @@ def main():
             for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
                 collected_jobs_map[c["job_id"]] = c
 
+            if len(collected_jobs_map) >= max_jobs:
+                break
+
             if len(collected_jobs_map) == prev_count:
                 no_new_cycles += 1
-                if no_new_cycles >= 3:
-                    break
+                if no_new_cycles >= 2:
+                    page_num += 1
+                    start_offset = page_num * 25
+                    next_url = f"{search_url}&start={start_offset}"
+                    print(f"  📄 Advancing to LinkedIn search results page {page_num + 1} (start={start_offset})...")
+                    try:
+                        page.goto(next_url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(2000)
+                        wait_for_job_cards_loaded(page, timeout_ms=8000, logger=print)
+                        
+                        new_page_cards = extract_all_search_job_cards(page, max_jobs=max_jobs)
+                        before_add = len(collected_jobs_map)
+                        for c in new_page_cards:
+                            collected_jobs_map[c["job_id"]] = c
+                        
+                        if len(collected_jobs_map) == before_add:
+                            print("  ℹ️ No more jobs found on subsequent pages; reached end of search results.")
+                            break
+                        no_new_cycles = 0
+                    except Exception as e:
+                        print(f"  ⚠️ Pagination error: {e}")
+                        break
             else:
                 no_new_cycles = 0
 
         extracted_jobs = list(collected_jobs_map.values())[:max_jobs]
         total_found = len(extracted_jobs)
-        print(f"  ✓ Found {total_found} visible job cards.")
+        print(f"  ✓ Found {total_found} visible job cards across {page_num + 1} page(s).")
 
         if total_found == 0:
             diag_path = os.path.join(ARTIFACT_DIR, "scratch", "easy_apply_zero_cards.png")
@@ -315,10 +347,28 @@ def main():
                 print(f"  🚫 Status: NOT_FOUND ({detail})")
             elif status == "RATE_LIMITED":
                 from src.db.settings import set_setting
-                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
-                set_setting("easy_apply_safeguard_reason", detail)
-                print(f"  🚨 {detail}")
-                print("  🛑 LinkedIn safeguard pause detected. Halting crawl immediately to protect your account.")
+                is_daily = "today’s easy apply limit" in detail.lower() or "today's easy apply limit" in detail.lower() or "continue applying tomorrow" in detail.lower()
+                if is_daily:
+                    import datetime
+                    now_dt = datetime.datetime.now()
+                    tomorrow_1am = (now_dt + datetime.timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                    paused_until = max(int(tomorrow_1am.timestamp()), int(time.time() + 8 * 3600))
+                    clean_detail = (
+                        "You reached today’s Easy Apply limit\n\n"
+                        "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                        "Save this job and continue applying tomorrow. Learn more"
+                    )
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "daily_limit")
+                else:
+                    paused_until = int(time.time() + 3600)
+                    clean_detail = detail
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "fast_pace")
+                print(f"  🚨 {clean_detail}")
+                print("  🛑 LinkedIn limit detected. Halting crawl immediately to protect your account.")
                 break
             elif status == "REQUIRES_QUESTIONNAIRE":
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)

@@ -384,7 +384,46 @@ async function saveSettings() {
   }
 }
 
+// --- LinkedIn Daily Easy Apply Limit Modal ---
+function showDailyLimitModal(details = '') {
+  const modal = document.getElementById('modalDailyLimit');
+  if (!modal) return;
+
+  fetch('/api/easy-apply/rate-limit-status')
+    .then((r) => r.json())
+    .then((data) => {
+      const timerEl = document.getElementById('dailyLimitResetsTimer');
+      if (timerEl) {
+        if (data.seconds_remaining > 0) {
+          const hours = Math.floor(data.seconds_remaining / 3600);
+          const mins = Math.floor((data.seconds_remaining % 3600) / 60);
+          timerEl.textContent = `Tomorrow in ~${hours}h ${mins}m`;
+        } else {
+          timerEl.textContent = 'Tomorrow (~1:00 AM)';
+        }
+      }
+    })
+    .catch(() => {});
+
+  modal.classList.remove('hidden');
+}
+
+function closeDailyLimitModal() {
+  const modal = document.getElementById('modalDailyLimit');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function resumeEasyApplySafeguardFromModal() {
+  closeDailyLimitModal();
+  if (typeof resumeEasyApplySafeguard === 'function') {
+    await resumeEasyApplySafeguard();
+  }
+}
+
 // Global Bindings
+window.showDailyLimitModal = showDailyLimitModal;
+window.closeDailyLimitModal = closeDailyLimitModal;
+window.resumeEasyApplySafeguardFromModal = resumeEasyApplySafeguardFromModal;
 window.openPostModal = openPostModal;
 window.closePostModal = closePostModal;
 window.openAddJdModal = openAddJdModal;

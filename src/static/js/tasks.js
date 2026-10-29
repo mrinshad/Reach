@@ -255,30 +255,61 @@ async function pollTaskStatus() {
             });
           }
         } else {
-          const firstLine = (task.error || 'Operation failed').split('\n')[0];
-          subEl.textContent = `Failed: ${firstLine}`;
+          const rawError = task.error || 'Operation failed';
+          const firstLine = rawError.split('\n')[0];
+          const isDailyLimit = (
+            rawError.toLowerCase().includes("today’s easy apply limit") ||
+            rawError.toLowerCase().includes("today's easy apply limit") ||
+            rawError.toLowerCase().includes("daily_limit") ||
+            rawError.toLowerCase().includes("continue applying tomorrow") ||
+            rawError.toLowerCase().includes("limit easy apply submissions")
+          );
 
-          if (typeof sendAppNotification === 'function') {
-            sendAppNotification({
-              title: task.task_name || 'Task Failed',
-              message: firstLine,
-              type: 'error',
-            });
-          }
+          if (isDailyLimit) {
+            subEl.textContent = "Reached today's Easy Apply limit (Paused until tomorrow)";
+            if (typeof sendAppNotification === 'function') {
+              sendAppNotification({
+                title: "You reached today’s Easy Apply limit",
+                message: "Great effort applying today. Easy Apply is paused until tomorrow to protect your account.",
+                type: 'warning',
+              });
+            }
+            if (typeof showSnackbar === 'function') {
+              showSnackbar({
+                title: "You reached today’s Easy Apply limit",
+                message: "Great effort applying today. Automation paused until tomorrow to protect your account.",
+                details: rawError,
+                type: 'warn',
+              });
+            }
+            if (typeof showDailyLimitModal === 'function') {
+              showDailyLimitModal(rawError);
+            }
+          } else {
+            subEl.textContent = `Failed: ${firstLine}`;
 
-          if (typeof showSnackbar === 'function') {
-            showSnackbar({
-              title: `Task Error: ${task.task_name || 'Automation'}`,
-              message: firstLine,
-              details: task.error,
-              type: 'error',
-            });
-          }
-          if (typeof showCenterAlert === 'function') {
-            showCenterAlert(
-              `Automation Stopped: ${task.task_name || 'Task'}`,
-              task.error || 'The automation task encountered an issue and stopped.'
-            );
+            if (typeof sendAppNotification === 'function') {
+              sendAppNotification({
+                title: task.task_name || 'Task Failed',
+                message: firstLine,
+                type: 'error',
+              });
+            }
+
+            if (typeof showSnackbar === 'function') {
+              showSnackbar({
+                title: `Task Error: ${task.task_name || 'Automation'}`,
+                message: firstLine,
+                details: task.error,
+                type: 'error',
+              });
+            }
+            if (typeof showCenterAlert === 'function') {
+              showCenterAlert(
+                `Automation Stopped: ${task.task_name || 'Task'}`,
+                task.error || 'The automation task encountered an issue and stopped.'
+              );
+            }
           }
         }
         if (typeof loadDashboardData === 'function') loadDashboardData();

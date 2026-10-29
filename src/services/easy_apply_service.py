@@ -215,7 +215,7 @@ def wait_for_job_cards_loaded(page: Page, timeout_ms: int = 15000, logger=print)
     return False
 
 
-def extract_all_search_job_cards(page: Page, max_jobs: int = 20) -> List[Dict[str, Any]]:
+def extract_all_search_job_cards(page: Page, max_jobs: Optional[int] = None) -> List[Dict[str, Any]]:
     """
     Extract job card metadata from search results using 2026 atomic componentkey layout,
     legacy links, and container fallback selectors. Deduplicates by job_id.
@@ -330,7 +330,7 @@ def extract_all_search_job_cards(page: Page, max_jobs: int = 20) -> List[Dict[st
         return results;
     }""")
 
-    return jobs[:max_jobs] if jobs else []
+    return jobs[:max_jobs] if (jobs and max_jobs) else (jobs or [])
 
 
 def extract_job_card_metadata(card) -> Dict[str, Any]:
@@ -493,10 +493,21 @@ def inspect_easy_apply_modal(page: Page) -> Dict[str, Any]:
 
 def check_linkedin_rate_limit(page: Page) -> Optional[str]:
     """
-    Check if LinkedIn has displayed an automated activity or fast pace rate limit warning.
-    Returns a safeguard message if detected, or None.
+    Check if LinkedIn has displayed a daily submission limit or fast-pace safeguard warning.
+    Returns the exact message if detected, or None.
+    Differentiates between DAILY_LIMIT and FAST_PACE.
     """
-    rate_limit_keywords = [
+    daily_limit_keywords = [
+        "reached today’s easy apply limit",
+        "reached today's easy apply limit",
+        "reached today's easy apply",
+        "reached today’s easy apply",
+        "limit easy apply submissions",
+        "continue applying tomorrow",
+        "save this job and continue applying tomorrow",
+        "great effort applying today",
+    ]
+    fast_pace_keywords = [
         "applying at a fast pace",
         "briefly paused easy apply",
         "safeguard against automated",
@@ -505,14 +516,43 @@ def check_linkedin_rate_limit(page: Page) -> Optional[str]:
         "paused easy apply",
         "unusual activity from your account",
     ]
+
     try:
-        body_text = page.locator("body").inner_text(timeout=2000)
-        body_lower = body_text.lower()
-        for kw in rate_limit_keywords:
-            if kw in body_lower:
+        # Check active dialogs and modal overlays first for high precision
+        dialog_texts = []
+        dialogs = page.locator("div[role='dialog'], .artdeco-modal, .artdeco-toast, [data-test-modal]").all()
+        for d in dialogs:
+            try:
+                if d.is_visible():
+                    txt = d.inner_text().strip()
+                    if txt:
+                        dialog_texts.append(txt)
+            except Exception:
+                pass
+
+        combined_text = " ".join(dialog_texts)
+        if not combined_text:
+            combined_text = page.locator("body").inner_text(timeout=2000)
+
+        combined_lower = combined_text.lower()
+
+        # 1. Daily Limit Check
+        for kw in daily_limit_keywords:
+            if kw in combined_lower:
+                return (
+                    "You reached today’s Easy Apply limit\n\n"
+                    "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                    "Save this job and continue applying tomorrow. Learn more"
+                )
+
+        # 2. Fast Pace Cooldown Check
+        for kw in fast_pace_keywords:
+            if kw in combined_lower:
                 return "LinkedIn Safeguard: Easy Apply briefly paused due to fast pace. Automation halted to protect account."
+
     except Exception:
         pass
+
     return None
 
 
@@ -647,9 +687,16 @@ def detect_already_applied(page: Page) -> Optional[str]:
 
 
 def dismiss_easy_apply_modal(page: Page):
-    """Safely dismiss and discard an open Easy Apply modal without saving partial drafts."""
+    """Safely dismiss and discard an open Easy Apply modal or limit dialog without saving partial drafts."""
     try:
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
+        dismiss_btn = page.locator(
+            "button[aria-label='Dismiss'], "
+            "button[aria-label='Close'], "
+            "button.artdeco-modal__dismiss, "
+            "[data-test-modal-close-btn], "
+            "button:has-text('Got it'), "
+            "button:has-text('Done')"
+        ).first
         if dismiss_btn.count() > 0 and dismiss_btn.is_visible():
             dismiss_btn.click(force=True)
             page.wait_for_timeout(800)
@@ -1459,11 +1506,16 @@ def execute_easy_apply(
 
         # Wait for Easy Apply button
         apply_btn_selector = (
-            "button[aria-label*='Easy Apply to']:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "[aria-label*='Easy Apply to']:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            "[aria-label*='Easy Apply']:not([aria-label*='filter']):not([aria-label*='Filter']), "
             "button.jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
-            ".jobs-s-apply button:not([aria-label*='filter']):not([aria-label*='Filter']), "
-            "div.jobs-apply-button--top-card button:not([aria-label*='filter']):not([aria-label*='Filter']), "
-            "button:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search'])"
+            "a.jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            ".jobs-apply-button:not([aria-label*='filter']):not([aria-label*='Filter']), "
+            ".jobs-s-apply button, .jobs-s-apply a, "
+            "div.jobs-apply-button--top-card button, div.jobs-apply-button--top-card a, "
+            "button:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search']), "
+            "a:has-text('Easy Apply'):not([aria-label*='filter']):not([aria-label*='Filter']):not([id*='search']), "
+            "[role='button']:has-text('Easy Apply')"
         )
         try:
             page.wait_for_selector(apply_btn_selector, timeout=7000)
@@ -1482,10 +1534,21 @@ def execute_easy_apply(
             if closed_reason:
                 logger(f"  🚫 Position is closed: {closed_reason}")
                 return "NOT_FOUND", closed_reason
-            logger("  ⚠️ No Easy Apply button found on page (position closed or external apply only).")
-            return "NOT_FOUND", "No Easy Apply button available (position closed or external apply only)"
+
+            # Check for external apply only
+            external_btn = page.locator("a[aria-label*='Apply on company website'], a:has-text('Apply on company website'), a.jobs-apply-button[href*='external']").first
+            if external_btn.count() > 0 and external_btn.is_visible():
+                logger("  ℹ️ External company apply only (non-Easy Apply).")
+                return "NOT_FOUND", "External apply only (non-Easy Apply)"
+
+            logger("  ⚠️ Easy Apply button not visible on page.")
+            return "FAILED", "Easy Apply button not visible on page"
 
         logger("  Clicking 'Easy Apply' button...")
+        try:
+            apply_btn.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
         try:
             apply_btn.click(timeout=4000)
         except Exception:
@@ -1602,6 +1665,13 @@ def execute_easy_apply(
                         submit_btn.click(force=True, timeout=5000)
                     page.wait_for_timeout(2500)
 
+                    # Check for LinkedIn daily limit or rate limit immediately after clicking submit
+                    rate_limit_msg = check_linkedin_rate_limit(page)
+                    if rate_limit_msg:
+                        logger(f"  🚨 {rate_limit_msg}")
+                        dismiss_easy_apply_modal(page)
+                        return "RATE_LIMITED", rate_limit_msg
+
                     # Check confirmation
                     done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
                     if done_btn.count() > 0 and done_btn.is_visible():
@@ -1684,7 +1754,7 @@ def run_easy_apply_crawler(
     keywords: str = "Full Stack Developer",
     location: str = "India",
     time_filter: str = "24h",
-    max_jobs: int = 20,
+    max_jobs: Optional[int] = None,
     cycles: Optional[int] = 8,
     pacing: Optional[str] = "safe",
     auto_apply: bool = False,
@@ -1693,7 +1763,7 @@ def run_easy_apply_crawler(
     """
     Main background crawler entrypoint:
     1. Searches LinkedIn jobs with Easy Apply filter (f_AL=true).
-    2. Extracts job cards and full specifications with dynamic scroll cycles.
+    2. Extracts job cards and full specifications with dynamic scroll cycles and pagination.
     3. Strictly filters job titles for relevance to search keywords.
     4. Saves matching jobs to database with category='EASY_APPLY', status='DISCOVERED' (Ready to Apply).
     5. If auto_apply=True, immediately submits applications; otherwise saves for user review.
@@ -1703,6 +1773,7 @@ def run_easy_apply_crawler(
     resume_path = config.get("resume_path", "")
 
     scroll_cycles = int(cycles) if cycles and int(cycles) > 0 else 8
+    target_max_jobs = int(max_jobs) if (max_jobs and int(max_jobs) > 0) else max(50, scroll_cycles * 5)
     pacing_mode = (pacing or "safe").lower()
 
     search_url = build_easy_apply_search_url(keywords, location, time_filter)
@@ -1712,7 +1783,7 @@ def run_easy_apply_crawler(
     else:
         logger(f"🚀 Starting LinkedIn Easy Apply Job Collector")
     logger(f"  Keywords: '{keywords}' | Location: '{location}' | Filter: {time_filter}")
-    logger(f"  Discovery Cycles: {scroll_cycles} | Mode: {'Auto-Apply' if auto_apply else 'Collect Only (Ready to Apply)'}")
+    logger(f"  Discovery Cycles: {scroll_cycles} | Target Max Jobs: {target_max_jobs} | Mode: {'Auto-Apply' if auto_apply else 'Collect Only (Ready to Apply)'}")
     if auto_apply:
         logger(f"  Pacing Mode: {pacing_mode}")
     logger(f"  URL: {search_url}")
@@ -1753,41 +1824,65 @@ def run_easy_apply_crawler(
         logger("  Waiting for job cards to load...")
         wait_for_job_cards_loaded(page, timeout_ms=15000, logger=logger)
 
-        # Cumulative discovery across cycles
-        logger(f"[3/4] Scanning job listings ({scroll_cycles} discovery cycles)...")
+        # Cumulative discovery across cycles & pagination
+        logger(f"[3/4] Scanning job listings ({scroll_cycles} cycles, target: {target_max_jobs} jobs)...")
         collected_jobs_map = {}
-        for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+        for c in extract_all_search_job_cards(page, max_jobs=target_max_jobs):
             collected_jobs_map[c["job_id"]] = c
 
-        actual_cycles = min(scroll_cycles, 15) if max_jobs > len(collected_jobs_map) else 0
+        page_num = 0
         no_new_cycles = 0
-        for cycle_idx in range(actual_cycles):
-            if len(collected_jobs_map) >= max_jobs:
-                break
-            logger(f"  [Cycle {cycle_idx + 1}/{actual_cycles}] Scrolling to discover more cards ({len(collected_jobs_map)}/{max_jobs} collected)...")
+        cycle_idx = 0
+
+        while cycle_idx < scroll_cycles and len(collected_jobs_map) < target_max_jobs:
+            cycle_idx += 1
+            logger(f"  [Cycle {cycle_idx}/{scroll_cycles}] Scrolling/discovering cards ({len(collected_jobs_map)}/{target_max_jobs} collected)...")
             page.evaluate("""() => {
                 const el = document.querySelector('div[data-testid="lazy-column"]') ||
                            document.querySelector('.scaffold-layout__list-container') ||
                            document.querySelector('.jobs-search-results-list');
-                if (el) el.scrollTop += 500;
-                else window.scrollBy(0, 500);
+                if (el) el.scrollTop += 600;
+                else window.scrollBy(0, 600);
             }""")
             page.wait_for_timeout(800)
 
             prev_count = len(collected_jobs_map)
-            for c in extract_all_search_job_cards(page, max_jobs=max_jobs):
+            for c in extract_all_search_job_cards(page, max_jobs=target_max_jobs):
                 collected_jobs_map[c["job_id"]] = c
+
+            if len(collected_jobs_map) >= target_max_jobs:
+                break
 
             if len(collected_jobs_map) == prev_count:
                 no_new_cycles += 1
-                if no_new_cycles >= 3:
-                    break
+                if no_new_cycles >= 2:
+                    page_num += 1
+                    start_offset = page_num * 25
+                    next_url = f"{search_url}&start={start_offset}"
+                    logger(f"  📄 Advancing to LinkedIn search results page {page_num + 1} (start={start_offset})...")
+                    try:
+                        page.goto(next_url, wait_until="domcontentloaded", timeout=30000)
+                        page.wait_for_timeout(2000)
+                        wait_for_job_cards_loaded(page, timeout_ms=8000, logger=logger)
+                        
+                        new_page_cards = extract_all_search_job_cards(page, max_jobs=target_max_jobs)
+                        before_add = len(collected_jobs_map)
+                        for c in new_page_cards:
+                            collected_jobs_map[c["job_id"]] = c
+                        
+                        if len(collected_jobs_map) == before_add:
+                            logger("  ℹ️ No more jobs found on subsequent pages; reached end of search results.")
+                            break
+                        no_new_cycles = 0
+                    except Exception as e:
+                        logger(f"  ⚠️ Pagination error: {e}")
+                        break
             else:
                 no_new_cycles = 0
 
-        extracted_jobs = list(collected_jobs_map.values())[:max_jobs]
+        extracted_jobs = list(collected_jobs_map.values())[:target_max_jobs]
         total_cards = len(extracted_jobs)
-        logger(f"  Found {total_cards} job cards. Processing up to {total_cards}...")
+        logger(f"  Found {total_cards} job cards across {page_num + 1} page(s). Processing {total_cards} jobs...")
 
         if task_manager and hasattr(task_manager, "set_total_posts"):
             task_manager.set_total_posts(total_cards)
@@ -2016,10 +2111,28 @@ def apply_to_single_easy_apply_post(post_id: str, task_manager=None) -> Dict[str
             return {"success": False, "status": "NOT_FOUND", "detail": detail}
         elif status == "RATE_LIMITED":
             from src.db.settings import set_setting
-            set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
-            set_setting("easy_apply_safeguard_reason", detail)
-            logger(f"🚨 {detail}")
-            return {"success": False, "status": "RATE_LIMITED", "detail": detail}
+            is_daily = "today’s easy apply limit" in detail.lower() or "today's easy apply limit" in detail.lower() or "continue applying tomorrow" in detail.lower()
+            if is_daily:
+                import datetime
+                now_dt = datetime.datetime.now()
+                tomorrow_1am = (now_dt + datetime.timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                paused_until = max(int(tomorrow_1am.timestamp()), int(time.time() + 8 * 3600))
+                clean_detail = (
+                    "You reached today’s Easy Apply limit\n\n"
+                    "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                    "Save this job and continue applying tomorrow. Learn more"
+                )
+                set_setting("easy_apply_paused_until", str(paused_until))
+                set_setting("easy_apply_safeguard_reason", clean_detail)
+                set_setting("easy_apply_limit_type", "daily_limit")
+            else:
+                paused_until = int(time.time() + 3600)
+                clean_detail = detail
+                set_setting("easy_apply_paused_until", str(paused_until))
+                set_setting("easy_apply_safeguard_reason", clean_detail)
+                set_setting("easy_apply_limit_type", "fast_pace")
+            logger(f"🚨 {clean_detail}")
+            return {"success": False, "status": "RATE_LIMITED", "detail": clean_detail, "is_daily_limit": is_daily}
         elif status == "REQUIRES_QUESTIONNAIRE":
             update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
             logger(f"📌 Custom questionnaire detected. Direct link saved for screening: {detail}")
@@ -2152,11 +2265,29 @@ def apply_to_batch_easy_apply_posts(
                 logger(f"  🚫 Position closed: {detail}. Status -> NOT_FOUND")
             elif status == "RATE_LIMITED":
                 from src.db.settings import set_setting
-                set_setting("easy_apply_paused_until", str(int(time.time() + 3600)))
-                set_setting("easy_apply_safeguard_reason", detail)
-                logger(f"  🚨 Safeguard rate-limit triggered: {detail}")
+                is_daily = "today’s easy apply limit" in detail.lower() or "today's easy apply limit" in detail.lower() or "continue applying tomorrow" in detail.lower()
+                if is_daily:
+                    import datetime
+                    now_dt = datetime.datetime.now()
+                    tomorrow_1am = (now_dt + datetime.timedelta(days=1)).replace(hour=1, minute=0, second=0, microsecond=0)
+                    paused_until = max(int(tomorrow_1am.timestamp()), int(time.time() + 8 * 3600))
+                    clean_detail = (
+                        "You reached today’s Easy Apply limit\n\n"
+                        "Great effort applying today. We limit Easy Apply submissions to help ensure each application gets the right attention. "
+                        "Save this job and continue applying tomorrow. Learn more"
+                    )
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "daily_limit")
+                else:
+                    paused_until = int(time.time() + 3600)
+                    clean_detail = detail
+                    set_setting("easy_apply_paused_until", str(paused_until))
+                    set_setting("easy_apply_safeguard_reason", clean_detail)
+                    set_setting("easy_apply_limit_type", "fast_pace")
+                logger(f"  🚨 Safeguard rate-limit triggered: {clean_detail}")
                 if task_manager:
-                    task_manager.fail_task(detail)
+                    task_manager.fail_task(clean_detail)
                 break
             elif status == "REQUIRES_QUESTIONNAIRE":
                 update_post_status(post_id, "REQUIRES_QUESTIONNAIRE", rejection_reason=detail)
@@ -2166,6 +2297,9 @@ def apply_to_batch_easy_apply_posts(
                 update_post_status(post_id, "REJECTED", rejection_reason=detail)
                 failed_count += 1
                 logger(f"  🚫 Aborted application due to unreasonable question ({detail}). Status -> REJECTED")
+            elif status == "FAILED":
+                failed_count += 1
+                logger(f"  ⚠️ Application attempt failed ({detail}). Keeping in Ready to Apply queue.")
             else:
                 update_post_status(post_id, "NOT_FOUND", rejection_reason=detail or "Application did not submit")
                 failed_count += 1

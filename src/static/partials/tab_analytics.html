@@ -26,7 +26,7 @@
     </div>
   </div>
 
-  <!-- Section 1: Streamlined KPI Performance Cards -->
+  <!-- Section 1: Streamlined Minimal KPI Cards -->
   <div class="dashboard-section">
     <div class="analytics-kpi-grid">
       <!-- 1. Discovered Jobs -->
@@ -34,33 +34,21 @@
         <div class="kpi-header">
           <span class="kpi-label">Jobs Discovered</span>
           <span class="kpi-header-action" title="Jump to Discovered">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiScraped">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue">Discovered</span>
-          <span class="kpi-note">in selected period</span>
-        </div>
+        <div class="kpi-value" id="kpiScraped">0</div>
       </div>
 
       <!-- 2. Easy Apply Submitted -->
       <div class="kpi-card kpi-easy-apply clickable-kpi" onclick="jumpToEasyApply()" title="Click to open LinkedIn Easy Apply Workspace">
         <div class="kpi-header">
-          <span class="kpi-label">Easy Apply Submitted</span>
+          <span class="kpi-label">Easy Applied</span>
           <span class="kpi-header-action" title="Jump to Easy Apply">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-green" id="kpiEasyApplyReady">0 ready</span>
-          <span class="kpi-note">applications filed</span>
-        </div>
+        <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
       </div>
 
       <!-- 3. Questionnaires Pending -->
@@ -68,16 +56,10 @@
         <div class="kpi-header">
           <span class="kpi-label">Questionnaires</span>
           <span class="kpi-header-action" title="Jump to Screening">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiEasyApplyScreened">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-amber">Action Needed</span>
-          <span class="kpi-note">screening questions</span>
-        </div>
+        <div class="kpi-value" id="kpiEasyApplyScreened">0</div>
       </div>
 
       <!-- 4. Question & Answer Bank -->
@@ -85,50 +67,32 @@
         <div class="kpi-header">
           <span class="kpi-label">Question Bank</span>
           <span class="kpi-header-action" title="Jump to Question Bank">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-purple" id="kpiQuestionBankAnswered">0 answered</span>
-          <span class="kpi-note" id="kpiQuestionBankRate">0% saved</span>
-        </div>
+        <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
       </div>
 
       <!-- 5. Outreach & AI Drafts -->
       <div class="kpi-card kpi-outreach clickable-kpi" onclick="jumpToReviewDrafts()" title="Click to review and dispatch email drafts">
         <div class="kpi-header">
-          <span class="kpi-label">Cold Outreach & Drafts</span>
+          <span class="kpi-label">Cold Outreach</span>
           <span class="kpi-header-action" title="Jump to Review & Drafts">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiDrafted">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue" id="kpiDraftReady">0 ready to send</span>
-          <span class="kpi-note" id="kpiApplied">0 sent</span>
-        </div>
+        <div class="kpi-value" id="kpiDrafted">0</div>
       </div>
 
       <!-- 6. Screened / Cancelled -->
       <div class="kpi-card kpi-cancelled clickable-kpi" onclick="jumpToScreenedApplications()" title="Click to view Screened / Cancelled applications">
         <div class="kpi-header">
-          <span class="kpi-label">Filtered & Dismissed</span>
+          <span class="kpi-label">Filtered Out</span>
           <span class="kpi-header-action" title="Jump to Cancelled History">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiRejected">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 filtered</span>
-          <span class="kpi-note">criteria screened</span>
-        </div>
+        <div class="kpi-value" id="kpiRejected">0</div>
       </div>
     </div>
   </div>

@@ -93,7 +93,7 @@ class EasyApplyBatchScrapePayload(BaseModel):
     keywords: List[str]
     location: Optional[str] = "India"
     time_filter: Optional[str] = "24h"
-    max_jobs: Optional[int] = 20
+    max_jobs: Optional[int] = None
     cycles: Optional[int] = None
     pacing: Optional[str] = None
 

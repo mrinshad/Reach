@@ -481,6 +481,8 @@ def api_trigger_scrape_easy_apply(payload: Optional[ScrapePayload] = None):
     cycles = payload.cycles if payload else None
     pacing = payload.pacing if payload else None
     max_jobs = (payload.max_jobs or payload.limit) if payload else None
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
 
     full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=query, location=loc, time_filter=time_filter)
     res = task_manager.enqueue_task(
@@ -510,6 +512,8 @@ def api_trigger_scrape_easy_apply_batch(payload: EasyApplyBatchScrapePayload):
     cycles = payload.cycles
     pacing = payload.pacing
     max_jobs = payload.max_jobs
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
 
     for kw in keywords:
         full_name, short_name, snippet = build_crawler_labels("linkedin_jobs", query=kw, location=loc, time_filter=time_filter)
@@ -540,6 +544,14 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
     1. A specified list of post IDs (selected from the UI).
     2. All posts currently in REQUIRES_QUESTIONNAIRE status (rerun screened applications).
     """
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    safeguard = get_rate_limit_safeguard_status()
+    if safeguard.get("is_paused"):
+        raise HTTPException(
+            status_code=429,
+            detail=safeguard.get("safeguard_reason") or "Easy Apply is currently paused due to LinkedIn rate limit safeguard."
+        )
+
     target_ids: List[str] = []
 
     if payload.all_ready:
@@ -628,6 +640,14 @@ def api_trigger_batch_easy_apply(payload: EasyApplyBatchApplyPayload):
 @router.post("/easy-apply/{post_id}")
 def api_trigger_single_easy_apply(post_id: str):
     """Enqueue Easy Apply submission for a specific job post."""
+    from src.services.question_bank_service import get_rate_limit_safeguard_status
+    safeguard = get_rate_limit_safeguard_status()
+    if safeguard.get("is_paused"):
+        raise HTTPException(
+            status_code=429,
+            detail=safeguard.get("safeguard_reason") or "Easy Apply is currently paused due to LinkedIn rate limit safeguard."
+        )
+
     from src.services.automation_tasks import run_single_easy_apply
     post = get_post_by_id(post_id)
     title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
@@ -736,11 +756,13 @@ def api_get_scrapers():
 
 @router.post("/scrape")
 def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional[str] = None):
-    """Enqueue scraper by source using the extensible scraper registry with optional query, location, and time_filter."""
+    """Enqueue scraper by source using the extensible scraper registry with optional query, location, cycles, and max_jobs."""
     src = "linkedin"
     query = None
     loc = None
     time_filter = "24h"
+    cycles = None
+    max_jobs = None
     if payload:
         if payload.source:
             src = payload.source
@@ -748,6 +770,8 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
         loc = payload.location
         if payload.time_filter:
             time_filter = payload.time_filter
+        cycles = payload.cycles
+        max_jobs = payload.max_jobs or payload.limit
     elif source:
         src = source
 
@@ -759,8 +783,8 @@ def api_trigger_scrape(payload: Optional[ScrapePayload] = None, source: Optional
             short_name=short_name,
             snippet=snippet,
             runner_func=run_scraper_by_source,
-            args=(src, query, loc, time_filter),
-            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter},
+            args=(src, query, loc, time_filter, cycles, max_jobs),
+            metadata={"source": src, "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "max_jobs": max_jobs},
         )
         msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"Scraper for '{src}' started."
         return {"success": True, "message": msg, **res}

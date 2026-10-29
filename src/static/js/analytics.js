@@ -377,6 +377,54 @@ function filterDiscoveredByLocation(loc) {
   }
 }
 
+function formatCompactNumber(num) {
+  const n = Number(num) || 0;
+  if (Math.abs(n) >= 1_000_000_000) {
+    return (n / 1_000_000_000).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (Math.abs(n) >= 1_000_000) {
+    return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (Math.abs(n) >= 10_000) {
+    return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  if (Math.abs(n) >= 1_000) {
+    return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+  }
+  return n.toLocaleString();
+}
+
+function animateCountUp(elementId, targetVal, duration = 600) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  const target = Number(targetVal) || 0;
+  el.title = target.toLocaleString();
+
+  const startVal = Number(el.dataset.rawVal !== undefined ? el.dataset.rawVal : 0);
+  el.dataset.rawVal = target;
+
+  if (startVal === target) {
+    el.textContent = formatCompactNumber(target);
+    return;
+  }
+
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = progress * (2 - progress); // Ease out quad
+    const current = Math.round(startVal + (target - startVal) * ease);
+    el.textContent = formatCompactNumber(current);
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      el.textContent = formatCompactNumber(target);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
 function renderRejectionReasonsChart(reasons) {
   const canvas = document.getElementById('chartRejectionReasons');
   if (!canvas || typeof Chart === 'undefined') return;
@@ -408,40 +456,21 @@ async function loadAnalytics(days) {
     const data = await res.json();
     state.analyticsData = data;
 
-    // Update KPI metrics
+    // Update KPI metrics with count-up animation & shortened format
     if (data.summary) {
+      animateCountUp('kpiScraped', data.summary.total_scraped || 0);
+      animateCountUp('kpiEasyApplyApplied', data.summary.easy_apply_applied || 0);
+      animateCountUp('kpiEasyApplyScreened', data.summary.easy_apply_screened || 0);
+      animateCountUp('kpiQuestionBankTotal', data.summary.question_bank_total || 0);
+      animateCountUp('kpiDrafted', data.summary.total_drafted || 0);
+      animateCountUp('kpiRejected', data.summary.total_rejected || 0);
+
       const elApplied = document.getElementById('kpiApplied');
-      if (elApplied) elApplied.textContent = Number(data.summary.total_sent || 0).toLocaleString();
+      if (elApplied) elApplied.textContent = formatCompactNumber(data.summary.total_sent || 0);
       const elConv = document.getElementById('kpiConversionRate');
       if (elConv) elConv.textContent = `${data.summary.sent_conversion_pct || 0}% conversion`;
-      const elScraped = document.getElementById('kpiScraped');
-      if (elScraped) elScraped.textContent = Number(data.summary.total_scraped || 0).toLocaleString();
-      const elRate = document.getElementById('kpiEmailRate');
-      if (elRate) elRate.textContent = `${data.summary.email_rate_pct || 0}% emails found`;
-      const elDirect = document.getElementById('kpiDirectEmails');
-      if (elDirect) elDirect.textContent = Number(data.summary.with_emails || 0).toLocaleString();
-      const elDrafted = document.getElementById('kpiDrafted');
-      if (elDrafted) elDrafted.textContent = Number(data.summary.total_drafted || 0).toLocaleString();
-      const elDraftReady = document.getElementById('kpiDraftReady');
-      if (elDraftReady) elDraftReady.textContent = `${Number(data.summary.total_drafted || 0).toLocaleString()} ready to send`;
-      const elPendingGen = document.getElementById('kpiPendingGen');
-      if (elPendingGen) elPendingGen.textContent = `${Number(data.summary.pending_review || 0).toLocaleString()} pending AI`;
-      const elRejected = document.getElementById('kpiRejected');
-      if (elRejected) elRejected.textContent = Number(data.summary.total_rejected || 0).toLocaleString();
-      const elSpamFlagged = document.getElementById('kpiSpamFlagged');
-      if (elSpamFlagged) elSpamFlagged.textContent = `${Number(data.summary.potential_spam_total || 0).toLocaleString()} potential spam`;
-
-      // LinkedIn Easy Apply KPIs
-      const elEasyApplied = document.getElementById('kpiEasyApplyApplied');
-      if (elEasyApplied) elEasyApplied.textContent = Number(data.summary.easy_apply_applied || 0).toLocaleString();
       const elEasyReady = document.getElementById('kpiEasyApplyReady');
       if (elEasyReady) elEasyReady.textContent = `${Number(data.summary.easy_apply_ready || 0).toLocaleString()} ready`;
-      const elEasyScreened = document.getElementById('kpiEasyApplyScreened');
-      if (elEasyScreened) elEasyScreened.textContent = `${Number(data.summary.easy_apply_screened || 0).toLocaleString()} questionnaires`;
-
-      // Screening Question Bank KPIs
-      const elQBankTotal = document.getElementById('kpiQuestionBankTotal');
-      if (elQBankTotal) elQBankTotal.textContent = Number(data.summary.question_bank_total || 0).toLocaleString();
       const elQBankAnswered = document.getElementById('kpiQuestionBankAnswered');
       if (elQBankAnswered) elQBankAnswered.textContent = `${Number(data.summary.question_bank_answered || 0).toLocaleString()} answered`;
       const elQBankRate = document.getElementById('kpiQuestionBankRate');
@@ -497,5 +526,7 @@ window.renderExperienceBreakdownChart = renderExperienceBreakdownChart;
 window.renderTopLocationsChart = renderTopLocationsChart;
 window.filterDiscoveredByLocation = filterDiscoveredByLocation;
 window.renderRejectionReasonsChart = renderRejectionReasonsChart;
+window.formatCompactNumber = formatCompactNumber;
+window.animateCountUp = animateCountUp;
 window.loadAnalytics = loadAnalytics;
 window.setAnalyticsTimeframe = setAnalyticsTimeframe;

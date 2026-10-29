@@ -500,6 +500,27 @@ async function dismissSingleEasyJob(postId, event) {
 }
 
 async function triggerSingleEasyApply(postId) {
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
+
   const post = easyApplyPosts.find((p) => p.id === postId);
   const title = post ? post.author_headline : 'job';
 
@@ -953,6 +974,27 @@ async function batchApplySelectedEasyJobs() {
   const ids = Array.from(selectedEasyJobIds);
   if (ids.length === 0) return;
 
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
+
   const confirmed = await showConfirm(
     'Batch Easy Apply',
     `Queue automated Easy Apply for ${ids.length} selected jobs sequentially?\n\nSaved answers from your Question Bank will be automatically filled, and applications will submit directly once all questions are answered.`,
@@ -999,6 +1041,27 @@ async function triggerRerunScreenedApplications() {
     showAlert('No Screened Jobs', 'There are currently no applications requiring questionnaire screening in your queue.');
     return;
   }
+
+  // Pre-check if Daily Limit or Safeguard pause is currently active
+  try {
+    const statusRes = await fetch('/api/easy-apply/rate-limit-status');
+    if (statusRes.ok) {
+      const safeguard = await statusRes.json();
+      if (safeguard && safeguard.is_paused) {
+        if (safeguard.is_daily_limit && typeof showDailyLimitModal === 'function') {
+          showDailyLimitModal(safeguard.safeguard_reason);
+          return;
+        } else {
+          showCenterAlert(
+            'LinkedIn Safeguard Active',
+            safeguard.safeguard_reason || 'Easy Apply is currently paused to protect your account.',
+            { danger: false, confirmText: 'Understood' }
+          );
+          return;
+        }
+      }
+    }
+  } catch (_) {}
 
   const confirmed = await showConfirm(
     'Rerun Screened Applications',
@@ -1602,16 +1665,19 @@ function openBulkSearchModal() {
   const currentTime = document.getElementById('easyTimeFilter')?.value || '24h';
   const currentPacing = document.getElementById('selectEasyPacing')?.value || 'safe';
   const currentCycles = document.getElementById('easyCrawlerCycles')?.value || '8';
+  const currentMaxJobs = document.getElementById('easyMaxJobs')?.value || '50';
 
   const locInput = document.getElementById('bulkSearchLocation');
   const timeSelect = document.getElementById('bulkTimeFilter');
   const pacingSelect = document.getElementById('bulkEasyPacing');
   const cyclesInput = document.getElementById('bulkEasyCycles');
+  const maxJobsInput = document.getElementById('bulkEasyMaxJobs');
 
   if (locInput) locInput.value = currentLoc;
   if (timeSelect) timeSelect.value = currentTime;
   if (pacingSelect) pacingSelect.value = currentPacing;
   if (cyclesInput) cyclesInput.value = currentCycles;
+  if (maxJobsInput) maxJobsInput.value = currentMaxJobs;
 
   // Pre-fill keywords from active search query if textarea is currently empty
   const activeQuery = (document.getElementById('easySearchQuery')?.value || '').trim();
@@ -1751,6 +1817,7 @@ async function submitBulkEasySearch() {
   const location = (document.getElementById('bulkSearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('bulkTimeFilter')?.value || '24h';
   const cycles = parseInt(document.getElementById('bulkEasyCycles')?.value || document.getElementById('easyCrawlerCycles')?.value || '8', 10);
+  const maxJobs = parseInt(document.getElementById('bulkEasyMaxJobs')?.value || document.getElementById('easyMaxJobs')?.value || '50', 10);
   const pacing = document.getElementById('bulkEasyPacing')?.value || document.getElementById('selectEasyPacing')?.value || 'safe';
   const pacingLabels = { safe: 'Safe (45-75s)', slow: 'Extra Slow (75-120s)', standard: 'Moderate (30-45s)' };
   const pacingLabel = pacingLabels[pacing] || pacing;
@@ -1758,7 +1825,7 @@ async function submitBulkEasySearch() {
 
   const confirmed = await showConfirm(
     'Launch Bulk LinkedIn Search',
-    `Enqueue ${count} searches sequentially in background for "${location}"?\n\n• Cycles: ${cycles} per role\n• Submission delay: ${pacingLabel}\n• Persistent headed/headless Firefox`,
+    `Enqueue ${count} searches sequentially in background for "${location}"?\n\n• Cycles: ${cycles} per role\n• Max Jobs: ${maxJobs} per role\n• Submission delay: ${pacingLabel}\n• Persistent headed/headless Firefox`,
     { confirmText: `Queue ${count} Searches` }
   );
   if (!confirmed) return;
@@ -1775,6 +1842,7 @@ async function submitBulkEasySearch() {
         location: location,
         time_filter: timeFilter,
         cycles: isNaN(cycles) ? 8 : cycles,
+        max_jobs: isNaN(maxJobs) ? 50 : maxJobs,
         pacing: pacing,
       }),
     });
@@ -2063,7 +2131,13 @@ async function checkRateLimitSafeguard() {
 
     if (data.is_paused && data.seconds_remaining > 0) {
       banner.classList.remove('hidden');
-      if (msgEl) msgEl.textContent = data.safeguard_reason || 'LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.';
+      if (data.is_daily_limit) {
+        if (msgEl) {
+          msgEl.innerHTML = `<strong>You reached today’s Easy Apply limit:</strong> Great effort applying today. Automation paused until tomorrow to protect your account. <a href="javascript:void(0)" onclick="showDailyLimitModal()" style="color:#60a5fa; text-decoration:underline; font-weight:600; margin-left:4px;">View details</a>`;
+        }
+      } else {
+        if (msgEl) msgEl.textContent = data.safeguard_reason || 'LinkedIn temporarily paused Easy Apply ("applying at a fast pace"). Automation is paused to protect your account.';
+      }
 
       if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
 
@@ -2074,9 +2148,15 @@ async function checkRateLimitSafeguard() {
           if (rateLimitTimerInterval) clearInterval(rateLimitTimerInterval);
           return;
         }
-        const m = Math.floor(remaining / 60);
-        const s = remaining % 60;
-        if (timerEl) timerEl.textContent = `(${m}m ${s < 10 ? '0' : ''}${s}s)`;
+        if (data.is_daily_limit) {
+          const h = Math.floor(remaining / 3600);
+          const m = Math.floor((remaining % 3600) / 60);
+          if (timerEl) timerEl.textContent = `(Resets in ${h}h ${m}m)`;
+        } else {
+          const m = Math.floor(remaining / 60);
+          const s = remaining % 60;
+          if (timerEl) timerEl.textContent = `(${m}m ${s < 10 ? '0' : ''}${s}s)`;
+        }
         remaining--;
       };
       updateTimer();

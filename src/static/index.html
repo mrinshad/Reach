@@ -491,7 +491,7 @@
               <div class="cycles-control-wrap" title="Number of scroll & discovery passes (automatically saved permanently)">
                 <label for="crawlerInputCycles" class="cycles-label">Cycles:</label>
                 <div class="cycles-stepper-box">
-                  <input type="number" id="crawlerInputCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                  <input type="number" id="crawlerInputCycles" class="input-cycles-num" min="1" max="1000" value="8" />
                   <div class="cycles-stepper-btns">
                     <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('crawlerInputCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
                       <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
@@ -966,7 +966,7 @@
         <div class="cycles-control-wrap" title="Number of scroll & discovery passes (automatically saved permanently)">
           <label for="easyCrawlerCycles" class="cycles-label">Cycles:</label>
           <div class="cycles-stepper-box">
-            <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="50" value="8" />
+            <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="1000" value="8" />
             <div class="cycles-stepper-btns">
               <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyCrawlerCycles', 1)"
                 title="Increase cycles" aria-label="Increase cycles">
@@ -988,9 +988,9 @@
             <span class="tooltip-icon-circle">?</span>
             <span class="tooltip-popover">
               <strong>What is a Cycle?</strong><br>
-              A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs
+              A cycle is one scroll &amp; discovery pass across search results. Each cycle scans visible jobs and advances pagination (~10–25 jobs
               per cycle).<br>
-              Increase cycles (e.g. 5–15) to search deeper and find more jobs.<br>
+              Increase cycles (e.g. 10–100) to search deeper across multiple pages.<br>
               <em>Cycles setting is automatically saved permanently.</em>
             </span>
           </span>
@@ -998,7 +998,7 @@
         <div class="cycles-control-wrap" title="Maximum jobs to discover & collect (automatically saved permanently)">
           <label for="easyMaxJobs" class="cycles-label">Max Jobs:</label>
           <div class="cycles-stepper-box">
-            <input type="number" id="easyMaxJobs" class="input-cycles-num" min="5" max="200" step="5" value="25" />
+            <input type="number" id="easyMaxJobs" class="input-cycles-num" min="5" max="1000" step="5" value="50" />
             <div class="cycles-stepper-btns">
               <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyMaxJobs', 5)"
                 title="Increase max jobs" aria-label="Increase max jobs">
@@ -1679,7 +1679,7 @@
     </div>
   </div>
 
-  <!-- Section 1: Streamlined KPI Performance Cards -->
+  <!-- Section 1: Streamlined Minimal KPI Cards -->
   <div class="dashboard-section">
     <div class="analytics-kpi-grid">
       <!-- 1. Discovered Jobs -->
@@ -1687,33 +1687,21 @@
         <div class="kpi-header">
           <span class="kpi-label">Jobs Discovered</span>
           <span class="kpi-header-action" title="Jump to Discovered">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiScraped">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue">Discovered</span>
-          <span class="kpi-note">in selected period</span>
-        </div>
+        <div class="kpi-value" id="kpiScraped">0</div>
       </div>
 
       <!-- 2. Easy Apply Submitted -->
       <div class="kpi-card kpi-easy-apply clickable-kpi" onclick="jumpToEasyApply()" title="Click to open LinkedIn Easy Apply Workspace">
         <div class="kpi-header">
-          <span class="kpi-label">Easy Apply Submitted</span>
+          <span class="kpi-label">Easy Applied</span>
           <span class="kpi-header-action" title="Jump to Easy Apply">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-green" id="kpiEasyApplyReady">0 ready</span>
-          <span class="kpi-note">applications filed</span>
-        </div>
+        <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
       </div>
 
       <!-- 3. Questionnaires Pending -->
@@ -1721,16 +1709,10 @@
         <div class="kpi-header">
           <span class="kpi-label">Questionnaires</span>
           <span class="kpi-header-action" title="Jump to Screening">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiEasyApplyScreened">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-amber">Action Needed</span>
-          <span class="kpi-note">screening questions</span>
-        </div>
+        <div class="kpi-value" id="kpiEasyApplyScreened">0</div>
       </div>
 
       <!-- 4. Question & Answer Bank -->
@@ -1738,50 +1720,32 @@
         <div class="kpi-header">
           <span class="kpi-label">Question Bank</span>
           <span class="kpi-header-action" title="Jump to Question Bank">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-purple" id="kpiQuestionBankAnswered">0 answered</span>
-          <span class="kpi-note" id="kpiQuestionBankRate">0% saved</span>
-        </div>
+        <div class="kpi-value" id="kpiQuestionBankTotal">0</div>
       </div>
 
       <!-- 5. Outreach & AI Drafts -->
       <div class="kpi-card kpi-outreach clickable-kpi" onclick="jumpToReviewDrafts()" title="Click to review and dispatch email drafts">
         <div class="kpi-header">
-          <span class="kpi-label">Cold Outreach & Drafts</span>
+          <span class="kpi-label">Cold Outreach</span>
           <span class="kpi-header-action" title="Jump to Review & Drafts">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiDrafted">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-blue" id="kpiDraftReady">0 ready to send</span>
-          <span class="kpi-note" id="kpiApplied">0 sent</span>
-        </div>
+        <div class="kpi-value" id="kpiDrafted">0</div>
       </div>
 
       <!-- 6. Screened / Cancelled -->
       <div class="kpi-card kpi-cancelled clickable-kpi" onclick="jumpToScreenedApplications()" title="Click to view Screened / Cancelled applications">
         <div class="kpi-header">
-          <span class="kpi-label">Filtered & Dismissed</span>
+          <span class="kpi-label">Filtered Out</span>
           <span class="kpi-header-action" title="Jump to Cancelled History">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
           </span>
         </div>
-        <div class="kpi-num-box">
-          <div class="kpi-value" id="kpiRejected">0</div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-badge badge-rose" id="kpiSpamFlagged">0 filtered</span>
-          <span class="kpi-note">criteria screened</span>
-        </div>
+        <div class="kpi-value" id="kpiRejected">0</div>
       </div>
     </div>
   </div>
@@ -2530,6 +2494,62 @@
     </div>
   </div>
 
+  <!-- LinkedIn Daily Easy Apply Limit Modal -->
+  <div class="modal-overlay hidden" id="modalDailyLimit" onclick="if (event.target === this) closeDailyLimitModal()">
+    <div class="modal-box modal-md" style="max-width: 520px; border-top: 4px solid #f59e0b;">
+      <div class="modal-top" style="align-items: flex-start;">
+        <div style="display: flex; gap: 0.85rem; align-items: flex-start;">
+          <div style="width: 42px; height: 42px; border-radius: 10px; background: rgba(245, 158, 11, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 id="dailyLimitTitle" style="font-size: 1.15rem; font-weight: 700; color: #fff; margin: 0 0 0.25rem 0;">You reached today’s Easy Apply limit</h3>
+            <span style="font-size: 0.78rem; color: #f59e0b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">LinkedIn Application Safeguard</span>
+          </div>
+        </div>
+        <button class="close-x" onclick="closeDailyLimitModal()">×</button>
+      </div>
+
+      <div class="modal-body" style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 1.1rem; color: #fde68a; font-size: 0.9rem; line-height: 1.6;">
+          <strong>Great effort applying today.</strong> We limit Easy Apply submissions to help ensure each application gets the right attention. Save this job and continue applying tomorrow. <a href="https://www.linkedin.com/help/linkedin/answer/a511306" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: underline; margin-left: 2px;">Learn more</a>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.82rem; line-height: 1.5;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; background: var(--bg-surface-elevated, #1e2230); border-radius: 6px; border: 1px solid var(--border-color, #2d3348);">
+            <span style="font-weight: 500; color: var(--text-dim);">Status:</span>
+            <span style="color: #f59e0b; font-weight: 600;">🛑 Daily Limit Hit (Paused)</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; background: var(--bg-surface-elevated, #1e2230); border-radius: 6px; border: 1px solid var(--border-color, #2d3348);">
+            <span style="font-weight: 500; color: var(--text-dim);">Automation Resumes:</span>
+            <span id="dailyLimitResetsTimer" style="color: #38bdf8; font-weight: 600; font-family: monospace;">Tomorrow</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.85rem; background: var(--bg-surface-elevated, #1e2230); border-radius: 6px; border: 1px solid var(--border-color, #2d3348);">
+            <span style="font-weight: 500; color: var(--text-dim);">Queue Preservation:</span>
+            <span style="color: #34d399; font-weight: 600;">✓ All jobs kept in Ready to Apply</span>
+          </div>
+        </div>
+
+        <p style="font-size: 0.78rem; color: var(--text-muted); margin: 0; line-height: 1.45;">
+          Your unsubmitted applications have been preserved safely in the <strong>Ready to Apply</strong> queue. You can resume applying as soon as LinkedIn resets your quota tomorrow.
+        </p>
+      </div>
+
+      <div class="modal-bottom" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-xs" style="color: var(--text-muted); border-color: rgba(255,255,255,0.15);" onclick="resumeEasyApplySafeguardFromModal()" title="Force clear pause and resume immediately if you're sure">
+          Force Clear Pause
+        </button>
+        <button class="btn btn-primary" onclick="closeDailyLimitModal()">
+          Got It, Continue Tomorrow
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Crawl Completion Summary Modal -->
   <div class="modal-overlay hidden" id="crawlSummaryModal" onclick="if (event.target === this) closeCrawlSummaryModal()">
     <div class="modal-box modal-md">
@@ -2979,7 +2999,7 @@
             <div class="cycles-control-wrap" style="height: 36px; width: 100%; justify-content: space-between; box-sizing: border-box;" title="Number of scroll & discovery passes per role">
               <span class="cycles-label">Cycles:</span>
               <div class="cycles-stepper-box">
-                <input type="number" id="bulkCrawlerCycles" class="input-cycles-num" min="1" max="100" value="8" />
+                <input type="number" id="bulkCrawlerCycles" class="input-cycles-num" min="1" max="1000" value="8" />
                 <div class="cycles-stepper-btns">
                   <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('bulkCrawlerCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
@@ -3094,7 +3114,7 @@
             <div class="cycles-control-wrap" style="height: 36px; width: 100%; justify-content: space-between; box-sizing: border-box;" title="Number of scroll & discovery passes per role">
               <span class="cycles-label">Cycles:</span>
               <div class="cycles-stepper-box">
-                <input type="number" id="bulkEasyCycles" class="input-cycles-num" min="1" max="50" value="8" />
+                <input type="number" id="bulkEasyCycles" class="input-cycles-num" min="1" max="1000" value="8" />
                 <div class="cycles-stepper-btns">
                   <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('bulkEasyCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
                     <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
@@ -3111,6 +3131,23 @@
                   A cycle is one scroll &amp; search pass (~5–8 jobs per cycle).
                 </span>
               </span>
+            </div>
+          </div>
+          <div class="form-block">
+            <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-dim);">Max Jobs per Search:</label>
+            <div class="cycles-control-wrap" style="height: 36px; width: 100%; justify-content: space-between; box-sizing: border-box;" title="Target jobs to discover & collect">
+              <span class="cycles-label">Max Jobs:</span>
+              <div class="cycles-stepper-box">
+                <input type="number" id="bulkEasyMaxJobs" class="input-cycles-num" min="5" max="1000" step="5" value="50" />
+                <div class="cycles-stepper-btns">
+                  <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('bulkEasyMaxJobs', 5)" title="Increase jobs" aria-label="Increase jobs">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  </button>
+                  <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('bulkEasyMaxJobs', -5)" title="Decrease jobs" aria-label="Decrease jobs">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -74,7 +74,7 @@
         <div class="cycles-control-wrap" title="Number of scroll & discovery passes (automatically saved permanently)">
           <label for="easyCrawlerCycles" class="cycles-label">Cycles:</label>
           <div class="cycles-stepper-box">
-            <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="50" value="8" />
+            <input type="number" id="easyCrawlerCycles" class="input-cycles-num" min="1" max="1000" value="8" />
             <div class="cycles-stepper-btns">
               <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyCrawlerCycles', 1)"
                 title="Increase cycles" aria-label="Increase cycles">
@@ -96,9 +96,9 @@
             <span class="tooltip-icon-circle">?</span>
             <span class="tooltip-popover">
               <strong>What is a Cycle?</strong><br>
-              A cycle is one scroll &amp; search pass. Each cycle scrolls down to load a new batch of jobs (~5–8 jobs
+              A cycle is one scroll &amp; discovery pass across search results. Each cycle scans visible jobs and advances pagination (~10–25 jobs
               per cycle).<br>
-              Increase cycles (e.g. 5–15) to search deeper and find more jobs.<br>
+              Increase cycles (e.g. 10–100) to search deeper across multiple pages.<br>
               <em>Cycles setting is automatically saved permanently.</em>
             </span>
           </span>
@@ -106,7 +106,7 @@
         <div class="cycles-control-wrap" title="Maximum jobs to discover & collect (automatically saved permanently)">
           <label for="easyMaxJobs" class="cycles-label">Max Jobs:</label>
           <div class="cycles-stepper-box">
-            <input type="number" id="easyMaxJobs" class="input-cycles-num" min="5" max="200" step="5" value="25" />
+            <input type="number" id="easyMaxJobs" class="input-cycles-num" min="5" max="1000" step="5" value="50" />
             <div class="cycles-stepper-btns">
               <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('easyMaxJobs', 5)"
                 title="Increase max jobs" aria-label="Increase max jobs">

@@ -207,6 +207,7 @@ def get_rate_limit_safeguard_status() -> Dict[str, Any]:
         "easy_apply_safeguard_reason",
         "LinkedIn safeguard: Easy Apply temporarily paused due to fast pace to protect account.",
     )
+    limit_type = get_setting("easy_apply_limit_type", "fast_pace")
     try:
         paused_until = int(paused_until_raw)
     except Exception:
@@ -215,12 +216,17 @@ def get_rate_limit_safeguard_status() -> Dict[str, Any]:
     now = int(time.time())
     is_paused = paused_until > now
     seconds_remaining = max(0, paused_until - now) if is_paused else 0
+    is_daily = (limit_type == "daily_limit") or (
+        "today" in (reason or "").lower() and "limit" in (reason or "").lower()
+    ) or ("continue applying tomorrow" in (reason or "").lower())
 
     return {
         "is_paused": is_paused,
         "paused_until": paused_until,
         "seconds_remaining": seconds_remaining,
         "safeguard_reason": reason if is_paused else None,
+        "limit_type": "daily_limit" if is_daily else "fast_pace",
+        "is_daily_limit": is_daily,
     }
 
 
@@ -228,4 +234,5 @@ def reset_rate_limit_safeguard() -> Dict[str, Any]:
     """Clear safeguard cooldown in settings to resume Easy Apply immediately."""
     set_setting("easy_apply_paused_until", "0")
     set_setting("easy_apply_safeguard_reason", "")
+    set_setting("easy_apply_limit_type", "fast_pace")
     return {"success": True, "message": "Safeguard pause cleared. Easy Apply resumed."}

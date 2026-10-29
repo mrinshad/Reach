@@ -1490,7 +1490,10 @@ def run_linkedin_easy_apply_scraper(
     if location and location.strip():
         task_label = f"LinkedIn Easy Apply Collector ({location.strip()})"
 
-    limit_val = max_jobs if (max_jobs and max_jobs > 0) else 25
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        limit_val = max(max_jobs or 25, cycles * 5)
+    else:
+        limit_val = max_jobs if (max_jobs and max_jobs > 0) else 50
     extra_env = {
         "SCRAPER_SOURCE": "dashboard",
         "SCRAPER_LIMIT": str(limit_val),
@@ -1584,8 +1587,15 @@ def get_registered_scrapers() -> List[Dict[str, str]]:
     ]
 
 
-def run_scraper_by_source(source_id: str, query: Optional[str] = None, location: Optional[str] = None, time_filter: Optional[str] = None):
-    """Dispatch and run a scraper background task by source ID with optional query, location, and time filter."""
+def run_scraper_by_source(
+    source_id: str,
+    query: Optional[str] = None,
+    location: Optional[str] = None,
+    time_filter: Optional[str] = None,
+    cycles: Optional[int] = None,
+    max_jobs: Optional[int] = None,
+):
+    """Dispatch and run a scraper background task by source ID with optional query, location, cycles, and max jobs."""
     source_lower = (source_id or "linkedin").strip().lower()
     scraper = SCRAPER_REGISTRY.get(source_lower)
     if not scraper:
@@ -1593,9 +1603,9 @@ def run_scraper_by_source(source_id: str, query: Optional[str] = None, location:
         raise ValueError(f"Unknown scraper source '{source_id}'. Supported sources: {valid_sources}")
     
     if source_lower == "linkedin":
-        run_linkedin_scraper(query=query, location=location, time_filter=time_filter)
+        run_linkedin_scraper(query=query, location=location, time_filter=time_filter, cycles=cycles)
     elif source_lower in ("linkedin_jobs", "easy_apply"):
-        run_linkedin_easy_apply_scraper(query=query, location=location, time_filter=time_filter)
+        run_linkedin_easy_apply_scraper(query=query, location=location, time_filter=time_filter, cycles=cycles, max_jobs=max_jobs)
     else:
         scraper["runner"]()
 
