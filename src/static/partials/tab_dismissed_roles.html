@@ -1,0 +1,162 @@
+<!-- TAB: Dismissed Roles Registry Workspace -->
+<div class="tab-panel hidden" id="tabDismissedRoles">
+  <!-- Standard Reach Toolbar -->
+  <div class="toolbar" style="margin-bottom: 0.85rem;">
+    <!-- Filter Pills (Left) -->
+    <div class="filter-pills" id="dismissedSourcePills">
+      <button class="pill active" data-source="ALL" onclick="setDismissedRoleSourceFilter('ALL')">
+        <span>All Sources</span> <span class="badge-count" id="countDismissedAll">0</span>
+      </button>
+      <button class="pill" data-source="LinkedIn Posts" onclick="setDismissedRoleSourceFilter('LinkedIn Posts')">
+        <span>LinkedIn</span> <span class="badge-count" id="countDismissedLinkedIn">0</span>
+      </button>
+      <button class="pill" data-source="LinkedIn Easy Apply" onclick="setDismissedRoleSourceFilter('LinkedIn Easy Apply')">
+        <span>Easy Apply</span> <span class="badge-count" id="countDismissedEasyApply">0</span>
+      </button>
+      <button class="pill" data-source="Indeed Apply" onclick="setDismissedRoleSourceFilter('Indeed Apply')">
+        <span>Indeed</span> <span class="badge-count" id="countDismissedIndeed">0</span>
+      </button>
+      <button class="pill" data-source="Infopark" onclick="setDismissedRoleSourceFilter('Infopark')">
+        <span>Infopark</span> <span class="badge-count" id="countDismissedInfopark">0</span>
+      </button>
+      <button class="pill" data-source="Manual" onclick="setDismissedRoleSourceFilter('Manual')">
+        <span>Manual</span> <span class="badge-count" id="countDismissedManual">0</span>
+      </button>
+    </div>
+
+    <!-- Actions, Sort & Search (Right) -->
+    <div class="toolbar-right">
+      <button class="btn btn-primary btn-sm hidden" id="btnBatchDeleteDismissedRoles" onclick="deleteBatchDismissedRoles()" title="Restore selected roles so they will not be auto-dismissed">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span id="btnBatchDeleteDismissedRolesText">Restore Selected (0)</span>
+      </button>
+
+      <button class="btn btn-outline btn-sm" id="btnOpenAddDismissedRoleModal" onclick="openAddDismissedRoleModal()" title="Add a custom role title to the exclusion registry">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Add Role</span>
+      </button>
+
+      <button class="btn btn-outline btn-sm" id="btnSyncDismissedFromHistory" onclick="syncDismissedRolesFromHistory()" title="Scan historical rejected posts for new uncataloged roles">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+        </svg>
+        <span>Sync History</span>
+      </button>
+
+      <select id="selectDismissedRoleSort" class="select-clean" onchange="handleSortDismissedRoles(this.value)" title="Order by name, date, or occurrences">
+        <option value="name_asc" selected>Sort: Name (A-Z)</option>
+        <option value="name_desc">Sort: Name (Z-A)</option>
+        <option value="recent">Sort: Newest</option>
+        <option value="oldest">Sort: Oldest</option>
+        <option value="occurrences_desc">Sort: Occurrences</option>
+      </select>
+
+      <span class="filter-count-badge" id="badgeDismissedRolesResults">0 roles</span>
+
+      <div class="search-box">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="inputSearchDismissedRoles" placeholder="Search role title, reason..." oninput="handleSearchDismissedRoles(this.value)" />
+      </div>
+
+      <button class="btn-clear-filters hidden" id="btnClearDismissedFilters" onclick="clearDismissedFilters()" title="Reset search and filters back to All">
+        <span>✕ Clear</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dedicated Batch Actions Bar (Shown when multiple roles are selected) -->
+  <div class="batch-actions-bar hidden" id="dismissedBatchBanner">
+    <div class="batch-bar-left">
+      <span class="selected-count-badge" id="dismissedSelectedCount">0 roles selected</span>
+    </div>
+    <div class="batch-bar-actions">
+      <button class="btn btn-primary btn-sm" onclick="deleteBatchDismissedRoles()" title="Restore selected roles to un-dismiss them so scrapers discover them again">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span>Restore / Un-dismiss (<span id="dismissedBatchCount">0</span>)</span>
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="clearDismissedSelection()" title="Clear selection">
+        <span>✕ Clear Selection</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Table Section (Reach-Table inside Table-Card) -->
+  <div class="table-card">
+    <!-- Top Table Header Bar / Pagination Controls -->
+    <div class="table-header-bar" id="dismissedTableHeaderBar">
+      <div class="pagination-info" id="dismissedRolesPageInfoTop">
+        Showing 0–0 of 0 roles
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectDismissedLimitTop" onchange="changeDismissedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="dismissedPageButtonsTop">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <table class="reach-table" id="tableDismissedRoles">
+      <thead>
+        <tr>
+          <th width="35" style="text-align: center;">
+            <input type="checkbox" id="selectAllDismissedRoles" class="table-cb" onchange="toggleSelectAllDismissedRoles(this.checked)" title="Select all on this page" />
+          </th>
+          <th style="min-width: 220px;">Role Title</th>
+          <th width="150">Source Channel</th>
+          <th style="min-width: 200px;">Dismissal Reason</th>
+          <th width="105" style="text-align: center;">Occurrences</th>
+          <th width="135">Last Added</th>
+          <th width="100" style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyDismissedRoles">
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-dim);">
+            Loading dismissed roles registry...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Table Footer / Pagination Controls -->
+    <div class="table-footer" id="dismissedTableFooter">
+      <div class="pagination-info" id="dismissedRolesPageInfo">
+        Showing 0–0 of 0 roles
+      </div>
+
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectDismissedLimit" onchange="changeDismissedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+
+        <div class="page-buttons" id="dismissedPageButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -37,6 +37,7 @@ from .chatgpt_service import (
     is_unsuitable_response,
     is_experience_rejection,
     get_default_chatgpt_url,
+    is_valid_email_draft,
 )
 from .gmail_service import (
     navigate_to_gmail,
@@ -610,6 +611,13 @@ class TaskManager:
             if current_step:
                 self.state["current_step"] = current_step
 
+    def update_step(self, step: str, completed_items: Optional[int] = None):
+        """Update active step description and optionally completed items count."""
+        with self._lock:
+            self.state["current_step"] = step
+            if completed_items is not None:
+                self.state["completed_items"] = completed_items
+
     def finish_task(self, success_message: str = "Task completed successfully.", crawl_stats: Optional[Dict[str, Any]] = None):
         with self._lock:
             self.state["status"] = "completed"
@@ -782,22 +790,29 @@ def run_chatgpt_batch(post_ids: List[str], force: bool = False):
                                     "skill requirements confidently."
                                 )
                                 retry_subject, retry_body = send_followup_and_get_email(page, followup_prompt)
-                                if retry_subject != "UNSUITABLE_JD" and not is_unsuitable_response(retry_body):
+                                is_valid, val_reason = is_valid_email_draft(retry_subject, retry_body)
+                                if retry_subject != "UNSUITABLE_JD" and not is_unsuitable_response(retry_body) and is_valid:
                                     save_chatgpt_response(post_id, retry_subject, retry_body)
                                     success_count += 1
                                     task_manager.log(f"  ✓ Email generated (experience override): '{retry_subject[:60]}...'")
                                 else:
                                     update_post_status(post_id, "DISCOVERED")
-                                    task_manager.log(f"  ℹ️ Kept in Discovered queue (experience-based cancellation disabled).")
+                                    reason_msg = val_reason if not is_valid else "experience override skipped"
+                                    task_manager.log(f"  ℹ️ Kept in Discovered queue ({reason_msg}).")
                             else:
                                 update_post_status(post_id, "REJECTED", rejection_reason=reason)
                                 update_post_email(post_id, "UNSUITABLE_JD", body)
                                 rejected_count += 1
                                 task_manager.log(f"  🚫 [Auto-Cancelled] Unsuitable JD for {author}: {reason}")
                         else:
-                            save_chatgpt_response(post_id, subject, body)
-                            success_count += 1
-                            task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")
+                            is_valid, val_reason = is_valid_email_draft(subject, body)
+                            if is_valid:
+                                save_chatgpt_response(post_id, subject, body)
+                                success_count += 1
+                                task_manager.log(f"  ✓ Email generated: '{subject[:60]}...'")
+                            else:
+                                update_post_status(post_id, "DISCOVERED")
+                                task_manager.log(f"  ⚠️ Generated draft rejected ({val_reason}). Kept in Discovered for re-generation.")
                     except Exception as post_err:
                         fallback_status = "EMAIL_GENERATED" if prev_status == "EMAIL_GENERATED" else "DISCOVERED"
                         update_post_status(post_id, fallback_status)
@@ -1229,6 +1244,26 @@ def run_send_batch_drafts(post_ids: List[str]):
                         task_manager.update_progress(idx)
                         continue
 
+                    # Validate email body content quality (prevent sending prompt directives or leaks)
+                    is_valid_draft, draft_err = is_valid_email_draft(subject, body)
+                    if not is_valid_draft:
+                        task_manager.log(f"  🛑 Skipping {author}: draft content invalid ({draft_err}). Will not send.")
+                        failed.append((author, f"Invalid draft ({draft_err})"))
+                        task_manager.update_progress(idx)
+                        continue
+
+                    # Daily Gmail quota safeguard (Gmail 500 emails/day cap)
+                    try:
+                        with get_connection() as conn:
+                            with conn.cursor() as cur:
+                                cur.execute("SELECT count(*) FROM posts WHERE status = 'SENT' AND sent_at >= CURRENT_DATE;")
+                                daily_sent_count = cur.fetchone()[0]
+                        if daily_sent_count >= 490:
+                            task_manager.log(f"🛑 Approaching Gmail daily limit ({daily_sent_count}/500 sent today). Halting further dispatches to protect account standing.")
+                            break
+                    except Exception:
+                        pass
+
                     task_manager.log(f"[{idx}/{len(post_ids)}] Composing to {author} ({recipient})...")
                     task_manager.set_current_step(f"Sending {idx}/{len(post_ids)}: {author}")
 
@@ -1493,13 +1528,14 @@ def run_linkedin_easy_apply_scraper(
     if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
         limit_val = max(max_jobs or 25, cycles * 5)
     else:
-        limit_val = max_jobs if (max_jobs and max_jobs > 0) else 50
+        from src.config import is_headless
+    limit_val = max_jobs if (max_jobs and max_jobs > 0) else 50
     extra_env = {
         "SCRAPER_SOURCE": "dashboard",
         "SCRAPER_LIMIT": str(limit_val),
+        "HEADLESS": "true" if is_headless() else "false",
+        "SCRAPER_SEARCH_QUERY": query.strip() if (query and query.strip()) else "",
     }
-    if query:
-        extra_env["SCRAPER_SEARCH_QUERY"] = query.strip()
     if location:
         extra_env["SCRAPER_LOCATION"] = location.strip()
     if time_filter:
@@ -1549,6 +1585,84 @@ def run_batch_easy_apply(post_ids: List[str], pacing: str = "safe"):
     return apply_to_batch_easy_apply_posts(post_ids, pacing=pacing, task_manager=task_manager)
 
 
+def run_indeed_apply_scraper(
+    query: Optional[str] = None,
+    location: Optional[str] = None,
+    time_filter: Optional[str] = None,
+    cycles: Optional[int] = None,
+    pacing: Optional[str] = None,
+    max_jobs: Optional[int] = None,
+):
+    """
+    Run Indeed Job Search & Indeed Apply crawler in persistent Firefox context.
+    Executes scripts/indeed_job_search.py via run_scraper_subprocess_with_timeout
+    with 180-second inactivity watchdog, in-stream JD recruiter email harvesting,
+    and real-time terminal streaming.
+    """
+    script_path = os.path.join(PROJECT_ROOT, "scripts", "indeed_job_search.py")
+    task_label = "Indeed Apply Collector"
+    if location and location.strip():
+        task_label = f"Indeed Apply Collector ({location.strip()})"
+
+    from src.config import is_headless
+    limit_val = max_jobs if (max_jobs and max_jobs > 0) else 50
+    extra_env = {
+        "SCRAPER_SOURCE": "dashboard",
+        "SCRAPER_LIMIT": str(limit_val),
+        "HEADLESS": "true" if is_headless() else "false",
+        "SCRAPER_SEARCH_QUERY": query.strip() if (query and query.strip()) else "",
+    }
+    if location:
+        extra_env["SCRAPER_LOCATION"] = location.strip()
+    if time_filter:
+        extra_env["SCRAPER_TIME_FILTER"] = time_filter.strip()
+    if cycles:
+        extra_env["SCRAPER_CYCLES"] = str(cycles)
+    if pacing:
+        extra_env["SCRAPER_PACING"] = str(pacing)
+
+    run_scraper_subprocess_with_timeout(
+        task_name=task_label,
+        script_path=script_path,
+        inactivity_timeout_seconds=180.0,
+        finish_message="Indeed Apply crawling and in-stream JD harvesting finished successfully.",
+        extra_env=extra_env,
+    )
+
+
+def run_single_indeed_apply(post_id: str):
+    """Run Indeed Apply submission for a single job post in Firefox."""
+    from src.services.indeed_apply_service import apply_to_single_indeed_post
+    post = get_post_by_id(post_id)
+    title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
+    company = (post.get("author_name") if post else None) or "Company"
+    task_manager.start_task(f"Indeed Apply — {title} @ {company}", total_items=1, short_name="Indeed Apply", snippet=company)
+    try:
+        result = apply_to_single_indeed_post(post_id, task_manager=task_manager)
+        status = (result or {}).get("status")
+        detail = (result or {}).get("detail", "")
+        if status == "APPLIED":
+            task_manager.finish_task(f"Indeed application successfully submitted for {title} @ {company}!")
+        elif status == "NOT_FOUND":
+            task_manager.finish_task(f"Position closed or not eligible ({detail}).")
+        elif status == "REQUIRES_QUESTIONNAIRE":
+            task_manager.finish_task(f"Custom screening questions encountered for {title}. Saved to Question Bank.")
+        else:
+            task_manager.finish_task(f"Indeed Apply completed for {title}: {detail}")
+    except Exception as e:
+        task_manager.fail_task(str(e))
+
+
+def run_batch_indeed_apply(post_ids: List[str], pacing: str = "safe"):
+    """Run sequential batch Indeed Apply submissions in Firefox using Question Bank answers."""
+    from src.services.indeed_apply_service import apply_to_batch_indeed_posts
+    try:
+        return apply_to_batch_indeed_posts(post_ids, pacing=pacing, task_manager=task_manager)
+    except Exception as e:
+        task_manager.fail_task(str(e))
+        raise
+
+
 SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
     "linkedin": {
         "id": "linkedin",
@@ -1563,6 +1677,13 @@ SCRAPER_REGISTRY: Dict[str, Dict[str, Any]] = {
         "icon": "⚡",
         "description": "Scrapes linkedin.com/jobs with Easy Apply (f_AL=true) and submits applications",
         "runner": run_linkedin_easy_apply_scraper,
+    },
+    "indeed_jobs": {
+        "id": "indeed_jobs",
+        "name": "Indeed Apply",
+        "icon": "🎯",
+        "description": "Scrapes indeed.com with Easily apply filter, harvests JD recruiter emails & submits applications",
+        "runner": run_indeed_apply_scraper,
     },
     "infopark": {
         "id": "infopark",
@@ -1606,6 +1727,8 @@ def run_scraper_by_source(
         run_linkedin_scraper(query=query, location=location, time_filter=time_filter, cycles=cycles)
     elif source_lower in ("linkedin_jobs", "easy_apply"):
         run_linkedin_easy_apply_scraper(query=query, location=location, time_filter=time_filter, cycles=cycles, max_jobs=max_jobs)
+    elif source_lower in ("indeed_jobs", "indeed", "indeed_apply"):
+        run_indeed_apply_scraper(query=query, location=location, time_filter=time_filter, cycles=cycles, max_jobs=max_jobs)
     else:
         scraper["runner"]()
 

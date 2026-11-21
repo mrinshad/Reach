@@ -57,6 +57,27 @@
         </div>
 
         <div class="table-card">
+          <!-- Top Table Header Bar / Pagination Controls (Applications) -->
+          <div class="table-header-bar" id="sentTableHeaderBar">
+            <div class="pagination-info" id="sentPaginationInfoTop">
+              Showing 0–0 of 0 applications
+            </div>
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectSentLimitTop" onchange="changeSentRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="page-buttons" id="sentPageButtonsTop">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+
           <table class="reach-table">
             <thead>
               <tr>
@@ -155,6 +176,26 @@
         </div>
 
         <div class="table-card">
+          <!-- Top Table Header Bar / Pagination Controls (Activity Logs) -->
+          <div class="table-header-bar" id="activityLogsTableHeaderBar">
+            <div class="pagination-info" id="activityLogsPaginationInfoTop">
+              Showing 0–0 of 0 activity runs
+            </div>
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectActivityLogsLimitTop" onchange="changeActivityLogsRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="page-buttons" id="activityLogsPageButtonsTop">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+
           <table class="reach-table activity-logs-table">
             <thead>
               <tr>

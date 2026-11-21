@@ -24,6 +24,7 @@ def check_firefox_session_cookies() -> Dict[str, bool]:
     cookie_file = os.path.join(FIREFOX_PROFILE_DIR, "cookies.sqlite")
     results = {
         "linkedin": False,
+        "indeed": False,
         "chatgpt": False,
         "gmail": False,
     }
@@ -49,6 +50,15 @@ def check_firefox_session_cookies() -> Dict[str, bool]:
             expiry = li_row[0]
             if expiry == 0 or expiry > now or (expiry > 1e11 and (expiry / 1000) > now):
                 results["linkedin"] = True
+
+        # 1b. Check Indeed: session cookie
+        cur.execute("""
+            SELECT expiry FROM moz_cookies 
+            WHERE host LIKE '%indeed.com%' AND name IN ('SURF', 'SHOE', 'CTK', 'CSRF', 'indeed_csrf_token', 'SOCK')
+        """)
+        ind_row = cur.fetchone()
+        if ind_row:
+            results["indeed"] = True
 
         # 2. Check ChatGPT: session token
         cur.execute("""
@@ -116,6 +126,10 @@ def get_system_health() -> Dict[str, Any]:
         "linkedin": {
             "connected": sessions["linkedin"],
             "label": "Logged In" if sessions["linkedin"] else "Optional",
+        },
+        "indeed": {
+            "connected": sessions["indeed"],
+            "label": "Ready" if sessions["indeed"] else "Guest / Optional",
         },
         "chatgpt": {
             "connected": sessions["chatgpt"],

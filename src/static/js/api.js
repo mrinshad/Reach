@@ -241,6 +241,14 @@ async function fetchStats() {
       countEasyApplyEl.title = `${eaPending} Easy Apply jobs ready to apply`;
     }
 
+    // 2b. Indeed Job Portal & Apply: ready to apply count
+    const countIndeedApplyEl = document.getElementById('countIndeedApply');
+    if (countIndeedApplyEl) {
+      const indPending = stats.indeed_pending !== undefined ? stats.indeed_pending : 0;
+      countIndeedApplyEl.textContent = indPending;
+      countIndeedApplyEl.title = `${indPending} Indeed Apply jobs ready to apply`;
+    }
+
     // 3. Question Bank: unanswered screening questions count
     const countQBankEl = document.getElementById('countSidebarQuestionBank');
     if (countQBankEl) {
@@ -248,6 +256,14 @@ async function fetchStats() {
       countQBankEl.textContent = qbPending;
       countQBankEl.title = `${qbPending} screening questions unanswered`;
       countQBankEl.style.display = qbPending > 0 ? 'inline-flex' : 'none';
+    }
+
+    // 3b. Dismissed Roles: total registered excluded roles count
+    const countDismissedEl = document.getElementById('countSidebarDismissedRoles');
+    if (countDismissedEl) {
+      const dismissedTotal = stats.dismissed_roles_total !== undefined ? stats.dismissed_roles_total : 0;
+      countDismissedEl.textContent = dismissedTotal;
+      countDismissedEl.title = `${dismissedTotal} dismissed roles registered`;
     }
 
     // 4. Review & Drafts: drafted count ready for review
@@ -260,6 +276,14 @@ async function fetchStats() {
     if (reviewQueueBadge) {
       reviewQueueBadge.textContent = draftsReady;
     }
+    const countRevAll = document.getElementById('countReviewAll');
+    if (countRevAll) countRevAll.textContent = (stats.email_outreach_total || 0);
+    const countRevGen = document.getElementById('countReviewGenerated');
+    if (countRevGen) countRevGen.textContent = draftsReady;
+    const countRevPend = document.getElementById('countReviewPending');
+    if (countRevPend) countRevPend.textContent = (stats.pending_generation || 0);
+    const countRevSent = document.getElementById('countReviewSent');
+    if (countRevSent) countRevSent.textContent = (stats.applications_sent || 0);
 
     // 3. Sent & History: Others tab counters
     const elOthersAll = document.getElementById('countOthersAll');

@@ -32,10 +32,14 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
               <span>Generate (<span id="batchCountBadge">0</span>)</span>
             </button>
+            <button class="btn btn-cancel-app btn-sm hidden" id="btnBatchDismiss" onclick="cancelBatchSelectedDiscovered()" title="Dismiss / remove selected posts from Discovered Jobs">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Dismiss (<span id="batchDismissCountBadge">0</span>)</span>
+            </button>
           </div>
         </div>
 
-        <!-- Row 2: Secondary Dropdown Filters, Results Badge & Clear Filters Button -->
+        <!-- Row 2: Secondary Dropdown Filters (Source, Status, Category, Location) -->
         <div class="toolbar-row secondary-row">
           <div class="filters-group">
             <span class="filters-label">Filters:</span>
@@ -64,10 +68,19 @@
             <select id="selectLocationFilter" class="select-clean" onchange="applyFilters()" title="Filter by Job Location">
               <option value="ALL" selected>All Locations</option>
             </select>
+          </div>
+        </div>
 
-            <select id="selectReasonFilterDiscovered" class="select-clean" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
+        <!-- Row 3: Reason Dropdown, Separator, Dates, From-To, Sort, Results Badge & Clear Filters -->
+        <div class="toolbar-row secondary-row row-tertiary">
+          <div class="filters-group">
+            <span class="filters-label">Reason:</span>
+            <select id="selectReasonFilterDiscovered" class="select-clean select-reason-discovered" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
               <option value="ALL" selected>All Reasons</option>
             </select>
+
+            <!-- Vertical Separator -->
+            <span class="toolbar-separator" aria-hidden="true"></span>
 
             <select id="selectDateFilter" class="select-clean" onchange="handleDateFilterSelectChange()" title="Filter by Crawled Date">
               <option value="ALL" selected>All Dates</option>
@@ -112,65 +125,163 @@
             <span>✕ Clear Filters</span>
           </button>
         </div>
+
+        <!-- Row 4: Active Filter Chips Bar (Displays on bottom with 'x' close buttons) -->
+        <div class="active-filters-bar hidden" id="discoveredActiveFiltersBar">
+          <span class="active-filters-label">Active:</span>
+          <div class="active-filters-list" id="discoveredActiveFiltersList"></div>
+          <button type="button" class="btn-clear-chips" onclick="clearDiscoveredFilters()" title="Clear all active filters">Clear all</button>
+        </div>
       </div>
 
-      <!-- Paginated Data Table Container -->
-      <div class="table-card">
-        <table class="reach-table">
-          <thead>
-            <tr>
-              <th width="35">
-                <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
-              </th>
-              <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
-                <div class="th-sort-wrapper">
-                  <span>Recruiter / Author</span>
-                  <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+      <!-- Main Workspace Layout: Scrollable Table + Docked Right-Side Window -->
+      <div class="discovered-workspace-wrapper" id="discoveredWorkspaceWrapper">
+        <!-- Left Area: Posts Table Container -->
+        <div class="discovered-table-container" id="discoveredTableContainer">
+          <div class="table-card">
+            <!-- Top Table Header Bar / Pagination Controls -->
+            <div class="table-header-bar" id="discoveredTableHeaderBar">
+              <div class="pagination-info" id="paginationInfoTop">
+                Showing 0–0 of 0 posts
+              </div>
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectLimitTop" onchange="changeRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
                 </div>
-              </th>
-              <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
-                <div class="th-sort-wrapper">
-                  <span>Experience</span>
-                  <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                <div class="page-buttons" id="pageButtonsTop">
+                  <!-- Dynamic page buttons -->
                 </div>
-              </th>
-              <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
-                <div class="th-sort-wrapper">
-                  <span>Date</span>
-                  <span class="sort-indicator" id="sortDateIndicator">↕</span>
-                </div>
-              </th>
-              <th width="190">Contact Email</th>
-              <th>Post Preview</th>
-              <th width="180" style="text-align: right;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="postsTableBody">
-            <!-- Populated dynamically or with skeleton -->
-          </tbody>
-        </table>
-
-        <!-- Table Footer / Pagination Controls -->
-        <div class="table-footer">
-          <div class="pagination-info" id="paginationInfo">
-            Showing 0–0 of 0 posts
-          </div>
-
-          <div class="pagination-controls">
-            <div class="rows-per-page">
-              <span>Rows:</span>
-              <select id="selectLimit" onchange="changeRowsPerPage(this.value)">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
+              </div>
             </div>
 
-            <div class="page-buttons" id="pageButtons">
-              <!-- Rendered dynamically -->
+            <div class="table-scroll-container" id="discoveredTableScrollContainer">
+              <table class="reach-table discovered-table">
+                <thead>
+                  <tr>
+                    <th width="35">
+                      <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
+                    </th>
+                    <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
+                      <div class="th-sort-wrapper">
+                        <span>Recruiter / Author</span>
+                        <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                      <div class="th-sort-wrapper">
+                        <span>Experience</span>
+                        <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                      <div class="th-sort-wrapper">
+                        <span>Date</span>
+                        <span class="sort-indicator" id="sortDateIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="180">Contact Email</th>
+                    <th width="160">Contact Number</th>
+                    <th width="180" style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="postsTableBody">
+                  <!-- Populated dynamically or with skeleton -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Table Footer / Pagination Controls -->
+            <div class="table-footer">
+              <div class="pagination-info" id="paginationInfo">
+                Showing 0–0 of 0 posts
+              </div>
+
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectLimit" onchange="changeRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+
+                <div class="page-buttons" id="pageButtons">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Right Area: Minimal Docked Side Window -->
+        <aside class="discovered-detail-drawer hidden" id="discoveredDetailDrawer">
+          <!-- Top Bar: Recruiter Title & Close Button -->
+          <div class="drawer-top-bar">
+            <div class="drawer-top-left">
+              <span class="drawer-recruiter-title" id="discoveredDrawerAuthor">Recruiter Name</span>
+              <span id="discoveredDrawerSourceBadge"></span>
+            </div>
+            <div class="drawer-top-right">
+              <button type="button" class="btn-drawer-close" onclick="closeDiscoveredDetailDrawer()" title="Close details window (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Contact Bar: Email & Contact Phone -->
+          <div class="drawer-contact-bar">
+            <div class="drawer-contact-item">
+              <span class="drawer-contact-label">Email:</span>
+              <span class="drawer-contact-val" id="discoveredDrawerEmail">—</span>
+              <button type="button" class="btn-copy-micro hidden" id="btnCopyDiscoveredEmail" onclick="copyDiscoveredDrawerEmail()" title="Copy Email">Copy</button>
+            </div>
+            <div class="drawer-contact-item">
+              <span class="drawer-contact-label">Contact:</span>
+              <span class="drawer-contact-val" id="discoveredDrawerPhone">—</span>
+              <button type="button" class="btn-copy-micro hidden" id="btnCopyDiscoveredPhone" onclick="copyDiscoveredDrawerPhone()" title="Copy Contact">Copy</button>
+            </div>
+          </div>
+
+          <!-- Job Description Header & Body -->
+          <div class="drawer-jd-header">
+            <span>Job Description</span>
+            <button type="button" class="btn-copy-micro" onclick="copyDiscoveredDrawerJd()" title="Copy entire Job Description">Copy JD</button>
+          </div>
+          <div class="drawer-jd-content" id="discoveredDrawerJd">
+            <!-- Job Description Text -->
+          </div>
+
+          <!-- Bottom Action Bar: Generate Mail, Review, and Source Link -->
+          <div class="drawer-bottom-bar">
+            <div class="drawer-bottom-left">
+              <a id="discoveredDrawerSourceLink" href="#" target="_blank" class="btn btn-outline btn-xs" title="Open source job link">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>Source</span>
+              </a>
+              <button type="button" class="btn btn-cancel-app btn-xs" id="btnDrawerDismissDiscovered" onclick="drawerDismissDiscovered()" title="Dismiss this post">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Dismiss</span>
+              </button>
+            </div>
+            <div class="drawer-bottom-right">
+              <button type="button" class="btn btn-primary btn-sm" id="btnDrawerGenerateMail" onclick="drawerGenerateMailDiscovered()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span id="drawerGenBtnText">Generate Mail</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnDrawerReview" onclick="drawerMoveToReviewDiscovered()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span id="drawerReviewBtnText">Review</span>
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>

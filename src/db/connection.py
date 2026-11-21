@@ -125,8 +125,14 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_potential_spam BOOLEAN DEFAULT FALSE;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS potential_spam_reason TEXT;
     ALTER TABLE posts ADD COLUMN IF NOT EXISTS location VARCHAR(128);
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS is_dismissed BOOLEAN DEFAULT FALSE;
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS platform_job_id VARCHAR(128);
+    ALTER TABLE posts ADD COLUMN IF NOT EXISTS contact_phones TEXT[] DEFAULT '{}';
     ALTER TABLE posts ALTER COLUMN post_url TYPE TEXT;
     CREATE INDEX IF NOT EXISTS idx_posts_location ON posts(location);
+    CREATE INDEX IF NOT EXISTS idx_posts_is_dismissed ON posts(is_dismissed);
+    CREATE INDEX IF NOT EXISTS idx_posts_platform_job_id ON posts(platform_job_id);
+    CREATE INDEX IF NOT EXISTS idx_posts_contact_phones ON posts USING GIN (contact_phones);
     ALTER TABLE screening_questions ADD COLUMN IF NOT EXISTS options TEXT[] DEFAULT '{}';
     ALTER TABLE screening_questions ALTER COLUMN question_key TYPE VARCHAR(512);
     """
@@ -139,4 +145,6 @@ def init_db(db_url: str = DEFAULT_DB_URL):
     seed_default_settings(db_url)
     from src.db.question_bank import init_question_bank
     init_question_bank(db_url)
-    print("✓ PostgreSQL database initialized (tables: posts, settings, activity_logs, screening_questions).")
+    from src.db.dismissed_roles import init_dismissed_roles
+    init_dismissed_roles(db_url)
+    print("✓ PostgreSQL database initialized (tables: posts, settings, activity_logs, screening_questions, dismissed_roles).")

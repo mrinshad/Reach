@@ -8,7 +8,7 @@ This living document tracks the active operational state, architectural mileston
 
 - **Repository**: Reach (`Byten/linkedInScrapper`)
 - **System Purpose**: Autonomous multi-platform job crawler, generative AI outreach writer, LinkedIn Easy Apply manager, and automated Gmail dispatcher.
-- **Active Branch**: `qstn-bank`
+- **Active Branch**: `indeed-apply`
 - **Primary Runtime**: Python 3.10+ / FastAPI / Playwright / PostgreSQL / Vanilla ES Modules / CSS Variables
 
 ---
@@ -30,6 +30,13 @@ This living document tracks the active operational state, architectural mileston
 | **M11** | Screening Question & Answer Bank | Complete | Persistent `screening_question_bank` table, modal UI, auto-sync |
 | **M12** | Activity Run Logs & Modern Dashboard | Complete | Activity logs table, retry engine, modernized overview cards |
 | **M13** | Question Bank Dedicated Page & Enhancements| Complete | Dedicated question bank page, filtering dismissed roles, batch question management, ChatGPT question answering with DB First protocol, WTF abort safeguard, and batch answer automation script |
+| **M14** | Indeed Job Portal & Apply Workspace | Complete | Autonomous Indeed discovery crawler, in-stream recruiter email harvesting, email filter & sort controls, 1-click Review & Drafts AI outreach generation, Question Bank option pills, and CAPTCHA safety detection |
+| **M15** | Review & Drafts Redesign & Side Drawer | Complete | Full-width outreach history table showing generated and pending drafts, quick status filter pills, docked sticky right-side email window with independent scrolling, close/dismiss toggle, and 1-click generation |
+| **M16** | Discovery Table Phone/Email & Dismissed Role Filtering | Complete | Contact Phone & Email columns on Discovered table, clickable recruiter preview modal trigger, phone extraction regex, and dismissed-role auto-filtering across discovery crawlers |
+| **M17** | Discovered Drawer, ChatGPT Paste Fix & Unified Toolbar | Complete | Docked side detail drawer on Discovered table, ChatGPT premature send fix via synthetic paste, compact reasons dropdown with sneak peek, row 3 toolbar alignment with separator, active filter chips bar, and manual auto-dismiss execution |
+| **M18** | Dismissed Roles Registry & Design Alignment | Complete | Dedicated PostgreSQL `dismissed_roles` table, auto-seeded 1,830 historical roles, developer title protection, REST API, canonical Reach `.toolbar` with source filter pills, `.table-card` wrapping `reach-table`, and full mobile/tablet responsive card transformations |
+| **M19** | 3-Layer Dismissal Audit, Role Restoration & Anti-Blacklisting Safeguards | Complete | 3-layer audit restored 523 software/dev/cloud/AI roles from `dismissed_roles`, reinstated 102 blocked posts back to `DISCOVERED`, eliminated automatic title blacklisting on post rejection, added `is_protected_tech_role()` & `is_circumstantial_reason()` guards, and streamlined all 5 scrapers to check ONLY the preloaded `dismissed_roles` table with zero history queries |
+| **M20** | Dual-Option Dismissal System (Dismiss Only vs. Blacklist Role) | Complete | Dual-choice dismissal options across individual rows and bulk selections across Discovered, Review, Easy Apply, and Indeed Apply workspaces |
 
 ---
 

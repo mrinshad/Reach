@@ -23,6 +23,7 @@ from .chatgpt_service import (
     navigate_to_conversation,
     send_jd_and_get_email,
     send_followup_and_get_email,
+    clean_email_body,
     parse_email_response,
     extract_unsuitable_reason,
     clean_and_truncate_reason,
@@ -36,6 +37,7 @@ from .chatgpt_service import (
     is_unreasonable_response,
     send_question_and_get_answer,
     ask_chatgpt_for_question_answer,
+    ask_chatgpt_for_reason_for_applying,
     is_experience_rejection,
     is_direct_hiring_post,
 )
@@ -76,8 +78,13 @@ from .health_service import (
     get_system_health,
 )
 
+from .question_bank_service import (
+    match_option_to_answer,
+)
+
 from .experience_extractor import (
     extract_experience,
+    extract_phone_numbers,
 )
 
 from .timing_service import (
@@ -104,6 +111,7 @@ __all__ = [
     "navigate_to_conversation",
     "send_jd_and_get_email",
     "send_followup_and_get_email",
+    "clean_email_body",
     "parse_email_response",
     "extract_unsuitable_reason",
     "clean_and_truncate_reason",
@@ -115,6 +123,7 @@ __all__ = [
     "is_user_response_needed",
     "send_question_and_get_answer",
     "ask_chatgpt_for_question_answer",
+    "ask_chatgpt_for_reason_for_applying",
     "is_experience_rejection",
     "is_direct_hiring_post",
     "navigate_to_gmail",
@@ -142,9 +151,11 @@ __all__ = [
     "check_firefox_session_cookies",
     "get_system_health",
     "extract_experience",
+    "extract_phone_numbers",
     "compute_task_timing_estimate",
     "estimate_queued_task",
     "format_time_estimate",
     "format_duration_short",
     "get_cached_benchmarks",
+    "match_option_to_answer",
 ]

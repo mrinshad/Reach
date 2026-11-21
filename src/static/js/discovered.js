@@ -85,6 +85,7 @@ async function fetchDiscoveredPosts() {
 
     renderPostsTable();
     renderPagination();
+    updateActiveFilterChips();
   } catch (err) {
     const tbody = document.getElementById('postsTableBody');
     if (tbody) {
@@ -105,7 +106,7 @@ function renderSkeletonRows() {
         <td><div class="skeleton-bar" style="width: 75px;"></div></td>
         <td><div class="skeleton-bar" style="width: 65px;"></div></td>
         <td><div class="skeleton-bar" style="width: 110px;"></div></td>
-        <td><div class="skeleton-bar" style="width: 200px;"></div></td>
+        <td><div class="skeleton-bar" style="width: 100px;"></div></td>
         <td style="text-align: right;"><div class="skeleton-bar" style="width: 70px; margin-left: auto;"></div></td>
       </tr>
     `;
@@ -143,6 +144,8 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
 
   const isScam = rejReason && (rejReason.toLowerCase().includes('scam') || rejReason.toLowerCase().includes('spam'));
   const isPotential = potentialSpam || (rejReason && rejReason.toLowerCase().includes('potential'));
+  const isDismissed = (typeof postOrUrl === 'object' && postOrUrl && (postOrUrl.is_dismissed || (rejReason && rejReason.toLowerCase().includes('dismissed'))));
+  const isAlreadyApplied = (typeof postOrUrl === 'object' && postOrUrl && rejReason && rejReason.toLowerCase().includes('already applied'));
 
   if (isScam) {
     const why = rejReason || 'Flagged as scam recruiter';
@@ -150,6 +153,11 @@ function getSourceBadgeHtml(postOrUrl, isPotentialSpam = false, potentialSpamRea
   } else if (isPotential) {
     const why = potentialReason || rejReason || 'Suspicious contact domain or flagged recruiter activity';
     badge += `<span class="badge-spam-warning" title="Potential Scam: ${escapeHtml(why)}">Potential Scam</span>`;
+  } else if (isDismissed) {
+    const why = rejReason || 'Auto-dismissed: Matches previously dismissed role';
+    badge += `<span class="badge-dismissed" title="${escapeHtml(why)}">🚫 Dismissed</span>`;
+  } else if (isAlreadyApplied) {
+    badge += `<span class="badge-already-applied" title="Already applied">✓ Already Applied</span>`;
   }
 
   return badge;
@@ -169,6 +177,8 @@ function renderPostsTable() {
     const tr = document.createElement('tr');
     tr.id = `row-${post.id}`;
     if (state.selectedIds.has(post.id)) tr.classList.add('selected');
+    if (state.activeDiscoveredPostId === post.id) tr.classList.add('active-row');
+    tr.setAttribute('onclick', `handleDiscoveredRowClick('${post.id}', event)`);
 
     let expClass = 'badge-none';
     let expText = post.raw_experience || 'Not Stated';
@@ -192,6 +202,13 @@ function renderPostsTable() {
          </span>`
       : `<span style="color: #64748b; font-size: 0.72rem;">—</span>`;
 
+    const primaryPhone = (post.contact_phones && post.contact_phones[0]) || '';
+    const phoneHtml = primaryPhone
+      ? `<span class="phone-copy-pill" onclick="copyPhoneToClipboard('${escapeHtml(primaryPhone)}')" title="Click to copy contact number">
+           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>${escapeHtml(primaryPhone)}
+         </span>`
+      : `<span style="color: #64748b; font-size: 0.72rem;">—</span>`;
+
     const isGenerated = post.status === 'EMAIL_GENERATED';
 
     tr.innerHTML = `
@@ -201,7 +218,7 @@ function renderPostsTable() {
       <td>
         <div class="recruiter-cell">
           <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-            <span class="recruiter-name">${escapeHtml(post.author_name)}</span>
+            <span class="recruiter-name" title="${escapeHtml(post.author_name)}">${escapeHtml(post.author_name)}</span>
             ${getSourceBadgeHtml(post)}
             ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : `<span class="pill-badge badge-location" style="opacity: 0.55;" title="Location not specified in post"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 2px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>Not Specified</span>`}
           </div>
@@ -218,9 +235,7 @@ function renderPostsTable() {
         ${emailHtml}
       </td>
       <td>
-        <div class="table-snippet" onclick="openPostModal('${post.id}')" title="Click to view full job description">
-          ${escapeHtml(post.full_text)}
-        </div>
+        ${phoneHtml}
       </td>
       <td style="text-align: right;">
         <div class="table-actions">
@@ -279,38 +294,52 @@ function renderPagination() {
   const totalPages = Math.ceil(state.total / state.limit) || 1;
   const startRow = state.total === 0 ? 0 : (state.page - 1) * state.limit + 1;
   const endRow = Math.min(state.page * state.limit, state.total);
+  const textInfo = `Showing ${startRow}–${endRow} of ${state.total} posts`;
 
   const pagInfoEl = document.getElementById('paginationInfo');
-  if (pagInfoEl) pagInfoEl.textContent = `Showing ${startRow}–${endRow} of ${state.total} posts`;
+  if (pagInfoEl) pagInfoEl.textContent = textInfo;
+  const pagInfoTopEl = document.getElementById('paginationInfoTop');
+  if (pagInfoTopEl) pagInfoTopEl.textContent = textInfo;
 
-  const container = document.getElementById('pageButtons');
-  if (!container) return;
-  container.innerHTML = '';
+  // Sync rows per page selects
+  const selLimit = document.getElementById('selectLimit');
+  if (selLimit) selLimit.value = String(state.limit);
+  const selLimitTop = document.getElementById('selectLimitTop');
+  if (selLimitTop) selLimitTop.value = String(state.limit);
 
-  const prevBtn = document.createElement('button');
-  prevBtn.className = 'page-btn';
-  prevBtn.textContent = '‹';
-  prevBtn.disabled = state.page <= 1;
-  prevBtn.onclick = () => goToPage(state.page - 1);
-  container.appendChild(prevBtn);
+  const containers = [
+    document.getElementById('pageButtons'),
+    document.getElementById('pageButtonsTop')
+  ].filter(Boolean);
 
-  const startPage = Math.max(1, state.page - 2);
-  const endPage = Math.min(totalPages, state.page + 2);
+  containers.forEach(container => {
+    container.innerHTML = '';
 
-  for (let p = startPage; p <= endPage; p++) {
-    const pBtn = document.createElement('button');
-    pBtn.className = `page-btn ${p === state.page ? 'active' : ''}`;
-    pBtn.textContent = String(p);
-    pBtn.onclick = () => goToPage(p);
-    container.appendChild(pBtn);
-  }
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.textContent = '‹';
+    prevBtn.disabled = state.page <= 1;
+    prevBtn.onclick = () => goToPage(state.page - 1);
+    container.appendChild(prevBtn);
 
-  const nextBtn = document.createElement('button');
-  nextBtn.className = 'page-btn';
-  nextBtn.textContent = '›';
-  nextBtn.disabled = state.page >= totalPages;
-  nextBtn.onclick = () => goToPage(state.page + 1);
-  container.appendChild(nextBtn);
+    const startPage = Math.max(1, state.page - 2);
+    const endPage = Math.min(totalPages, state.page + 2);
+
+    for (let p = startPage; p <= endPage; p++) {
+      const pBtn = document.createElement('button');
+      pBtn.className = `page-btn ${p === state.page ? 'active' : ''}`;
+      pBtn.textContent = String(p);
+      pBtn.onclick = () => goToPage(p);
+      container.appendChild(pBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.textContent = '›';
+    nextBtn.disabled = state.page >= totalPages;
+    nextBtn.onclick = () => goToPage(state.page + 1);
+    container.appendChild(nextBtn);
+  });
 }
 
 function goToPage(p) {
@@ -321,6 +350,10 @@ function goToPage(p) {
 function changeRowsPerPage(val) {
   state.limit = parseInt(val, 10) || 25;
   state.page = 1;
+  const selLimit = document.getElementById('selectLimit');
+  if (selLimit) selLimit.value = String(state.limit);
+  const selLimitTop = document.getElementById('selectLimitTop');
+  if (selLimitTop) selLimitTop.value = String(state.limit);
   fetchDiscoveredPosts();
 }
 
@@ -360,7 +393,10 @@ function applyFilters() {
   if (locSelect) state.locationFilter = locSelect.value;
 
   const discReasonSelect = document.getElementById('selectReasonFilterDiscovered');
-  if (discReasonSelect) state.discoveredReason = discReasonSelect.value;
+  if (discReasonSelect) {
+    state.discoveredReason = discReasonSelect.value;
+    discReasonSelect.title = discReasonSelect.value !== 'ALL' ? discReasonSelect.value : 'Filter by cancellation / rejection reason';
+  }
 
   const sortSelect = document.getElementById('selectSortBy');
   if (sortSelect) {
@@ -484,7 +520,10 @@ function clearDiscoveredFilters() {
 
   state.discoveredReason = 'ALL';
   const discReasonSel = document.getElementById('selectReasonFilterDiscovered');
-  if (discReasonSel) discReasonSel.value = 'ALL';
+  if (discReasonSel) {
+    discReasonSel.value = 'ALL';
+    discReasonSel.title = 'Filter by cancellation / rejection reason';
+  }
 
   state.sortBy = 'default';
   const sortSel = document.getElementById('selectSortBy');
@@ -495,8 +534,176 @@ function clearDiscoveredFilters() {
   const searchInput = document.getElementById('inputSearch');
   if (searchInput) searchInput.value = '';
 
+  updateActiveFilterChips();
   state.page = 1;
   fetchDiscoveredPosts();
+}
+
+/**
+ * Dynamically updates the active filter chips bar at the bottom of the Discovered toolbar.
+ * Shows selected filter details with a clean (x) close button.
+ */
+function updateActiveFilterChips() {
+  const bar = document.getElementById('discoveredActiveFiltersBar');
+  const list = document.getElementById('discoveredActiveFiltersList');
+  if (!bar || !list) return;
+
+  const chips = [];
+
+  // Reason Filter Chip
+  if (state.discoveredReason && state.discoveredReason !== 'ALL') {
+    chips.push(`
+      <span class="filter-chip" title="Cancellation / Rejection Reason: ${escapeHtml(state.discoveredReason)}">
+        <span class="chip-label">Reason:</span>
+        <span class="chip-val">${escapeHtml(state.discoveredReason)}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('reason')" title="Remove Reason filter">✕</button>
+      </span>
+    `);
+  }
+
+  // Location Filter Chip
+  if (state.locationFilter && state.locationFilter !== 'ALL') {
+    chips.push(`
+      <span class="filter-chip" title="Location: ${escapeHtml(state.locationFilter)}">
+        <span class="chip-label">Location:</span>
+        <span class="chip-val">${escapeHtml(state.locationFilter)}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('location')" title="Remove Location filter">✕</button>
+      </span>
+    `);
+  }
+
+  // Experience Filter Chip
+  if (state.expFilter && state.expFilter !== 'ALL') {
+    const expLabel = state.expFilter === 'FRESHER' ? 'Fresher (0-1 yr)' : state.expFilter === 'MID' ? '1 - 3 yrs' : '3 - 5+ yrs';
+    chips.push(`
+      <span class="filter-chip" title="Experience Level: ${expLabel}">
+        <span class="chip-label">Exp:</span>
+        <span class="chip-val">${expLabel}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('exp')" title="Remove Experience filter">✕</button>
+      </span>
+    `);
+  }
+
+  // Source Filter Chip
+  if (state.sourceFilter && state.sourceFilter !== 'ALL') {
+    chips.push(`
+      <span class="filter-chip" title="Job Source: ${escapeHtml(state.sourceFilter)}">
+        <span class="chip-label">Source:</span>
+        <span class="chip-val">${escapeHtml(state.sourceFilter)}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('source')" title="Remove Source filter">✕</button>
+      </span>
+    `);
+  }
+
+  // Status Filter Chip (if non-default)
+  if (state.genStatusFilter && state.genStatusFilter !== 'PENDING' && state.genStatusFilter !== 'ALL') {
+    const statusMap = { GENERATED: 'Already Generated', SENT: 'Sent Applications', REJECTED: 'Cancelled / Screened' };
+    chips.push(`
+      <span class="filter-chip" title="Status: ${statusMap[state.genStatusFilter] || state.genStatusFilter}">
+        <span class="chip-label">Status:</span>
+        <span class="chip-val">${statusMap[state.genStatusFilter] || escapeHtml(state.genStatusFilter)}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('genStatus')" title="Reset Status to default">✕</button>
+      </span>
+    `);
+  }
+
+  // Date Filter Chip
+  if (state.dateFilter && state.dateFilter !== 'ALL') {
+    let dateTxt = state.dateFilter;
+    if (dateTxt === '24H') dateTxt = 'Last 24 Hours';
+    else if (dateTxt === 'TODAY') dateTxt = 'Today';
+    else if (dateTxt === 'YESTERDAY') dateTxt = 'Yesterday';
+    else if (dateTxt === '2D') dateTxt = 'Last 2 Days';
+    else if (dateTxt === '3D') dateTxt = 'Last 3 Days';
+    else if (dateTxt === 'WEEK') dateTxt = 'Past 7 Days';
+    else if (dateTxt.startsWith('CUSTOM')) dateTxt = dateTxt.replace('CUSTOM_HOURS:', '').replace('CUSTOM_DAYS:', '') + (dateTxt.includes('HOURS') ? ' hrs' : ' days');
+    chips.push(`
+      <span class="filter-chip" title="Date: ${escapeHtml(dateTxt)}">
+        <span class="chip-label">Date:</span>
+        <span class="chip-val">${escapeHtml(dateTxt)}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('date')" title="Remove Date filter">✕</button>
+      </span>
+    `);
+  }
+
+  // From-To Date Range
+  if (state.fromDiscoveredDate || state.toDiscoveredDate) {
+    const rangeTxt = `${state.fromDiscoveredDate || '...'} → ${state.toDiscoveredDate || '...'}`;
+    chips.push(`
+      <span class="filter-chip" title="Date Range: ${rangeTxt}">
+        <span class="chip-label">Range:</span>
+        <span class="chip-val">${rangeTxt}</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('dateRange')" title="Remove Date Range">✕</button>
+      </span>
+    `);
+  }
+
+  // Search Query
+  if (state.searchQuery && state.searchQuery.trim()) {
+    chips.push(`
+      <span class="filter-chip" title="Search query: ${escapeHtml(state.searchQuery)}">
+        <span class="chip-label">Search:</span>
+        <span class="chip-val">"${escapeHtml(state.searchQuery)}"</span>
+        <button type="button" class="btn-chip-remove" onclick="removeDiscoveredFilter('search')" title="Clear Search">✕</button>
+      </span>
+    `);
+  }
+
+  if (chips.length > 0) {
+    list.innerHTML = chips.join('');
+    bar.classList.remove('hidden');
+  } else {
+    list.innerHTML = '';
+    bar.classList.add('hidden');
+  }
+}
+
+/**
+ * Removes an individual filter from the active filter chips bar and refreshes results.
+ */
+function removeDiscoveredFilter(filterType) {
+  if (filterType === 'reason') {
+    state.discoveredReason = 'ALL';
+    const sel = document.getElementById('selectReasonFilterDiscovered');
+    if (sel) {
+      sel.value = 'ALL';
+      sel.title = 'Filter by cancellation / rejection reason';
+    }
+  } else if (filterType === 'location') {
+    state.locationFilter = 'ALL';
+    const sel = document.getElementById('selectLocationFilter');
+    if (sel) sel.value = 'ALL';
+  } else if (filterType === 'exp') {
+    setExpFilter('ALL');
+    return;
+  } else if (filterType === 'source') {
+    state.sourceFilter = 'ALL';
+    const sel = document.getElementById('selectSource');
+    if (sel) sel.value = 'ALL';
+  } else if (filterType === 'genStatus') {
+    state.genStatusFilter = 'PENDING';
+    const sel = document.getElementById('selectGenStatus');
+    if (sel) sel.value = 'PENDING';
+  } else if (filterType === 'date') {
+    state.dateFilter = 'ALL';
+    const sel = document.getElementById('selectDateFilter');
+    if (sel) sel.value = 'ALL';
+    const customGroup = document.getElementById('customDateFilterGroup');
+    if (customGroup) customGroup.classList.add('hidden');
+  } else if (filterType === 'dateRange') {
+    state.fromDiscoveredDate = '';
+    state.toDiscoveredDate = '';
+    const fromEl = document.getElementById('discoveredDateFrom');
+    if (fromEl) fromEl.value = '';
+    const toEl = document.getElementById('discoveredDateTo');
+    if (toEl) toEl.value = '';
+  } else if (filterType === 'search') {
+    state.searchQuery = '';
+    const input = document.getElementById('inputSearch');
+    if (input) input.value = '';
+  }
+
+  applyFilters();
 }
 
 function filterPendingGeneration() {
@@ -569,6 +776,8 @@ function updateSelectedCountUI() {
   const count = state.selectedIds.size;
   const batchBtn = document.getElementById('btnBatchGenerate');
   const countBadge = document.getElementById('batchCountBadge');
+  const dismissBtn = document.getElementById('btnBatchDismiss');
+  const dismissBadge = document.getElementById('batchDismissCountBadge');
 
   if (batchBtn && countBadge) {
     if (count > 0) {
@@ -578,7 +787,224 @@ function updateSelectedCountUI() {
       batchBtn.classList.add('hidden');
     }
   }
+
+  if (dismissBtn && dismissBadge) {
+    if (count > 0) {
+      dismissBtn.classList.remove('hidden');
+      dismissBadge.textContent = String(count);
+    } else {
+      dismissBtn.classList.add('hidden');
+    }
+  }
+
+  const selectAllCb = document.getElementById('selectAllCheckbox');
+  if (selectAllCb) {
+    if (!state.posts || state.posts.length === 0) {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = false;
+    } else {
+      const allSelected = state.posts.every((p) => state.selectedIds.has(p.id));
+      const someSelected = !allSelected && state.posts.some((p) => state.selectedIds.has(p.id));
+      selectAllCb.checked = allSelected;
+      selectAllCb.indeterminate = someSelected;
+    }
+  }
 }
+
+function cancelBatchSelectedDiscovered() {
+  const count = state.selectedIds ? state.selectedIds.size : 0;
+  if (count === 0) return;
+
+  state.pendingCancelPostIds = Array.from(state.selectedIds);
+  state.pendingCancelPostId = null;
+  state.pendingCancelSource = 'discovered';
+  state.isSpamCancelMode = false;
+
+  const titleEl = document.getElementById('cancelModalTitle');
+  if (titleEl) {
+    titleEl.textContent = `Dismiss ${count} Discovered Post${count === 1 ? '' : 's'}`;
+  }
+
+  const descEl = document.getElementById('cancelModalDesc');
+  if (descEl) {
+    descEl.innerHTML = `Select a suggestion below or type a custom reason. All <strong>${count} selected post${count === 1 ? '' : 's'}</strong> will be removed from Discovered and moved to your <strong>Others</strong> history.`;
+  }
+
+  const checkAddToDismissed = document.getElementById('checkAddToDismissedRoles');
+  if (checkAddToDismissed) checkAddToDismissed.checked = false;
+
+  const btnPostOnly = document.getElementById('btnDismissPostOnly');
+  if (btnPostOnly) {
+    btnPostOnly.textContent = `Dismiss ${count} Post${count === 1 ? '' : 's'} Only`;
+  }
+  const btnBlacklist = document.getElementById('btnDismissAndBlacklist');
+  if (btnBlacklist) {
+    btnBlacklist.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg><span>🚫 Dismiss & Add Roles (${count})</span>`;
+  }
+
+  const nameEl = document.getElementById('cancelModalCandidate');
+  if (nameEl) nameEl.textContent = `for ${count} selected posts`;
+
+  const input = document.getElementById('inputCancelReason');
+  if (input) {
+    input.value = 'Irrelevant tech stack';
+  }
+
+  document.querySelectorAll('#cancelReasonModal .reason-chip').forEach((c) => {
+    const chipVal = c.getAttribute('data-reason') || c.textContent.trim();
+    c.classList.toggle('active', chipVal.toLowerCase() === 'irrelevant tech stack');
+  });
+
+  const modal = document.getElementById('cancelReasonModal');
+  if (modal) modal.classList.remove('hidden');
+  setTimeout(() => {
+    input?.focus();
+  }, 50);
+}
+
+// ==========================================================================
+// Discovered Jobs Side Detail Drawer Management
+// ==========================================================================
+
+function handleDiscoveredRowClick(postId, event) {
+  if (event.target.closest('input[type="checkbox"], button, a, .phone-copy-pill, .email-copy-pill')) {
+    return;
+  }
+  openDiscoveredDetailDrawer(postId);
+}
+
+function openDiscoveredDetailDrawer(postId) {
+  state.activeDiscoveredPostId = postId;
+  const post = state.posts && state.posts.find((p) => p.id === postId);
+  if (!post) return;
+
+  // Active row highlight
+  document.querySelectorAll('#postsTableBody tr').forEach((r) => r.classList.remove('active-row'));
+  const row = document.getElementById(`row-${postId}`);
+  if (row) row.classList.add('active-row');
+
+  // Title & Source Badge
+  const authorEl = document.getElementById('discoveredDrawerAuthor');
+  if (authorEl) authorEl.textContent = post.author_name || 'Recruiter';
+
+  const badgeEl = document.getElementById('discoveredDrawerSourceBadge');
+  if (badgeEl) badgeEl.innerHTML = getSourceBadgeHtml(post);
+
+  // Email
+  const primaryEmail = (post.contact_emails && post.contact_emails[0]) || '';
+  const emailEl = document.getElementById('discoveredDrawerEmail');
+  const copyEmailBtn = document.getElementById('btnCopyDiscoveredEmail');
+  if (emailEl) emailEl.textContent = primaryEmail || '—';
+  if (copyEmailBtn) {
+    if (primaryEmail) copyEmailBtn.classList.remove('hidden');
+    else copyEmailBtn.classList.add('hidden');
+  }
+
+  // Contact Phone
+  const primaryPhone = (post.contact_phones && post.contact_phones[0]) || '';
+  const phoneEl = document.getElementById('discoveredDrawerPhone');
+  const copyPhoneBtn = document.getElementById('btnCopyDiscoveredPhone');
+  if (phoneEl) phoneEl.textContent = primaryPhone || '—';
+  if (copyPhoneBtn) {
+    if (primaryPhone) copyPhoneBtn.classList.remove('hidden');
+    else copyPhoneBtn.classList.add('hidden');
+  }
+
+  // Job Description
+  const jdEl = document.getElementById('discoveredDrawerJd');
+  if (jdEl) jdEl.textContent = post.full_text || 'No job description text available.';
+
+  // Source Link
+  const sourceLink = document.getElementById('discoveredDrawerSourceLink');
+  if (sourceLink) {
+    if (post.post_url && !post.post_url.startsWith('manual://')) {
+      sourceLink.href = post.post_url;
+      sourceLink.classList.remove('hidden');
+    } else {
+      sourceLink.classList.add('hidden');
+    }
+  }
+
+  // Action Buttons
+  const genBtn = document.getElementById('btnDrawerGenerateMail');
+  const genText = document.getElementById('drawerGenBtnText');
+  const reviewBtn = document.getElementById('btnDrawerReview');
+  const reviewText = document.getElementById('drawerReviewBtnText');
+
+  const isGenerated = post.status === 'EMAIL_GENERATED';
+  if (genText) genText.textContent = isGenerated ? 'Re-generate' : 'Generate Mail';
+  if (reviewText) reviewText.textContent = isGenerated ? 'Review Draft' : 'Review';
+
+  // Open Drawer & Set Workspace Class
+  const drawer = document.getElementById('discoveredDetailDrawer');
+  const wrapper = document.getElementById('discoveredWorkspaceWrapper');
+  if (drawer) drawer.classList.remove('hidden');
+  if (wrapper) wrapper.classList.add('drawer-open');
+}
+
+function closeDiscoveredDetailDrawer() {
+  state.activeDiscoveredPostId = null;
+  const drawer = document.getElementById('discoveredDetailDrawer');
+  const wrapper = document.getElementById('discoveredWorkspaceWrapper');
+  if (drawer) drawer.classList.add('hidden');
+  if (wrapper) wrapper.classList.remove('drawer-open');
+  document.querySelectorAll('#postsTableBody tr').forEach((r) => r.classList.remove('active-row'));
+}
+
+function drawerGenerateMailDiscovered() {
+  if (!state.activeDiscoveredPostId) return;
+  const post = state.posts && state.posts.find((p) => p.id === state.activeDiscoveredPostId);
+  if (!post) return;
+  generateSingleChatGPT(post.id);
+}
+
+function drawerMoveToReviewDiscovered() {
+  if (!state.activeDiscoveredPostId) return;
+  const post = state.posts && state.posts.find((p) => p.id === state.activeDiscoveredPostId);
+  if (!post) return;
+  if (post.status === 'EMAIL_GENERATED') {
+    openPostInReview(post.id);
+  } else {
+    movePostToReview(post.id);
+  }
+}
+
+function copyDiscoveredDrawerEmail() {
+  if (!state.activeDiscoveredPostId) return;
+  const post = state.posts && state.posts.find((p) => p.id === state.activeDiscoveredPostId);
+  const email = (post && post.contact_emails && post.contact_emails[0]) || '';
+  if (email && typeof copyEmailToClipboard === 'function') {
+    copyEmailToClipboard(email);
+  }
+}
+
+function copyDiscoveredDrawerPhone() {
+  if (!state.activeDiscoveredPostId) return;
+  const post = state.posts && state.posts.find((p) => p.id === state.activeDiscoveredPostId);
+  const phone = (post && post.contact_phones && post.contact_phones[0]) || '';
+  if (phone && typeof copyPhoneToClipboard === 'function') {
+    copyPhoneToClipboard(phone);
+  }
+}
+
+function copyDiscoveredDrawerJd() {
+  const jdEl = document.getElementById('discoveredDrawerJd');
+  const text = jdEl ? jdEl.textContent : '';
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    if (typeof showToast === 'function') showToast('✓ Job description copied to clipboard', 'success');
+  });
+}
+
+// Global Keyboard Listener for Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const drawer = document.getElementById('discoveredDetailDrawer');
+    if (drawer && !drawer.classList.contains('hidden')) {
+      closeDiscoveredDetailDrawer();
+    }
+  }
+});
 
 // Global Bindings
 window.fetchDiscoveredPosts = fetchDiscoveredPosts;
@@ -603,3 +1029,18 @@ window.movePostToReview = movePostToReview;
 window.toggleSelectPost = toggleSelectPost;
 window.toggleSelectAll = toggleSelectAll;
 window.updateSelectedCountUI = updateSelectedCountUI;
+window.cancelBatchSelectedDiscovered = cancelBatchSelectedDiscovered;
+window.handleDiscoveredRowClick = handleDiscoveredRowClick;
+window.openDiscoveredDetailDrawer = openDiscoveredDetailDrawer;
+window.closeDiscoveredDetailDrawer = closeDiscoveredDetailDrawer;
+window.drawerGenerateMailDiscovered = drawerGenerateMailDiscovered;
+window.drawerMoveToReviewDiscovered = drawerMoveToReviewDiscovered;
+window.drawerDismissDiscovered = drawerDismissDiscovered;
+window.copyDiscoveredDrawerEmail = copyDiscoveredDrawerEmail;
+window.copyDiscoveredDrawerPhone = copyDiscoveredDrawerPhone;
+window.copyDiscoveredDrawerJd = copyDiscoveredDrawerJd;
+
+function drawerDismissDiscovered() {
+  if (!state.activeDiscoveredPostId) return;
+  cancelDiscoveredPost(state.activeDiscoveredPostId);
+}

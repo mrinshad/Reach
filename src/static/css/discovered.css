@@ -307,6 +307,139 @@
     padding: 0.4rem 0.65rem;
     border-radius: var(--radius-sm);
     outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .select-clean:focus {
+    border-color: var(--accent-indigo, #6366f1);
+  }
+
+  /* Compact Reason Dropdown with Sneak Peek (Ellipsis) */
+  .select-reason-discovered {
+    max-width: 140px;
+    width: 140px;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  /* Toolbar Row 3 (Reason, Separator, Dates, Sort, Results) */
+  .toolbar-row.row-tertiary {
+    padding-top: 0.25rem;
+    border-top: 1px dashed rgba(255, 255, 255, 0.05);
+  }
+
+  /* Vertical Separator Divider */
+  .toolbar-separator {
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: var(--border-medium, rgba(255, 255, 255, 0.14));
+    margin: 0 0.35rem;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+
+  /* Active Filter Chips Bar (Bottom of Toolbar) */
+  .active-filters-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.45rem;
+    margin-top: 0.15rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+    font-size: 0.74rem;
+  }
+
+  .active-filters-bar.hidden {
+    display: none !important;
+  }
+
+  .active-filters-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .active-filters-list {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.32);
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    padding: 0.18rem 0.5rem;
+    border-radius: var(--radius-xs, 4px);
+    transition: all 0.15s ease;
+  }
+
+  .filter-chip:hover {
+    background: rgba(99, 102, 241, 0.18);
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+
+  .filter-chip .chip-label {
+    font-weight: 600;
+    color: #94a3b8;
+  }
+
+  .filter-chip .chip-val {
+    color: #f8fafc;
+    font-weight: 600;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .filter-chip .btn-chip-remove {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 0 0.1rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.2rem;
+    border-radius: 2px;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .filter-chip .btn-chip-remove:hover {
+    color: #f43f5e;
+    background: rgba(244, 63, 94, 0.15);
+  }
+
+  .btn-clear-chips {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    margin-left: auto;
+    padding: 0.1rem 0.35rem;
+    transition: color 0.15s ease;
+  }
+
+  .btn-clear-chips:hover {
+    color: #f43f5e;
   }
 
   .custom-date-filter-group {
@@ -361,8 +494,39 @@
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    overflow-x: auto;
     box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Table Scroll Container: Scroll table internally until bottom is reached */
+  .table-scroll-container {
+    max-height: calc(100vh - 16rem);
+    min-height: 480px;
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
+  .table-scroll-container::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .table-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+
+  .table-scroll-container .reach-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-surface, #0f172a);
+    box-shadow: 0 1px 0 var(--border-subtle, rgba(255, 255, 255, 0.08));
   }
 
   .reach-table {
@@ -413,6 +577,17 @@
     white-space: nowrap;
   }
 
+  .recruiter-name.clickable-preview {
+    cursor: pointer;
+    transition: color 0.15s ease, text-decoration-color 0.15s ease;
+  }
+
+  .recruiter-name.clickable-preview:hover {
+    color: var(--accent-indigo, #818cf8);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
   .recruiter-headline {
     font-size: 0.74rem;
     color: var(--text-muted);
@@ -442,6 +617,32 @@
 
   .email-copy-pill:hover {
     border-color: rgba(99, 102, 241, 0.3);
+  }
+
+  .phone-copy-pill {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: rgba(14, 165, 233, 0.12);
+    color: #7dd3fc;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid rgba(14, 165, 233, 0.2);
+    max-width: 170px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .phone-copy-pill:hover {
+    background: rgba(14, 165, 233, 0.2);
+    border-color: rgba(14, 165, 233, 0.45);
+    color: #bae6fd;
+    transform: translateY(-1px);
   }
 
   .table-snippet {
@@ -506,7 +707,18 @@
 
 
 
-  /* Table Footer / Pagination */
+  /* Table Top Header Bar & Footer / Pagination */
+  .table-header-bar {
+    padding: 0.65rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-subtle);
+    background: rgba(0, 0, 0, 0.12);
+  }
+
   .table-footer {
     padding: 0.75rem 1.25rem;
     display: flex;
@@ -745,3 +957,233 @@
     background: rgba(14, 165, 233, 0.2);
     color: #7dd3fc;
   }
+
+/* ==========================================================================
+   Discovered Jobs Workspace & Docked Detail Window
+   ========================================================================== */
+
+.discovered-workspace-wrapper {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  position: relative;
+  width: 100%;
+  min-height: calc(100vh - 12rem);
+}
+
+.discovered-table-container {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  overflow-x: auto;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.discovered-workspace-wrapper.drawer-open .discovered-table-container {
+  max-width: calc(100% - 640px);
+}
+
+.discovered-table tr {
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.discovered-table tr.active-row {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border-left: 3px solid var(--accent-indigo, #6366f1) !important;
+}
+
+.discovered-table tr:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Detail Drawer (Right side) - Matches Review & Drafts Drawer Geometry */
+.discovered-detail-drawer {
+  width: 600px;
+  max-width: 600px;
+  min-width: 440px;
+  background: var(--bg-surface, #0f172a);
+  border: 1px solid var(--border-medium, #1e293b);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: calc(73px + 1rem); /* Stops exactly 1rem below the navbar */
+  height: 630px;
+  max-height: calc(100vh - 73px - 2.5rem);
+  min-height: 500px;
+  overflow: hidden;
+  z-index: 35;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.discovered-detail-drawer.hidden {
+  display: none !important;
+}
+
+/* Drawer Top Bar */
+.discovered-detail-drawer .drawer-top-bar {
+  padding: 0.5rem 0.85rem;
+  background: var(--bg-card, #1e293b);
+  border-bottom: 1px solid var(--border-subtle, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.discovered-detail-drawer .drawer-top-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.discovered-detail-drawer .drawer-recruiter-title {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text-main, #f8fafc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discovered-detail-drawer .drawer-top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.discovered-detail-drawer .btn-drawer-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: var(--radius-xs, 4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.discovered-detail-drawer .btn-drawer-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main, #ffffff);
+}
+
+/* Contact Bar: Email & Contact Phone */
+.discovered-detail-drawer .drawer-contact-bar {
+  padding: 0.55rem 0.85rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--border-subtle, #334155);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.discovered-detail-drawer .drawer-contact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+}
+
+.discovered-detail-drawer .drawer-contact-label {
+  color: var(--text-muted, #94a3b8);
+  font-weight: 600;
+  min-width: 52px;
+}
+
+.discovered-detail-drawer .drawer-contact-val {
+  color: #e2e8f0;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* JD Header & Content */
+.discovered-detail-drawer .drawer-jd-header {
+  padding: 0.5rem 0.85rem 0.35rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.discovered-detail-drawer .drawer-jd-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0.85rem 1rem;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  margin: 0 0.85rem 0.65rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Bottom Action Bar */
+.discovered-detail-drawer .drawer-bottom-bar {
+  padding: 0.55rem 0.85rem;
+  background: var(--bg-card, #1e293b);
+  border-top: 1px solid var(--border-subtle, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.discovered-detail-drawer .drawer-bottom-left,
+.discovered-detail-drawer .drawer-bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+@media (max-width: 1300px) {
+  .discovered-workspace-wrapper.drawer-open .discovered-table-container {
+    max-width: calc(100% - 500px);
+  }
+  .discovered-detail-drawer {
+    width: 480px;
+    max-width: 480px;
+    min-width: 360px;
+  }
+}
+
+@media (max-width: 960px) {
+  .discovered-workspace-wrapper {
+    flex-direction: column;
+  }
+  .discovered-workspace-wrapper.drawer-open .discovered-table-container {
+    max-width: 100%;
+  }
+  .discovered-detail-drawer {
+    width: 100%;
+    max-width: 100%;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    z-index: 100;
+  }
+}

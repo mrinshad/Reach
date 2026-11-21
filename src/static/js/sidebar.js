@@ -75,10 +75,12 @@ function switchTab(tabId) {
   if (tabId === 'crawlers') tabId = 'tabCrawlers';
   else if (tabId === 'discovered') tabId = 'tabDiscovered';
   else if (tabId === 'easy_apply' || tabId === 'easyApply' || tabId === 'easy-apply' || tabId === '#easy-apply') tabId = 'tabEasyApply';
+  else if (tabId === 'indeed_apply' || tabId === 'indeedApply' || tabId === 'indeed-apply' || tabId === '#indeed-apply' || tabId === 'tabIndeedApply') tabId = 'tabIndeedApply';
   else if (tabId === 'questions' || tabId === 'question_bank' || tabId === 'questionBank') tabId = 'tabQuestionBank';
   else if (tabId === 'review') tabId = 'tabReview';
   else if (tabId === 'sent') tabId = 'tabSent';
   else if (tabId === 'analytics') tabId = 'tabAnalytics';
+  else if (tabId === 'dismissed' || tabId === 'dismissed-roles') tabId = 'tabDismissedRoles';
 
   state.activeTab = tabId;
 
@@ -93,7 +95,9 @@ function switchTab(tabId) {
       tabCrawlers: '#crawlers',
       tabDiscovered: '#discovered',
       tabEasyApply: '#easy-apply',
+      tabIndeedApply: '#indeed-apply',
       tabQuestionBank: '#questions',
+      tabDismissedRoles: '#dismissed-roles',
       tabReview: '#review',
       tabSent: (localStorage.getItem('reach_history_view') === 'logs' ? '#logs' : '#sent'),
     };
@@ -108,7 +112,9 @@ function switchTab(tabId) {
     tabCrawlers: { title: 'Job Crawlers & Portals', breadcrumb: 'Launch active scrapers or explore upcoming major job portal engines' },
     tabDiscovered: { title: 'Discovered Jobs', breadcrumb: 'Explore, filter, and review crawled job postings' },
     tabEasyApply: { title: 'LinkedIn Job Portal & Easy Apply', breadcrumb: 'Autonomous direct job crawling, auto-apply submissions & questionnaire screening' },
+    tabIndeedApply: { title: 'Indeed Job Portal & Apply', breadcrumb: 'Autonomous Indeed job discovery, in-stream recruiter email harvesting & batch applications' },
     tabQuestionBank: { title: 'Screening Question Bank', breadcrumb: 'Centralized repository of Easy Apply recruiter screening questions & answers' },
+    tabDismissedRoles: { title: 'Dismissed Roles', breadcrumb: 'Centralized registry of excluded job roles skipped automatically across all crawler channels' },
     tabReview: { title: 'Review & Drafts', breadcrumb: 'Approve AI cover letters and dispatch outreach' },
     tabSent: { title: 'Sent & History', breadcrumb: 'Track dispatched applications and historical outreach' },
   };
@@ -126,8 +132,12 @@ function switchTab(tabId) {
   if (btnDiscovered) btnDiscovered.classList.toggle('active', tabId === 'tabDiscovered');
   const btnEasyApply = document.getElementById('btnTabEasyApply');
   if (btnEasyApply) btnEasyApply.classList.toggle('active', tabId === 'tabEasyApply');
+  const btnIndeedApply = document.getElementById('btnTabIndeedApply');
+  if (btnIndeedApply) btnIndeedApply.classList.toggle('active', tabId === 'tabIndeedApply');
   const btnQuestionBank = document.getElementById('btnTabQuestionBank');
   if (btnQuestionBank) btnQuestionBank.classList.toggle('active', tabId === 'tabQuestionBank');
+  const btnDismissedRoles = document.getElementById('btnTabDismissedRoles');
+  if (btnDismissedRoles) btnDismissedRoles.classList.toggle('active', tabId === 'tabDismissedRoles');
   const btnReview = document.getElementById('btnTabReview');
   if (btnReview) btnReview.classList.toggle('active', tabId === 'tabReview');
   const btnSent = document.getElementById('btnTabSent');
@@ -141,15 +151,19 @@ function switchTab(tabId) {
   if (panelDiscovered) panelDiscovered.classList.toggle('hidden', tabId !== 'tabDiscovered');
   const panelEasyApply = document.getElementById('tabEasyApply');
   if (panelEasyApply) panelEasyApply.classList.toggle('hidden', tabId !== 'tabEasyApply');
+  const panelIndeedApply = document.getElementById('tabIndeedApply');
+  if (panelIndeedApply) panelIndeedApply.classList.toggle('hidden', tabId !== 'tabIndeedApply');
   const panelQuestionBank = document.getElementById('tabQuestionBank');
   if (panelQuestionBank) panelQuestionBank.classList.toggle('hidden', tabId !== 'tabQuestionBank');
+  const panelDismissedRoles = document.getElementById('tabDismissedRoles');
+  if (panelDismissedRoles) panelDismissedRoles.classList.toggle('hidden', tabId !== 'tabDismissedRoles');
   const panelReview = document.getElementById('tabReview');
   if (panelReview) panelReview.classList.toggle('hidden', tabId !== 'tabReview');
   const panelSent = document.getElementById('tabSent');
   if (panelSent) panelSent.classList.toggle('hidden', tabId !== 'tabSent');
 
   const appMain = document.getElementById('appMain');
-  if (appMain) appMain.classList.toggle('no-scroll', tabId === 'tabReview');
+  if (appMain) appMain.classList.remove('no-scroll');
 
   fetchStats();
 
@@ -160,8 +174,12 @@ function switchTab(tabId) {
     fetchDiscoveredPosts();
   } else if (tabId === 'tabEasyApply') {
     if (typeof fetchEasyApplyPosts === 'function') fetchEasyApplyPosts();
+  } else if (tabId === 'tabIndeedApply') {
+    if (typeof fetchIndeedApplyPosts === 'function') fetchIndeedApplyPosts();
   } else if (tabId === 'tabQuestionBank') {
     if (typeof loadQuestionBankPage === 'function') loadQuestionBankPage();
+  } else if (tabId === 'tabDismissedRoles') {
+    if (typeof loadDismissedRolesPage === 'function') loadDismissedRolesPage();
   } else if (tabId === 'tabReview') {
     fetchReviewPosts();
   } else if (tabId === 'tabSent') {
@@ -193,6 +211,9 @@ function jumpToOutreachReady() {
 }
 
 function jumpToReviewDrafts() {
+  if (typeof setReviewFilter === 'function') {
+    setReviewFilter('GENERATED');
+  }
   switchTab('tabReview');
 }
 
@@ -219,6 +240,13 @@ function jumpToEasyApply(statusFilter) {
   }
 }
 
+function jumpToIndeedApply(statusFilter) {
+  switchTab('tabIndeedApply');
+  if (statusFilter && typeof filterIndeedApplyStatus === 'function') {
+    filterIndeedApplyStatus(statusFilter);
+  }
+}
+
 function jumpToQuestionBank() {
   switchTab('tabQuestionBank');
 }
@@ -236,4 +264,6 @@ window.jumpToReviewDrafts = jumpToReviewDrafts;
 window.jumpToDiscovered = jumpToDiscovered;
 window.jumpToScreenedApplications = jumpToScreenedApplications;
 window.jumpToEasyApply = jumpToEasyApply;
+window.jumpToIndeedApply = jumpToIndeedApply;
+window.jumpToQuestionBank = jumpToQuestionBank;
 window.jumpToQuestionBank = jumpToQuestionBank;

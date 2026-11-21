@@ -56,6 +56,48 @@ def get_chatgpt_question_url() -> str:
     return DEFAULT_CHATGPT_QUESTION_URL
 
 
+PROMPT_LEAK_PHRASES = [
+    "write the tailored cold outreach",
+    "focus on the candidate",
+    "never invent experience",
+    "bridge skill requirements",
+    "prompting chatgpt",
+    "role mentions",
+    "experience-based cancellation is disabled",
+    "write the email anyway",
+    "tailored cold outreach application email",
+    "submitting jd for",
+]
+
+
+def is_valid_email_draft(subject: str, body: str) -> Tuple[bool, str]:
+    """
+    Validate that an email draft has legitimate applicant outreach content
+    and does not contain prompt echoes, meta-instructions, or garbage.
+    Returns (is_valid, failure_reason).
+    """
+    if not subject or not subject.strip():
+        return False, "Empty subject"
+    if subject.strip().upper() == "UNSUITABLE_JD":
+        return False, "Unsuitable JD"
+    if not body or len(body.strip()) < 80:
+        return False, "Email body too short (<80 characters)"
+
+    body_lower = body.lower()
+    subject_lower = subject.lower()
+
+    # Reject prompt leaks or echoed instructions
+    for phrase in PROMPT_LEAK_PHRASES:
+        if phrase in body_lower or phrase in subject_lower:
+            return False, f"Contains prompt meta-instruction: '{phrase}'"
+
+    # Reject if body starts like a prompt directive
+    if body_lower.startswith("write ") or body_lower.startswith("please write ") or body_lower.startswith("prompt:"):
+        return False, "Starts with prompt directive instead of greeting"
+
+    return True, "Valid"
+
+
 def clean_chatgpt_answer(raw_text: str) -> str:
     """Clean and sanitize ChatGPT's raw response to extract only the answer."""
     if not raw_text:
@@ -149,6 +191,9 @@ def dismiss_chatgpt_overlays(page: Page):
         "button:has-text('Continue without logging in')",
         "button[aria-label='Close dialog']",
         "button[aria-label='Close']",
+        "button[aria-label*='Close canvas' i]",
+        "button[aria-label*='Close writing block' i]",
+        "button[data-testid='close-canvas-button']",
         "div[role='dialog'] button:has-text('Close')",
     ]
     for sel in dismiss_selectors:
@@ -162,12 +207,12 @@ def dismiss_chatgpt_overlays(page: Page):
 
 
 PROMPT_BOX_SELECTOR = (
-    "div.ProseMirror[role='textbox'][aria-label*='Ask' i], "
-    "div.ProseMirror[role='textbox'], "
-    "div[contenteditable='true'][role='textbox'], "
-    "div[contenteditable='true'], "
     "#prompt-textarea, "
-    "[data-testid='prompt-textarea']"
+    "[data-testid='prompt-textarea'], "
+    "form[data-chatgpt-composer] div.ProseMirror[contenteditable='true'], "
+    "form div.ProseMirror[contenteditable='true'], "
+    "div.ProseMirror[role='textbox'][contenteditable='true']:not([contenteditable='false']), "
+    "div[contenteditable='true'][role='textbox']"
 )
 
 SEND_BTN_SELECTOR = (
@@ -233,6 +278,107 @@ def is_unsuitable_response(raw_text: str) -> bool:
     )
 
 
+def clean_email_body(body: str) -> str:
+    """
+    Clean an email body by:
+    1. Stripping leading ChatGPT / Canvas UI artifacts (e.g. 'Send', 'Send email',
+       'Connect email', 'Recipients', 'Draft', 'Email Draft:', etc.).
+    2. Detecting the candidate's signature block and trimming any assistant chatter,
+       prompt reflections, notes, or canvas action buttons that appear after it.
+    """
+    if not body:
+        return ""
+
+    raw_lines = body.strip().split("\n")
+    # 1. Strip leading lines that are UI artifacts / headers
+    start_idx = 0
+    leading_artifact_pattern = re.compile(
+        r"^(?:send(?:\s+email)?|connect email.*|recipients.*|email(?:\s+draft)?[:\s]*|draft[:\s]*|to[:\s]+.*|from[:\s]+.*|cc[:\s]+.*|bcc[:\s]+.*|(?:\*\*)?subject(?:\*\*)?:.*|```.*|---)$",
+        re.IGNORECASE,
+    )
+    while start_idx < len(raw_lines):
+        line = raw_lines[start_idx].strip()
+        if not line:
+            start_idx += 1
+            continue
+        if leading_artifact_pattern.match(line):
+            start_idx += 1
+            continue
+        break
+
+    lines = raw_lines[start_idx:]
+    if not lines:
+        return ""
+
+    # 2. Look for signature block and trim anything following it
+    sign_off_pattern = re.compile(
+        r"^(?:\*\*)?(?:(?:best|warm|kind|with)?\s*regards|sincerely(?:\s+yours)?|thanks\s*(?:&|and)\s*regards|thanks|thank\s+you|best|cheers|respectfully|yours\s+(?:sincerely|faithfully))(?:\*\*)?\b[,\s]*",
+        re.IGNORECASE,
+    )
+
+    sign_off_idx = -1
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i].strip()
+        if sign_off_pattern.match(line):
+            sign_off_idx = i
+            break
+
+    if sign_off_idx != -1:
+        contact_line_pattern = re.compile(
+            r"^(?:(?:\+?\d[\d\s\-\(\)\.]{7,}\d)|.*@.*\..*|(?:phone|tel|mobile|cell|email|linkedin|github|portfolio|website|web)[:\s].*|https?://.*|linkedin\.com/.*|github\.com/.*|(?:full[\s\-]stack|software|frontend|backend|web|devops|cloud)?\s*(?:developer|engineer|consultant|architect|specialist))\b",
+            re.IGNORECASE,
+        )
+
+        sig_end_idx = sign_off_idx
+        sign_off_line = lines[sign_off_idx].strip()
+        has_name_on_same_line = bool(
+            re.search(
+                r"^(?:\*\*)?(?:(?:best|warm|kind|with)?\s*regards|sincerely(?:\s+yours)?|thanks\s*(?:&|and)\s*regards|thanks|thank\s+you|best|cheers)(?:\*\*)?[,\s]+[A-Za-z]+",
+                sign_off_line,
+                re.IGNORECASE,
+            )
+        )
+
+        curr = sign_off_idx + 1
+        name_found = has_name_on_same_line
+
+        while curr < len(lines):
+            cline = lines[curr].strip()
+            if not cline:
+                # Allow up to 1 blank line before name
+                if not name_found and (curr + 1 < len(lines)) and lines[curr + 1].strip():
+                    curr += 1
+                    continue
+                else:
+                    break
+
+            if not name_found:
+                if not re.match(
+                    r"^(?:note:|ps:|p\.s\.|let me know|hope this|good luck|feel free|why this|copy|edit|regenerate|share|---)",
+                    cline,
+                    re.IGNORECASE,
+                ):
+                    name_found = True
+                    sig_end_idx = curr
+                    curr += 1
+                    continue
+                else:
+                    break
+            else:
+                # Name already found. Check if this is contact info / title / candidate detail
+                if contact_line_pattern.match(cline) or ("rinshad" in cline.lower()):
+                    sig_end_idx = curr
+                    curr += 1
+                    continue
+                else:
+                    # Anything else is commentary or UI artifact
+                    break
+
+        lines = lines[: sig_end_idx + 1]
+
+    return "\n".join(lines).strip()
+
+
 def parse_email_response(raw_text: str) -> Tuple[str, str]:
     """
     Parse a ChatGPT generated application response into (subject, body).
@@ -281,8 +427,8 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
 
     for line in lines[idx:]:
         l_str = line.strip()
-        # Skip Canvas metadata lines like "Connect email", "Recipients", or solitary "Email"
-        if re.match(r"^(?:Email|Connect email|Recipients)(?:\s+[^\n]+)?$", l_str, re.IGNORECASE):
+        # Skip Canvas metadata lines like "Connect email", "Recipients", "Send", or solitary "Email"
+        if re.match(r"^(?:Email|Connect email|Recipients|Send(?:\s+email)?)(?:\s+[^\n]+)?$", l_str, re.IGNORECASE):
             continue
         sub_match = re.match(r"^(?:\*\*)?Subject(?:\*\*)?:\s*(.+)$", l_str, re.IGNORECASE)
         if sub_match and not subject:
@@ -293,6 +439,7 @@ def parse_email_response(raw_text: str) -> Tuple[str, str]:
     body = "\n".join(filtered_lines).strip()
     # Strip any residual leading "Email\n\n" or "Subject:\n"
     body = re.sub(r"^(?:Email(?:\s+Draft)?[:\s]*\n+)+", "", body, flags=re.IGNORECASE).strip()
+    body = clean_email_body(body)
 
     if not subject:
         # Try extracting role from first sentence (e.g. "I'm writing to apply for the Full Stack Developer L2 position in Mumbai")
@@ -526,22 +673,71 @@ def normalize_rejection_reason(reason: str, gen_body: str = "", full_text: str =
     return r_raw[:48]
 
 
-def clean_and_truncate_reason(text: str, max_chars: int = 48, max_words: int = 8) -> str:
+def clean_and_truncate_reason(text: str, max_chars: int = 100, max_words: int = 14) -> str:
     """
-    Strip boilerplate prefixes and return a clean, uniform taxonomy label.
+    Extract clean, concise reason directly from ChatGPT's unsuitable response text.
+    Strips boilerplate prefixes (UNSUITABLE_JD, ❌, Not suitable —, Reason:),
+    and truncates cleanly at word boundaries if excessive.
+    e.g. "UNSUITABLE_JD - Java Specialized" -> "Java Specialized"
+    e.g. "UNSUITABLE_JD - ❌ Not suitable — SEO role" -> "SEO role"
     """
     if not text:
-        return "Not Suitable (General)"
-    return normalize_rejection_reason(text)
+        return "Unsuitable JD"
+    t = text.strip()
+
+    # Check for Classification: XYZ → Skip
+    class_match = re.search(r"Classification:\s*([^→\-\n\.]+?)(?:\s*[→\-]+\s*Skip|\.|$)", t, flags=re.IGNORECASE)
+    if class_match:
+        label = class_match.group(1).strip()
+        if label:
+            if label.isupper():
+                label = " / ".join("QA" if part.strip().upper() == "QA" else part.strip().title() for part in label.split("/"))
+            return label[:max_chars].strip()
+
+    # Strip UNSUITABLE_JD / ❌ prefix
+    t = re.sub(r"^(?:UNSUITABLE_JD\s*[-—:]*\s*)?(?:❌\s*)?", "", t, flags=re.IGNORECASE).strip()
+    # Strip "Not suitable — " / "Not suitable - " / "Unsuitable JD -" prefix variants
+    t = re.sub(r"^(?:Not suitable|Unsuitable(?:\s*JD)?)\s*[-—:]+\s*", "", t, flags=re.IGNORECASE).strip()
+    # Strip leading "Reason:\s*"
+    t = re.sub(r"^Reason\s*:\s*", "", t, flags=re.IGNORECASE).strip()
+    # Strip leading/trailing quotes, backticks, asterisks, dashes
+    t = t.strip("`*\"' \t\n-—:")
+    if not t or len(t) <= 2:
+        return "Unsuitable JD"
+
+    words = t.split()
+    t_lower = t.lower()
+    # For scam/potential scam/spam reasons, preserve context up to 100 characters
+    if "scam" in t_lower or "spam" in t_lower:
+        if len(t) > 100:
+            return t[:97].rstrip() + "..."
+        return t
+
+    if len(words) > max_words or len(t) > max_chars:
+        # Take up to max_words and also respect max_chars
+        truncated = " ".join(words[:max_words])
+        if len(truncated) > max_chars - 3:
+            truncated = truncated[: max_chars - 3].rstrip()
+            if " " in truncated:
+                truncated = truncated.rsplit(" ", 1)[0]
+        return truncated.rstrip(".,;:-—") + "..."
+    return t.rstrip(".,;:-—")
 
 
 def extract_unsuitable_reason(raw_text: str, full_text: str = "") -> str:
     """
-    Extract clean, concise uniform reason string from an unsuitable JD response.
+    Extract clean, concise reason string directly from an unsuitable JD response from ChatGPT.
     """
     if not raw_text:
-        return "Not Suitable (General)"
-    return normalize_rejection_reason(raw_text, gen_body=raw_text, full_text=full_text)
+        return "Unsuitable JD"
+    lines = [line.strip() for line in raw_text.strip().splitlines() if line.strip()]
+    if not lines:
+        return "Unsuitable JD"
+    t = lines[0]
+    # If line 0 is strictly "UNSUITABLE_JD" or "UNSUITABLE" without any reason, look at line 1
+    if re.fullmatch(r"^UNSUITABLE(?:_JD)?$", t, flags=re.IGNORECASE) and len(lines) > 1:
+        t = lines[1]
+    return clean_and_truncate_reason(t)
 
 
 def is_experience_rejection(reason_text: str) -> bool:
@@ -571,10 +767,13 @@ def is_experience_rejection(reason_text: str) -> bool:
 
 
 EXPERIENCE_OVERRIDE_DIRECTIVE = (
-    "\n\n[System Directive: Do NOT disqualify, skip, or classify as UNSUITABLE_JD based on years of experience, "
-    "seniority level, or experience mismatch (even for 5+, 8+, 10+, 15+ years). Always generate a tailored "
-    "application email focusing on relevant technical skills, frameworks, and projects. Only classify as "
-    "UNSUITABLE_JD if this is a completely non-engineering role (e.g. Sales, HR, Marketing) or a vendor marketing hotlist/referral.]"
+    "\n\n[System Directive: Generate application emails ONLY for JDs with at least 70% alignment with my primary stack: "
+    "React.js, Next.js, TypeScript, JavaScript, Node.js, Express.js, PostgreSQL, Prisma, Python, GCP, Azure, and DevOps. "
+    "Evaluate core technical requirements, not keyword overlap. "
+    "Exclude unrelated specialized roles (e.g., Java, SAP, Salesforce, ServiceNow, Oracle DBA, Azure Developer).\n\n"
+    "Never reject based on experience or seniority. ALWAYS reject non-engineering roles and vendor marketing hotlists/referrals.\n\n"
+    "For all unsuitable JDs, output ONLY: `UNSUITABLE_JD - [1–2 word reason]`.\n\n"
+    "For qualifying JDs, generate a tailored application email.]"
 )
 
 
@@ -599,10 +798,9 @@ def _send_prompt_and_wait_response(
             pass
 
     ASSISTANT_MSG_SELECTOR = (
-        "[data-markdown-text-style='assistant-message'], "
         "[data-message-author-role='assistant'], "
-        "div[data-dil-message-id], "
-        "article"
+        "[data-markdown-text-style='assistant-message'], "
+        "div[data-dil-message-id]:not([data-message-author-role='user'])"
     )
 
     existing_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
@@ -621,26 +819,50 @@ def _send_prompt_and_wait_response(
         except Exception:
             pass
 
-    # 2. Focus prompt box
-    prompt_box = page.locator(PROMPT_BOX_SELECTOR).first
-    prompt_box.click()
+    # 2. Focus prompt box (prioritize bottom chat composer #prompt-textarea)
+    prompt_box = page.locator(PROMPT_BOX_SELECTOR).last
+    try:
+        prompt_box.click(force=True, timeout=3000)
+    except Exception:
+        try:
+            prompt_box.focus()
+        except Exception:
+            pass
     page.wait_for_timeout(300)
 
-    # 3. Fast insert into ProseMirror contenteditable via native execCommand
+    # 3. Fast & Safe insert into ProseMirror contenteditable
+    # (Avoid bare keyboard.type on multiline text because Playwright sends Enter keydown for \n,
+    # which causes ChatGPT to prematurely submit before the full prompt is typed)
     inserted = False
     try:
         inserted = page.evaluate("""({sel, text}) => {
-            const el = document.querySelector(sel);
+            const els = Array.from(document.querySelectorAll(sel));
+            const el = els.find(e => e.getAttribute('contenteditable') === 'true' || e.tagName === 'TEXTAREA') || els[els.length - 1];
             if (!el) return false;
             el.focus();
-            document.execCommand('selectAll', false, null);
-            const ok = document.execCommand('insertText', false, text);
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return ok;
+
+            // Method A: Synthetic Clipboard paste event (ProseMirror native multiline handler)
+            try {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', text);
+                const ev = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
+                el.dispatchEvent(ev);
+                if (el.innerText && el.innerText.trim().length > 10) return true;
+            } catch (e) {}
+
+            // Method B: execCommand
+            try {
+                document.execCommand('selectAll', false, null);
+                const ok = document.execCommand('insertText', false, text);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                if (ok && el.innerText && el.innerText.trim().length > 10) return true;
+            } catch (e) {}
+
+            return false;
         }""", {"sel": PROMPT_BOX_SELECTOR, "text": prompt_text.strip()})
     except Exception as eval_err:
-        print(f"    execCommand insert notice: {eval_err}")
+        print(f"    execCommand/paste insert notice: {eval_err}")
         inserted = False
 
     # Verify text populated in prompt box
@@ -651,21 +873,28 @@ def _send_prompt_and_wait_response(
         pass
 
     if not inserted or not current_prompt_text:
-        # Fallback 1: fill locator
+        # Fallback 1: keyboard.insert_text (sends input event without bare Enter keypresses)
         try:
-            prompt_box.fill(prompt_text.strip())
+            prompt_box.focus()
+            page.keyboard.insert_text(prompt_text.strip())
             current_prompt_text = prompt_box.inner_text().strip()
         except Exception:
             pass
 
     if not current_prompt_text:
-        # Fallback 2: type line-by-line
-        lines = prompt_text.strip().split("\n")
-        for i, line in enumerate(lines):
-            if i > 0:
-                page.keyboard.press("Shift+Enter")
-            if line:
-                page.keyboard.type(line, delay=1)
+        # Fallback 2: type line-by-line with safe Shift+Enter (prevents premature submit)
+        try:
+            prompt_box.focus()
+            lines = prompt_text.strip().split("\n")
+            for i, line in enumerate(lines):
+                if i > 0:
+                    page.keyboard.press("Shift+Enter")
+                    page.wait_for_timeout(20)
+                if line:
+                    page.keyboard.insert_text(line)
+            current_prompt_text = prompt_box.inner_text().strip()
+        except Exception:
+            pass
 
     page.wait_for_timeout(600)
 
@@ -888,10 +1117,9 @@ def send_question_and_get_answer(
             prompt_to_send += f"\nOptions: {', '.join(clean_opts)}"
 
     ASSISTANT_MSG_SELECTOR = (
-        "[data-markdown-text-style='assistant-message'], "
         "[data-message-author-role='assistant'], "
-        "div[data-dil-message-id], "
-        "article"
+        "[data-markdown-text-style='assistant-message'], "
+        "div[data-dil-message-id]:not([data-message-author-role='user'])"
     )
 
     existing_msgs = page.locator(ASSISTANT_MSG_SELECTOR)
@@ -955,8 +1183,9 @@ def send_question_and_get_answer(
             for i, line in enumerate(lines):
                 if i > 0:
                     page.keyboard.press("Shift+Enter")
+                    page.wait_for_timeout(20)
                 if line:
-                    page.keyboard.type(line, delay=2)
+                    page.keyboard.insert_text(line)
             current_prompt_text = prompt_box.inner_text().strip()
         except Exception:
             pass
@@ -1153,3 +1382,83 @@ def ask_chatgpt_for_question_answer(
     except Exception as e:
         logger(f"  Notice querying ChatGPT for question: {e}")
         return None, "FAILED"
+
+
+def ask_chatgpt_for_reason_for_applying(
+    context,
+    jd_text: str,
+    logger=print,
+) -> str:
+    """
+    Query ChatGPT to generate a concise, tailored reason for applying based on the JD.
+    Directive format: {jd_text}\n\nNeed reason for applying
+    Copies the result to the macOS system clipboard (pbcopy) and returns the generated text.
+    """
+    clean_jd = (jd_text or "").strip()
+    if not clean_jd:
+        clean_jd = "Software engineering and full-stack development role."
+
+    prompt_to_send = f"{clean_jd}\n\nNeed reason for applying"
+    logger("  🤖 Requesting tailored 'Reason for applying' from ChatGPT...")
+
+    chat_page = None
+    target_url = get_chatgpt_question_url()
+
+    try:
+        if context:
+            for p in context.pages:
+                try:
+                    p_url = p.url or ""
+                    if "chatgpt.com" in p_url:
+                        chat_page = p
+                        break
+                except Exception:
+                    pass
+
+            if not chat_page:
+                chat_page = context.new_page()
+                navigate_to_conversation(chat_page, url=target_url)
+            else:
+                try:
+                    dismiss_chatgpt_overlays(chat_page)
+                    chat_page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=4000)
+                except Exception:
+                    try:
+                        chat_page.goto(target_url, wait_until="commit", timeout=20000)
+                        chat_page.wait_for_timeout(3000)
+                        dismiss_chatgpt_overlays(chat_page)
+                        chat_page.wait_for_selector(PROMPT_BOX_SELECTOR, timeout=15000)
+                    except Exception:
+                        pass
+
+        if chat_page:
+            ans, status = send_question_and_get_answer(
+                chat_page,
+                question_text=prompt_to_send,
+                logger=logger,
+            )
+            if ans and status == "OK":
+                clean_reason = ans.strip().strip('"\'')
+                # Copy to pbcopy on macOS
+                try:
+                    import subprocess
+                    subprocess.run(["pbcopy"], input=clean_reason, text=True, check=False)
+                    logger("    📋 Copied generated reason to system clipboard (pbcopy)")
+                except Exception:
+                    pass
+                return clean_reason
+    except Exception as e:
+        logger(f"  Notice querying ChatGPT for reason: {e}")
+
+    # Fallback tailored paragraph if ChatGPT is unreachable
+    fallback = (
+        "With hands-on experience building full-stack web applications, robust RESTful APIs, and scalable "
+        "cloud infrastructure, I possess the direct technical background and problem-solving skills required "
+        "to deliver immediate value to your engineering team."
+    )
+    try:
+        import subprocess
+        subprocess.run(["pbcopy"], input=fallback, text=True, check=False)
+    except Exception:
+        pass
+    return fallback

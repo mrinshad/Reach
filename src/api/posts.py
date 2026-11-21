@@ -95,6 +95,7 @@ def api_get_posts(
     experience_only: bool = Query(False, description="Filter only posts cancelled due to experience requirements"),
     from_date: Optional[str] = Query(None, description="Start date filter YYYY-MM-DD"),
     to_date: Optional[str] = Query(None, description="End date filter YYYY-MM-DD"),
+    has_email: Optional[bool] = Query(None, description="Filter posts that have detected recruiter contact emails"),
     limit: int = Query(25, ge=1, le=5000),
     offset: int = Query(0, ge=0),
 ):
@@ -126,6 +127,7 @@ def api_get_posts(
             experience_only=safe_exp_only,
             from_date=safe_from_date,
             to_date=safe_to_date,
+            has_email=has_email,
             limit=safe_limit,
             offset=safe_offset,
         )
@@ -180,6 +182,8 @@ def api_update_post(post_id: str, payload: UpdateEmailPayload):
     try:
         subject = payload.subject or payload.generated_subject or ""
         body = payload.body or payload.generated_body or ""
+        from src.services.chatgpt_service import clean_email_body
+        body = clean_email_body(body)
         update_post_email(post_id, subject, body)
         return {"success": True, "message": "Email draft updated successfully."}
     except Exception as e:
@@ -239,13 +243,22 @@ def api_revert_posts_batch(payload: BatchPostActionPayload):
 
 @router.post("/posts/{post_id}/reject")
 def api_reject_post(post_id: str, payload: Optional[RejectPostPayload] = None):
-    """Mark a post as rejected/cancelled with optional reason comment."""
+    """Mark a post as rejected/cancelled with optional reason comment and optional addition to dismissed_roles."""
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     try:
         reason = payload.reason if payload else None
         update_post_status(post_id, "REJECTED", rejection_reason=reason)
+        if payload and payload.add_to_dismissed_roles:
+            headline = post.get("author_headline") or post.get("author_name") or post.get("title")
+            if headline and headline.strip():
+                from src.db.dismissed_roles import add_dismissed_role, detect_post_source
+                src = detect_post_source(post.get("category"), post.get("post_url"))
+                try:
+                    add_dismissed_role(headline.strip(), source=src, reason=reason, force=True)
+                except Exception:
+                    pass
         return {"success": True, "message": "Post marked as REJECTED."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -253,11 +266,23 @@ def api_reject_post(post_id: str, payload: Optional[RejectPostPayload] = None):
 
 @router.post("/posts/reject-batch")
 def api_reject_posts_batch(payload: BatchPostActionPayload):
-    """Reject/cancel multiple posts with an optional cancellation reason."""
+    """Reject/cancel multiple posts with an optional cancellation reason and optional addition to dismissed_roles."""
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided.")
     try:
         count = reject_posts_batch(payload.post_ids, payload.reason)
+        if payload.add_to_dismissed_roles:
+            from src.db.posts import get_posts_by_ids
+            from src.db.dismissed_roles import add_dismissed_role, detect_post_source
+            posts = get_posts_by_ids(payload.post_ids)
+            for p in posts:
+                headline = p.get("author_headline") or p.get("author_name") or p.get("title")
+                if headline and headline.strip():
+                    src = detect_post_source(p.get("category"), p.get("post_url"))
+                    try:
+                        add_dismissed_role(headline.strip(), source=src, reason=payload.reason, force=True)
+                    except Exception:
+                        pass
         return {"success": True, "count": count, "message": f"Successfully cancelled {count} applications."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -294,7 +319,7 @@ def api_update_post_status(post_id: str, payload: UpdateStatusPayload):
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "EMAIL_GENERATED", "SENT", "NOT_FOUND"}
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "CANCELLED", "EMAIL_GENERATED", "SENT", "NOT_FOUND"}
     new_status = (payload.status or "").strip().upper()
     if new_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}. Allowed: {allowed_statuses}")
@@ -304,6 +329,15 @@ def api_update_post_status(post_id: str, payload: UpdateStatusPayload):
         if reason is None and new_status in ("DISCOVERED", "APPLIED"):
             reason = ""  # Clear previous screening/rejection reason
         update_post_status(post_id, new_status, rejection_reason=reason)
+        if payload.add_to_dismissed_roles and new_status in ("REJECTED", "CANCELLED"):
+            headline = post.get("author_headline") or post.get("author_name") or post.get("title")
+            if headline and headline.strip():
+                from src.db.dismissed_roles import add_dismissed_role, detect_post_source
+                src = detect_post_source(post.get("category"), post.get("post_url"))
+                try:
+                    add_dismissed_role(headline.strip(), source=src, reason=reason, force=True)
+                except Exception:
+                    pass
         return {"success": True, "post_id": post_id, "status": new_status, "message": f"Status updated to {new_status}."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -315,7 +349,7 @@ def api_update_posts_status_batch(payload: BatchStatusPayload):
     if not payload.post_ids:
         raise HTTPException(status_code=400, detail="No post IDs provided.")
 
-    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "NOT_FOUND"}
+    allowed_statuses = {"DISCOVERED", "REQUIRES_QUESTIONNAIRE", "APPLIED", "REJECTED", "CANCELLED", "NOT_FOUND"}
     new_status = (payload.status or "").strip().upper()
     if new_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
@@ -331,6 +365,19 @@ def api_update_posts_status_batch(payload: BatchStatusPayload):
             updated_count += 1
         except Exception:
             pass
+
+    if payload.add_to_dismissed_roles and new_status in ("REJECTED", "CANCELLED"):
+        from src.db.posts import get_posts_by_ids
+        from src.db.dismissed_roles import add_dismissed_role, detect_post_source
+        posts = get_posts_by_ids(payload.post_ids)
+        for p in posts:
+            headline = p.get("author_headline") or p.get("author_name") or p.get("title")
+            if headline and headline.strip():
+                src = detect_post_source(p.get("category"), p.get("post_url"))
+                try:
+                    add_dismissed_role(headline.strip(), source=src, reason=payload.reason, force=True)
+                except Exception:
+                    pass
 
     return {
         "success": True,

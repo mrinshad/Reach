@@ -460,6 +460,7 @@ async function loadAnalytics(days) {
     if (data.summary) {
       animateCountUp('kpiScraped', data.summary.total_scraped || 0);
       animateCountUp('kpiEasyApplyApplied', data.summary.easy_apply_applied || 0);
+      animateCountUp('kpiIndeedApplied', data.summary.indeed_applied || 0);
       animateCountUp('kpiEasyApplyScreened', data.summary.easy_apply_screened || 0);
       animateCountUp('kpiQuestionBankTotal', data.summary.question_bank_total || 0);
       animateCountUp('kpiDrafted', data.summary.total_drafted || 0);

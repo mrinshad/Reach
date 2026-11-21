@@ -25,21 +25,25 @@ class SendBatchPayload(BaseModel):
 class BatchPostActionPayload(BaseModel):
     post_ids: List[str]
     reason: Optional[str] = None
+    add_to_dismissed_roles: Optional[bool] = False
 
 
 class UpdateStatusPayload(BaseModel):
     status: str
     reason: Optional[str] = None
+    add_to_dismissed_roles: Optional[bool] = False
 
 
 class BatchStatusPayload(BaseModel):
     post_ids: List[str]
     status: str
     reason: Optional[str] = None
+    add_to_dismissed_roles: Optional[bool] = False
 
 
 class RejectPostPayload(BaseModel):
     reason: Optional[str] = None
+    add_to_dismissed_roles: Optional[bool] = False
 
 
 class SpamPostPayload(BaseModel):

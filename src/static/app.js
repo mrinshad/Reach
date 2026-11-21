@@ -20,15 +20,19 @@
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof initSidebarCollapse === 'function') initSidebarCollapse();
 
-  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabEasyApply', 'tabQuestionBank', 'tabReview', 'tabSent'];
+  const validTabs = ['tabAnalytics', 'tabCrawlers', 'tabDiscovered', 'tabEasyApply', 'tabIndeedApply', 'tabQuestionBank', 'tabDismissedRoles', 'tabReview', 'tabSent'];
   const hashToTab = {
     '#analytics': 'tabAnalytics',
     '#crawlers': 'tabCrawlers',
     '#discovered': 'tabDiscovered',
     '#easy-apply': 'tabEasyApply',
+    '#indeed-apply': 'tabIndeedApply',
+    '#indeed': 'tabIndeedApply',
     '#questions': 'tabQuestionBank',
     '#question-bank': 'tabQuestionBank',
     '#screening': 'tabQuestionBank',
+    '#dismissed': 'tabDismissedRoles',
+    '#dismissed-roles': 'tabDismissedRoles',
     '#review': 'tabReview',
     '#sent': 'tabSent',
     '#others': 'tabSent',
@@ -60,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (typeof initNotificationSystem === 'function') initNotificationSystem();
+  if (typeof initIndeedApplyWorkspace === 'function') initIndeedApplyWorkspace();
   if (typeof switchTab === 'function') switchTab(startTab);
   if (typeof initCrawlerControls === 'function') initCrawlerControls();
   if (typeof fetchLocations === 'function') fetchLocations();

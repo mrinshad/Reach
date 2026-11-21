@@ -114,10 +114,16 @@ async function loadRejectionReasonsFilter(selectedReason = null) {
       items.forEach((item) => {
         const countTxt = item.count !== null && item.count !== undefined ? ` (${item.count})` : '';
         const isSel = item.reason === currentDiscVal ? 'selected' : '';
-        html += `<option value="${escapeHtml(item.reason)}" ${isSel}>${escapeHtml(item.reason)}${countTxt}</option>`;
+        html += `<option value="${escapeHtml(item.reason)}" ${isSel} title="${escapeHtml(item.reason)}">${escapeHtml(item.reason)}${countTxt}</option>`;
       });
       discSelect.innerHTML = html;
       discSelect.value = currentDiscVal;
+      if (currentDiscVal !== 'ALL') {
+        discSelect.title = currentDiscVal;
+      }
+      if (typeof updateActiveFilterChips === 'function') {
+        updateActiveFilterChips();
+      }
     }
 
     if (selectedReason) {
@@ -243,9 +249,17 @@ async function fetchSentPosts() {
       let statusBadge = '';
       if (isSent) {
         statusBadge = `<span class="badge-status-sent" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>Sent</span>`;
-      } else if (isRejected) {
-        statusBadge = `<span class="badge-status-rejected" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>`;
-        if (post.rejection_reason) {
+      } else if (isRejected || post.status === 'CANCELLED') {
+        const isAlreadyApplied = post.rejection_reason && post.rejection_reason.toLowerCase().includes('already applied');
+        const isDismissed = post.is_dismissed || (post.rejection_reason && post.rejection_reason.toLowerCase().includes('dismissed'));
+        if (isAlreadyApplied) {
+          statusBadge = `<span class="badge-already-applied" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>Already Applied</span>`;
+        } else if (isDismissed) {
+          statusBadge = `<span class="badge-dismissed" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>Dismissed</span>`;
+        } else {
+          statusBadge = `<span class="badge-status-rejected" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>Cancelled</span>`;
+        }
+        if (post.rejection_reason && !isAlreadyApplied && !isDismissed) {
           statusBadge += `<span class="badge-rejection-reason" title="${escapeHtml(post.rejection_reason)}">${escapeHtml(post.rejection_reason)}</span>`;
         }
       } else {
@@ -311,40 +325,52 @@ function renderSentPagination() {
   const totalPages = Math.ceil(state.sentTotal / state.sentLimit) || 1;
   const startRow = state.sentTotal === 0 ? 0 : (state.sentPage - 1) * state.sentLimit + 1;
   const endRow = Math.min(state.sentPage * state.sentLimit, state.sentTotal);
+  const textInfo = `Showing ${startRow}–${endRow} of ${state.sentTotal} applications`;
 
   const info = document.getElementById('sentPaginationInfo');
-  if (info) {
-    info.textContent = `Showing ${startRow}–${endRow} of ${state.sentTotal} applications`;
-  }
+  if (info) info.textContent = textInfo;
+  const infoTop = document.getElementById('sentPaginationInfoTop');
+  if (infoTop) infoTop.textContent = textInfo;
 
-  const container = document.getElementById('sentPageButtons');
-  if (!container) return;
-  container.innerHTML = '';
+  // Sync rows per page selects
+  const selLimit = document.getElementById('selectSentLimit');
+  if (selLimit) selLimit.value = String(state.sentLimit);
+  const selLimitTop = document.getElementById('selectSentLimitTop');
+  if (selLimitTop) selLimitTop.value = String(state.sentLimit);
 
-  const prevBtn = document.createElement('button');
-  prevBtn.className = 'page-btn';
-  prevBtn.textContent = '‹';
-  prevBtn.disabled = state.sentPage <= 1;
-  prevBtn.onclick = () => goToSentPage(state.sentPage - 1);
-  container.appendChild(prevBtn);
+  const containers = [
+    document.getElementById('sentPageButtons'),
+    document.getElementById('sentPageButtonsTop')
+  ].filter(Boolean);
 
-  const startPage = Math.max(1, state.sentPage - 2);
-  const endPage = Math.min(totalPages, state.sentPage + 2);
+  containers.forEach(container => {
+    container.innerHTML = '';
 
-  for (let p = startPage; p <= endPage; p++) {
-    const pBtn = document.createElement('button');
-    pBtn.className = `page-btn ${p === state.sentPage ? 'active' : ''}`;
-    pBtn.textContent = String(p);
-    pBtn.onclick = () => goToSentPage(p);
-    container.appendChild(pBtn);
-  }
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.textContent = '‹';
+    prevBtn.disabled = state.sentPage <= 1;
+    prevBtn.onclick = () => goToSentPage(state.sentPage - 1);
+    container.appendChild(prevBtn);
 
-  const nextBtn = document.createElement('button');
-  nextBtn.className = 'page-btn';
-  nextBtn.textContent = '›';
-  nextBtn.disabled = state.sentPage >= totalPages;
-  nextBtn.onclick = () => goToSentPage(state.sentPage + 1);
-  container.appendChild(nextBtn);
+    const startPage = Math.max(1, state.sentPage - 2);
+    const endPage = Math.min(totalPages, state.sentPage + 2);
+
+    for (let p = startPage; p <= endPage; p++) {
+      const pBtn = document.createElement('button');
+      pBtn.className = `page-btn ${p === state.sentPage ? 'active' : ''}`;
+      pBtn.textContent = String(p);
+      pBtn.onclick = () => goToSentPage(p);
+      container.appendChild(pBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.textContent = '›';
+    nextBtn.disabled = state.sentPage >= totalPages;
+    nextBtn.onclick = () => goToSentPage(state.sentPage + 1);
+    container.appendChild(nextBtn);
+  });
 }
 
 function goToSentPage(p) {
@@ -355,6 +381,10 @@ function goToSentPage(p) {
 function changeSentRowsPerPage(val) {
   state.sentLimit = parseInt(val, 10) || 25;
   state.sentPage = 1;
+  const selLimit = document.getElementById('selectSentLimit');
+  if (selLimit) selLimit.value = String(state.sentLimit);
+  const selLimitTop = document.getElementById('selectSentLimitTop');
+  if (selLimitTop) selLimitTop.value = String(state.sentLimit);
   fetchSentPosts();
 }
 
@@ -643,6 +673,10 @@ function applyActivityLogDateFilter() {
 function changeActivityLogsRowsPerPage(limit) {
   activityLogsLimit = parseInt(limit, 10) || 25;
   activityLogsPage = 1;
+  const sel = document.getElementById('selectActivityLogsLimit');
+  if (sel) sel.value = String(activityLogsLimit);
+  const selTop = document.getElementById('selectActivityLogsLimitTop');
+  if (selTop) selTop.value = String(activityLogsLimit);
   fetchActivityLogs();
 }
 
@@ -871,15 +905,23 @@ function renderActivityLogs(runs) {
 function renderActivityLogsPagination() {
   const footer = document.getElementById('activityLogsTableFooter');
   const info = document.getElementById('activityLogsPaginationInfo');
-  const buttonsContainer = document.getElementById('activityLogsPageButtons');
-  if (!footer || !info || !buttonsContainer) return;
+  const infoTop = document.getElementById('activityLogsPaginationInfoTop');
+  if (!footer && !info && !infoTop) return;
 
   const total = activityLogsTotal;
   const totalPages = Math.max(1, Math.ceil(total / activityLogsLimit));
   const start = total === 0 ? 0 : (activityLogsPage - 1) * activityLogsLimit + 1;
   const end = Math.min(total, activityLogsPage * activityLogsLimit);
+  const textInfo = `Showing ${start}–${end} of ${total} activity runs`;
 
-  info.textContent = `Showing ${start}–${end} of ${total} activity runs`;
+  if (info) info.textContent = textInfo;
+  if (infoTop) infoTop.textContent = textInfo;
+
+  // Sync rows per page selects
+  const selLimit = document.getElementById('selectActivityLogsLimit');
+  if (selLimit) selLimit.value = String(activityLogsLimit);
+  const selLimitTop = document.getElementById('selectActivityLogsLimitTop');
+  if (selLimitTop) selLimitTop.value = String(activityLogsLimit);
 
   let html = '';
   html += `<button class="page-btn" ${activityLogsPage <= 1 ? 'disabled' : ''} onclick="goToActivityLogsPage(${activityLogsPage - 1})">‹ Prev</button>`;
@@ -896,7 +938,11 @@ function renderActivityLogsPagination() {
   }
 
   html += `<button class="page-btn" ${activityLogsPage >= totalPages ? 'disabled' : ''} onclick="goToActivityLogsPage(${activityLogsPage + 1})">Next ›</button>`;
-  buttonsContainer.innerHTML = html;
+
+  const buttonsContainer = document.getElementById('activityLogsPageButtons');
+  if (buttonsContainer) buttonsContainer.innerHTML = html;
+  const buttonsContainerTop = document.getElementById('activityLogsPageButtonsTop');
+  if (buttonsContainerTop) buttonsContainerTop.innerHTML = html;
 }
 
 async function fetchActivityLogCounts() {

@@ -1,17 +1,44 @@
 /**
- * Reach — Review & Drafts Workspace, AI Editor, Gmail Dispatch & Candidate Queue
+ * Reach — Review & Drafts Workspace, Full Outreach History Table, Docked Email Window & AI Editor
  * (src/static/js/review.js)
  */
 
 let reviewSearchDebounce = null;
 let reviewDateFrom = '';
 let reviewDateTo = '';
+let draftAutoSaveTimer = null;
+let isDraftDirty = false;
+const DRAFT_DEBOUNCE_MS = 1000;
 
 function updateReviewClearFiltersButton() {
   const btn = document.getElementById('btnClearReviewFilters');
   if (!btn) return;
-  const isFiltered = Boolean(state.searchReview) || Boolean(reviewDateFrom) || Boolean(reviewDateTo);
+  const isFiltered = (state.reviewFilter && state.reviewFilter !== 'GENERATED') ||
+                     (state.reviewSourceFilter && state.reviewSourceFilter !== 'ALL') ||
+                     Boolean(state.searchReview) ||
+                     Boolean(reviewDateFrom) ||
+                     Boolean(reviewDateTo);
   btn.classList.toggle('hidden', !isFiltered);
+}
+
+function setReviewFilter(filter) {
+  state.reviewFilter = filter || 'GENERATED';
+  state.reviewPage = 1;
+
+  document.querySelectorAll('#reviewStatusPills .pill').forEach((pill) => {
+    const f = pill.getAttribute('data-review');
+    pill.classList.toggle('active', f === state.reviewFilter);
+  });
+
+  updateReviewClearFiltersButton();
+  fetchReviewPosts();
+}
+
+function applyReviewSourceFilter(source) {
+  state.reviewSourceFilter = source || 'ALL';
+  state.reviewPage = 1;
+  updateReviewClearFiltersButton();
+  fetchReviewPosts();
 }
 
 function applyReviewDateFilter() {
@@ -21,10 +48,12 @@ function applyReviewDateFilter() {
   reviewDateTo = toEl ? toEl.value.trim() : '';
   state.reviewPage = 1;
   updateReviewClearFiltersButton();
-  fetchReviewPosts(true);
+  fetchReviewPosts();
 }
 
 function clearReviewFilters() {
+  state.reviewFilter = 'GENERATED';
+  state.reviewSourceFilter = 'ALL';
   state.searchReview = '';
   reviewDateFrom = '';
   reviewDateTo = '';
@@ -33,13 +62,20 @@ function clearReviewFilters() {
   const searchInput = document.getElementById('inputSearchReview');
   if (searchInput) searchInput.value = '';
 
+  const sourceSelect = document.getElementById('selectReviewSource');
+  if (sourceSelect) sourceSelect.value = 'ALL';
+
   const fromEl = document.getElementById('reviewDateFrom');
   if (fromEl) fromEl.value = '';
   const toEl = document.getElementById('reviewDateTo');
   if (toEl) toEl.value = '';
 
+  document.querySelectorAll('#reviewStatusPills .pill').forEach((pill) => {
+    pill.classList.toggle('active', pill.getAttribute('data-review') === 'GENERATED');
+  });
+
   updateReviewClearFiltersButton();
-  fetchReviewPosts(true);
+  fetchReviewPosts();
 }
 
 function handleSearchReview(val) {
@@ -48,41 +84,61 @@ function handleSearchReview(val) {
     state.searchReview = (val || '').trim();
     state.reviewPage = 1;
     updateReviewClearFiltersButton();
-    fetchReviewPosts(true);
+    fetchReviewPosts();
   }, 250);
 }
 
 function updateReviewPaginationUI() {
   const infoEl = document.getElementById('reviewPageInfo');
+  const infoTopEl = document.getElementById('reviewPageInfoTop');
   const btnPrev = document.getElementById('btnReviewPrevPage');
+  const btnPrevTop = document.getElementById('btnReviewPrevPageTop');
   const btnNext = document.getElementById('btnReviewNextPage');
+  const btnNextTop = document.getElementById('btnReviewNextPageTop');
 
   const total = state.reviewTotal || 0;
-  const limit = state.reviewLimit || 100;
+  const limit = state.reviewLimit || 25;
   const page = state.reviewPage || 1;
   const maxPage = Math.max(1, Math.ceil(total / limit));
 
-  if (infoEl) {
-    if (total === 0) {
-      infoEl.textContent = '0 of 0';
-    } else {
-      const start = (page - 1) * limit + 1;
-      const end = Math.min(page * limit, total);
-      infoEl.textContent = `${start}–${end} of ${total}`;
-    }
+  let textInfo = 'Showing 0 of 0 posts';
+  if (total > 0) {
+    const start = (page - 1) * limit + 1;
+    const end = Math.min(page * limit, total);
+    textInfo = `Showing ${start}–${end} of ${total} posts`;
   }
 
-  if (btnPrev) {
-    btnPrev.disabled = page <= 1;
-  }
-  if (btnNext) {
-    btnNext.disabled = page >= maxPage || total === 0;
-  }
+  if (infoEl) infoEl.textContent = textInfo;
+  if (infoTopEl) infoTopEl.textContent = textInfo;
+
+  const isPrevDisabled = page <= 1;
+  const isNextDisabled = page >= maxPage || total === 0;
+
+  if (btnPrev) btnPrev.disabled = isPrevDisabled;
+  if (btnPrevTop) btnPrevTop.disabled = isPrevDisabled;
+  if (btnNext) btnNext.disabled = isNextDisabled;
+  if (btnNextTop) btnNextTop.disabled = isNextDisabled;
+
+  // Sync rows per page selects
+  const selLimit = document.getElementById('selectReviewLimit');
+  if (selLimit) selLimit.value = String(limit);
+  const selLimitTop = document.getElementById('selectReviewLimitTop');
+  if (selLimitTop) selLimitTop.value = String(limit);
+}
+
+function changeReviewRowsPerPage(val) {
+  state.reviewLimit = parseInt(val, 10) || 25;
+  state.reviewPage = 1;
+  const sel = document.getElementById('selectReviewLimit');
+  if (sel) sel.value = String(state.reviewLimit);
+  const selTop = document.getElementById('selectReviewLimitTop');
+  if (selTop) selTop.value = String(state.reviewLimit);
+  fetchReviewPosts();
 }
 
 async function changeReviewPage(delta) {
   const total = state.reviewTotal || 0;
-  const limit = state.reviewLimit || 100;
+  const limit = state.reviewLimit || 25;
   const maxPage = Math.max(1, Math.ceil(total / limit));
   const newPage = (state.reviewPage || 1) + delta;
 
@@ -92,29 +148,71 @@ async function changeReviewPage(delta) {
   state.selectedDraftIds.clear();
   updateSelectedDraftsUI();
 
-  await fetchReviewPosts(true);
+  await fetchReviewPosts();
 
-  const container = document.getElementById('reviewQueueList');
-  if (container) container.scrollTop = 0;
+  const container = document.getElementById('reviewTableContainer');
+  if (container) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderReviewSkeletonRows() {
+  const tbody = document.getElementById('reviewTableBody');
+  if (!tbody) return;
+  let rowsHtml = '';
+  for (let i = 0; i < 6; i++) {
+    rowsHtml += `
+      <tr class="skeleton-row">
+        <td><div class="skeleton-box" style="width: 14px; height: 14px;"></div></td>
+        <td>
+          <div class="skeleton-box" style="width: 130px; height: 15px; margin-bottom: 4px;"></div>
+          <div class="skeleton-box" style="width: 180px; height: 12px;"></div>
+        </td>
+        <td><div class="skeleton-box" style="width: 90px; height: 18px; border-radius: 4px;"></div></td>
+        <td><div class="skeleton-box" style="width: 140px; height: 13px;"></div></td>
+        <td><div class="skeleton-box" style="width: 200px; height: 14px;"></div></td>
+        <td><div class="skeleton-box" style="width: 70px; height: 18px; border-radius: 4px;"></div></td>
+        <td><div class="skeleton-box" style="width: 65px; height: 12px;"></div></td>
+        <td style="text-align: right;"><div class="skeleton-box" style="width: 75px; height: 26px; border-radius: 4px; margin-left: auto;"></div></td>
+      </tr>
+    `;
+  }
+  tbody.innerHTML = rowsHtml;
 }
 
 async function fetchReviewPosts(forceSelectFirst = false) {
-  const container = document.getElementById('reviewQueueList');
-  if (!container) return;
+  const tbody = document.getElementById('reviewTableBody');
+  if (!tbody) return;
+
   if (!state.reviewPosts || state.reviewPosts.length === 0) {
-    container.innerHTML = '<div style="text-align: center; padding: 2rem; color: #64748b;">Loading drafts...</div>';
+    renderReviewSkeletonRows();
   }
 
   const page = Math.max(1, state.reviewPage || 1);
-  const limit = Math.max(1, state.reviewLimit || 100);
+  const limit = Math.max(1, state.reviewLimit || 25);
   const offset = (page - 1) * limit;
 
   try {
     const params = new URLSearchParams({
-      status: 'EMAIL_GENERATED',
       limit: String(limit),
       offset: String(offset),
     });
+
+    const filter = state.reviewFilter || 'GENERATED';
+    if (filter === 'ALL') {
+      params.append('status', 'REVIEW_ALL');
+      params.append('category', 'EMAIL_OUTREACH');
+      params.append('order_by', 'generated_first');
+    } else if (filter === 'GENERATED') {
+      params.append('status', 'EMAIL_GENERATED');
+    } else if (filter === 'PENDING') {
+      params.append('gen_status', 'PENDING');
+      params.append('category', 'EMAIL_OUTREACH');
+    } else if (filter === 'SENT') {
+      params.append('status', 'SENT');
+    }
+
+    if (state.reviewSourceFilter && state.reviewSourceFilter !== 'ALL') {
+      params.append('source', state.reviewSourceFilter);
+    }
     if (state.searchReview) {
       params.append('search', state.searchReview);
     }
@@ -130,82 +228,258 @@ async function fetchReviewPosts(forceSelectFirst = false) {
     state.reviewPosts = data.posts || [];
     state.reviewTotal = typeof data.total === 'number' ? data.total : (state.reviewPosts.length || 0);
 
-    const queueCountEl = document.getElementById('reviewQueueCount');
-    if (queueCountEl) queueCountEl.textContent = String(state.reviewTotal);
-    const countReviewEl = document.getElementById('countReview');
-    if (countReviewEl) countReviewEl.textContent = String(state.reviewTotal);
+    const badgeEl = document.getElementById('reviewResultsBadge');
+    const isFiltered = (filter !== 'GENERATED') ||
+                       (state.reviewSourceFilter && state.reviewSourceFilter !== 'ALL') ||
+                       Boolean(state.searchReview) ||
+                       Boolean(reviewDateFrom) ||
+                       Boolean(reviewDateTo);
+    if (badgeEl) {
+      if (isFiltered) {
+        badgeEl.textContent = `${state.reviewTotal} result${state.reviewTotal === 1 ? '' : 's'}`;
+        badgeEl.classList.remove('hidden');
+      } else {
+        badgeEl.classList.add('hidden');
+      }
+    }
 
+    updateReviewClearFiltersButton();
     updateReviewPaginationUI();
-    container.innerHTML = '';
+    tbody.innerHTML = '';
 
     if (state.reviewPosts.length === 0) {
       state.selectedDraftIds.clear();
       updateSelectedDraftsUI();
       const emptyMsg = state.searchReview
-        ? `No drafts matching "${escapeHtml(state.searchReview)}" found.`
-        : 'No emails generated yet. Generate emails or click Move to Review on Discovered Posts!';
-      container.innerHTML = `<div style="text-align: center; padding: 2rem; font-size: 0.78rem; color: #64748b;">${emptyMsg}</div>`;
-      const emptyStateEl = document.getElementById('emptyReviewState');
-      if (emptyStateEl) emptyStateEl.classList.remove('hidden');
-      const wsPanel = document.getElementById('workspacePanel');
-      if (wsPanel) wsPanel.classList.add('hidden');
-      state.activeReviewPost = null;
-      state.activePostId = null;
+        ? `No outreach posts matching "${escapeHtml(state.searchReview)}" found.`
+        : 'No posts matching the selected filter found.';
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 3rem; color: #64748b; font-size: 0.85rem;">${emptyMsg}</td></tr>`;
       return;
     }
 
     state.reviewPosts.forEach((post) => {
-      const item = document.createElement('div');
-      item.className = 'queue-item' + (state.activeReviewPost && state.activeReviewPost.id === post.id ? ' active' : '');
-      item.id = `queue-item-${post.id}`;
-      item.onclick = (e) => {
-        if (e.target.closest('.draft-checkbox')) return;
-        selectReviewPost(post);
-      };
+      const tr = document.createElement('tr');
+      tr.id = `review-row-${post.id}`;
+      const isActive = state.activeReviewPost && state.activeReviewPost.id === post.id;
+      if (isActive) tr.classList.add('active-row');
+      if (state.selectedDraftIds.has(post.id)) tr.classList.add('selected');
 
-      const email = (post.contact_emails && post.contact_emails[0]) || 'No email';
       const isChecked = state.selectedDraftIds.has(post.id);
+      const email = (post.contact_emails && post.contact_emails[0]) || 'No email';
+      const hasGeneratedBody = Boolean(post.generated_body && post.generated_body.trim().length > 0);
+      const isSent = post.status === 'SENT';
+      const isRejected = post.status === 'REJECTED';
+      const isGenerated = post.status === 'EMAIL_GENERATED' || (hasGeneratedBody && !isSent && !isRejected);
 
-      item.innerHTML = `
-        <div class="queue-item-inner">
-          <input type="checkbox" class="draft-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectDraft('${post.id}')" title="Select for batch send" />
-          <div class="queue-item-content">
-            <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
-              <span class="queue-author">${escapeHtml(post.author_name)}</span>
-              ${getSourceBadgeHtml(post)}
-              ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem; display: inline-flex; align-items: center; gap: 0.2rem;" title="Location: ${escapeHtml(post.location)}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>${escapeHtml(post.location)}</span>` : ''}
-            </div>
-            <span class="queue-email" style="display: inline-flex; align-items: center; gap: 0.3rem;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>${escapeHtml(email)}</span>
+      let statusBadgeHtml = '';
+      if (isGenerated) {
+        statusBadgeHtml = '<span class="badge-status-pill badge-status-generated">✓ Generated</span>';
+      } else if (isSent) {
+        statusBadgeHtml = '<span class="badge-status-pill badge-status-sent">✉ Sent</span>';
+      } else if (isRejected) {
+        statusBadgeHtml = '<span class="badge-status-pill badge-status-rejected">🚫 Cancelled</span>';
+      } else {
+        statusBadgeHtml = '<span class="badge-status-pill badge-status-pending">⏳ Yet to Generate</span>';
+      }
+
+      const expLabel = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
+      const dateDisplay = typeof formatDateTime === 'function' ? formatDateTime(post.created_at || post.post_date) : (post.post_date || '—');
+
+      let actionButtonHtml = '';
+      if (isGenerated) {
+        actionButtonHtml = `<button type="button" class="btn btn-outline btn-xs" onclick="event.stopPropagation(); openReviewDraftDrawer('${post.id}')" title="Open generated email draft in side drawer">View Email ✉</button>`;
+      } else if (isSent) {
+        actionButtonHtml = `<button type="button" class="btn btn-outline btn-xs" onclick="event.stopPropagation(); openReviewDraftDrawer('${post.id}')" title="View sent email details">View Sent</button>`;
+      } else {
+        actionButtonHtml = `<button type="button" class="btn btn-primary btn-xs" onclick="event.stopPropagation(); triggerGenerateSingleReviewPost('${post.id}')" title="Generate cold outreach email via ChatGPT">✨ Generate</button>`;
+      }
+
+      const subjectOrPreview = post.generated_subject
+        ? `<div style="font-size: 0.78rem; font-weight: 600; color: var(--text-main); max-width: 290px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(post.generated_subject)}">${escapeHtml(post.generated_subject)}</div>`
+        : `<div style="font-size: 0.74rem; color: var(--text-dim); max-width: 290px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(post.full_text || '')}">${escapeHtml((post.full_text || '').replace(/\s+/g, ' ').substring(0, 65))}...</div>`;
+
+      tr.innerHTML = `
+        <td>
+          <input type="checkbox" class="draft-checkbox" value="${post.id}" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleSelectDraft('${post.id}')" title="Select for batch action" />
+        </td>
+        <td>
+          <div style="display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;">
+            <strong style="color: var(--text-main); font-size: 0.85rem;">${escapeHtml(post.author_name)}</strong>
+            ${getSourceBadgeHtml(post)}
+            ${post.location ? `<span class="pill-badge badge-location" style="font-size: 0.66rem; padding: 0.1rem 0.35rem;" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}
           </div>
-        </div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${escapeHtml(post.author_headline || '')}
+          </div>
+        </td>
+        <td>${statusBadgeHtml}</td>
+        <td>
+          <span class="queue-email" style="display: inline-flex; align-items: center; gap: 0.25rem;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            ${escapeHtml(email)}
+          </span>
+        </td>
+        <td>${subjectOrPreview}</td>
+        <td><span class="pill-badge" style="font-size: 0.7rem;">${escapeHtml(expLabel)}</span></td>
+        <td><span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">${escapeHtml(dateDisplay)}</span></td>
+        <td style="text-align: right;">${actionButtonHtml}</td>
       `;
 
-      container.appendChild(item);
+      tr.onclick = (e) => {
+        if (e.target.closest('input, button, a')) return;
+        openReviewDraftDrawer(post.id);
+      };
+
+      tbody.appendChild(tr);
     });
 
     updateSelectedDraftsUI();
 
-    if (forceSelectFirst || !state.activeReviewPost || !state.reviewPosts.some((p) => p.id === state.activeReviewPost.id)) {
-      if (state.reviewPosts.length > 0) {
-        selectReviewPost(state.reviewPosts[0]);
-      } else {
-        state.activeReviewPost = null;
-        state.activePostId = null;
-      }
-    } else {
-      const exists = state.reviewPosts.find((p) => p.id === state.activeReviewPost.id);
-      if (exists) {
-        selectReviewPost(exists);
+    // Auto-select drawer post if drawer was already open
+    if (state.activeReviewPost) {
+      const match = state.reviewPosts.find((p) => p.id === state.activeReviewPost.id);
+      if (match) {
+        populateDrawerWithPost(match);
       }
     }
   } catch (err) {
-    container.innerHTML = `<div style="text-align: center; padding: 2rem;">Error: ${escapeHtml(err.message)}</div>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 2.5rem; color: #ef4444;">Error loading posts: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
-let draftAutoSaveTimer = null;
-let isDraftDirty = false;
-const DRAFT_DEBOUNCE_MS = 1000;
+function populateDrawerWithPost(post) {
+  if (!post) return;
+
+  const isSamePost = state.activeReviewPost && state.activeReviewPost.id === post.id;
+  const subjInput = document.getElementById('draftSubject');
+  const bodyInput = document.getElementById('draftBody');
+  const hasFocus = (subjInput && document.activeElement === subjInput) ||
+                    (bodyInput && document.activeElement === bodyInput);
+
+  state.activeReviewPost = post;
+  state.activePostId = post.id;
+
+  const statusPill = document.getElementById('drawerStatusPill');
+  const hasBody = Boolean(post.generated_body && post.generated_body.trim().length > 0);
+  const isSent = post.status === 'SENT';
+
+  if (statusPill) {
+    if (isSent) {
+      statusPill.textContent = '✉ Sent';
+      statusPill.className = 'drawer-status-pill badge-status-sent';
+    } else if (hasBody) {
+      statusPill.textContent = '✓ Generated';
+      statusPill.className = 'drawer-status-pill badge-status-generated';
+    } else {
+      statusPill.textContent = '⏳ Not Generated';
+      statusPill.className = 'drawer-status-pill badge-status-pending';
+    }
+  }
+
+  // Unready Banner
+  const unreadyBanner = document.getElementById('drawerUnreadyBanner');
+  if (unreadyBanner) {
+    unreadyBanner.classList.toggle('hidden', hasBody || isSent);
+  }
+
+  const btnGenLabel = document.getElementById('btnGenerateMailLabel');
+  if (btnGenLabel) {
+    btnGenLabel.textContent = hasBody ? 'Re-gen' : 'Generate';
+  }
+
+  // Recipient email
+  const emailEl = document.getElementById('reviewTargetEmail');
+  if (emailEl) {
+    const email = (post.contact_emails && post.contact_emails[0]) || 'No email';
+    emailEl.textContent = email;
+    emailEl.title = email;
+  }
+
+  // Subject and Body fields
+  if (!isSamePost || (!isDraftDirty && !hasFocus)) {
+    if (subjInput) subjInput.value = post.generated_subject || '';
+    if (bodyInput) {
+      let b = post.generated_body || '';
+      if (typeof cleanEmailBody === 'function') {
+        b = cleanEmailBody(b);
+      }
+      bodyInput.value = b;
+      bodyInput.scrollTop = 0;
+    }
+    isDraftDirty = false;
+    updateDraftSaveStatus('saved');
+  }
+
+  setupDraftInputListeners();
+
+  const resume = state.config.resume_path || '';
+  const resFilenameEl = document.getElementById('draftResumeFilename');
+  if (resFilenameEl) resFilenameEl.textContent = resume.split('/').pop() || 'rinshadp.pdf';
+}
+
+async function openReviewDraftDrawer(postId) {
+  if (!postId) return;
+
+  // Flush previous unsaved edits if switching posts
+  if (isDraftDirty && state.activeReviewPost && state.activeReviewPost.id !== postId) {
+    await saveActiveDraftEdits({ silent: true });
+  }
+
+  let post = (state.reviewPosts || []).find((p) => p.id === postId)
+          || (state.posts || []).find((p) => p.id === postId);
+
+  if (!post) {
+    try {
+      const res = await fetch(`/api/posts/${postId}`);
+      if (res.ok) post = await res.json();
+    } catch (_) {}
+  }
+
+  if (!post) return;
+
+  populateDrawerWithPost(post);
+
+  // Show Drawer and adjust workspace layout
+  const drawer = document.getElementById('reviewEmailDrawer');
+  const wrapper = document.getElementById('reviewWorkspaceWrapper');
+  if (drawer) drawer.classList.remove('hidden');
+  if (wrapper) wrapper.classList.add('drawer-open');
+
+  // Highlight active row in table
+  document.querySelectorAll('#reviewTableBody tr').forEach((r) => r.classList.remove('active-row'));
+  const targetRow = document.getElementById(`review-row-${postId}`);
+  if (targetRow) targetRow.classList.add('active-row');
+}
+
+function closeReviewEmailDrawer() {
+  if (isDraftDirty && state.activeReviewPost) {
+    saveActiveDraftEdits({ silent: true });
+  }
+
+  const drawer = document.getElementById('reviewEmailDrawer');
+  const wrapper = document.getElementById('reviewWorkspaceWrapper');
+  if (drawer) drawer.classList.add('hidden');
+  if (wrapper) wrapper.classList.remove('drawer-open');
+
+  document.querySelectorAll('#reviewTableBody tr').forEach((r) => r.classList.remove('active-row'));
+  state.activeReviewPost = null;
+  state.activePostId = null;
+}
+
+function selectReviewPost(post) {
+  if (!post) return;
+  openReviewDraftDrawer(post.id);
+}
+
+async function openPostInReview(postId) {
+  if (typeof switchTab === 'function') switchTab('tabReview');
+  await openReviewDraftDrawer(postId);
+}
+
+async function triggerGenerateSingleReviewPost(postId) {
+  await openReviewDraftDrawer(postId);
+  await generateEmailForActiveDraft();
+}
 
 function updateDraftSaveStatus(status) {
   const statusEl = document.getElementById('draftSaveStatus');
@@ -254,106 +528,118 @@ function setupDraftInputListeners() {
       }
     });
   });
-}
 
-function selectReviewPost(post) {
-  if (!post) return;
+  // Smart paste listener on Email Body field
+  if (bodyInput && !bodyInput._hasPasteListener) {
+    bodyInput._hasPasteListener = true;
+    bodyInput.addEventListener('paste', (e) => {
+      const pasteText = (e.clipboardData || window.clipboardData)?.getData('text');
+      if (!pasteText) return;
 
-  // If previous post had unsaved edits and is different from selected post, flush save
-  if (isDraftDirty && state.activeReviewPost && state.activeReviewPost.id !== post.id) {
-    saveActiveDraftEdits({ silent: true });
+      const isLikelyEmailDraft =
+        /^(?:\*\*)?Subject(?:\*\*)?:/im.test(pasteText) ||
+        /^(?:Send(?:\s+email)?|Connect email|Recipients|Email(?:\s+Draft)?)/im.test(pasteText) ||
+        /\b(?:Regards|Sincerely|Thanks & Regards|Best|Cheers)[,\s]+[A-Za-z]+/i.test(pasteText);
+
+      if (isLikelyEmailDraft && typeof parseAndCleanEmailInput === 'function') {
+        const { subject, body } = parseAndCleanEmailInput(pasteText);
+        if (body) {
+          e.preventDefault();
+          if (subject && subjInput) {
+            subjInput.value = subject;
+          }
+          if (bodyInput.selectionStart === 0 && bodyInput.selectionEnd === bodyInput.value.length) {
+            bodyInput.value = body;
+          } else if (!bodyInput.value.trim()) {
+            bodyInput.value = body;
+          } else {
+            const start = bodyInput.selectionStart;
+            const end = bodyInput.selectionEnd;
+            const val = bodyInput.value;
+            bodyInput.value = val.substring(0, start) + body + val.substring(end);
+            bodyInput.selectionStart = bodyInput.selectionEnd = start + body.length;
+          }
+          onDraftInputChange();
+          if (typeof showToast === 'function') {
+            showToast('✓ Cleaned & formatted ChatGPT email draft', 'success');
+          }
+        }
+      }
+    });
   }
 
-  const isSamePost = state.activeReviewPost && state.activeReviewPost.id === post.id;
+  // Smart paste listener on Subject field (handles pasting whole email into subject input)
+  if (subjInput && !subjInput._hasPasteListener) {
+    subjInput._hasPasteListener = true;
+    subjInput.addEventListener('paste', (e) => {
+      const pasteText = (e.clipboardData || window.clipboardData)?.getData('text');
+      if (!pasteText) return;
+
+      if (pasteText.includes('\n') && (
+        /^(?:\*\*)?Subject(?:\*\*)?:/im.test(pasteText) ||
+        /\b(?:Regards|Sincerely|Thanks & Regards|Best|Cheers)[,\s]+/i.test(pasteText) ||
+        /^(?:Send|Hi|Dear|Hello)\b/im.test(pasteText)
+      ) && typeof parseAndCleanEmailInput === 'function') {
+        e.preventDefault();
+        const { subject, body } = parseAndCleanEmailInput(pasteText);
+        if (subject) {
+          subjInput.value = subject;
+        }
+        if (body && bodyInput) {
+          bodyInput.value = body;
+        }
+        onDraftInputChange();
+        if (typeof showToast === 'function') {
+          showToast('✓ Split and cleaned email into Subject and Body', 'success');
+        }
+      }
+    });
+  }
+}
+
+function cleanActiveDraftFields() {
   const subjInput = document.getElementById('draftSubject');
   const bodyInput = document.getElementById('draftBody');
-  const hasFocus = (subjInput && document.activeElement === subjInput) ||
-                    (bodyInput && document.activeElement === bodyInput);
+  if (!bodyInput) return;
 
-  state.activeReviewPost = post;
-  state.activePostId = post.id;
+  const currentSubject = subjInput ? subjInput.value : '';
+  const currentBody = bodyInput.value;
 
-  document.querySelectorAll('.queue-item').forEach((el) => el.classList.remove('active'));
-  const activeCard = document.getElementById(`queue-item-${post.id}`);
-  if (activeCard) {
-    activeCard.classList.add('active');
-    activeCard.scrollIntoView({ block: 'nearest' });
+  if (typeof parseAndCleanEmailInput !== 'function') return;
+
+  const { subject, body } = parseAndCleanEmailInput(currentBody);
+  let changed = false;
+
+  if (subject && subjInput && (!currentSubject || !currentSubject.trim())) {
+    subjInput.value = subject;
+    changed = true;
+  }
+  if (body && body !== currentBody) {
+    bodyInput.value = body;
+    changed = true;
   }
 
-  const emptyEl = document.getElementById('emptyReviewState');
-  if (emptyEl) emptyEl.classList.add('hidden');
-  const wsEl = document.getElementById('workspacePanel');
-  if (wsEl) wsEl.classList.remove('hidden');
-
-  const authorEl = document.getElementById('reviewAuthorName');
-  if (authorEl) {
-    authorEl.innerHTML = `${escapeHtml(post.author_name)} ${getSourceBadgeHtml(post)} ${post.location ? `<span class="pill-badge badge-location" title="Location: ${escapeHtml(post.location)}">📍 ${escapeHtml(post.location)}</span>` : ''}`;
-  }
-  const headEl = document.getElementById('reviewHeadline');
-  if (headEl) headEl.textContent = post.author_headline || 'N/A';
-
-  const emailEl = document.getElementById('reviewTargetEmail');
-  if (emailEl) emailEl.textContent = (post.contact_emails || []).join(', ') || 'None';
-
-  const locEl = document.getElementById('reviewTargetLocation');
-  if (locEl) locEl.textContent = post.location || 'Not Specified';
-
-  const expLabel = post.is_fresher ? 'Fresher' : (post.raw_experience || `${post.min_experience || 0}+ yrs`);
-  const expEl = document.getElementById('reviewExpPill');
-  if (expEl) expEl.textContent = expLabel;
-
-  const fullTextEl = document.getElementById('reviewFullText');
-  if (fullTextEl) {
-    fullTextEl.textContent = post.full_text;
-    fullTextEl.scrollTop = 0;
-  }
-
-  const postLink = document.getElementById('reviewPostLink');
-  if (postLink) {
-    if (post.post_url) {
-      postLink.href = post.post_url;
-      postLink.style.display = 'inline';
-      if (post.post_url.includes('infopark.in')) {
-        postLink.textContent = 'Infopark Kochi ↗';
-      } else if (post.post_url.startsWith('manual://')) {
-        postLink.textContent = 'Manual JD';
-      } else {
-        postLink.textContent = 'LinkedIn ↗';
-      }
-    } else {
-      postLink.style.display = 'none';
+  if (changed) {
+    onDraftInputChange();
+    if (typeof showToast === 'function') {
+      showToast('✓ Cleaned ChatGPT artifacts & trimmed signature extras', 'success');
+    }
+  } else {
+    if (typeof showToast === 'function') {
+      showToast('Draft is already clean', 'info');
     }
   }
+}
 
-  // Only update textarea content if not actively typing the same post
-  if (!isSamePost || (!isDraftDirty && !hasFocus)) {
-    if (subjInput) subjInput.value = post.generated_subject || '';
-    if (bodyInput) {
-      bodyInput.value = post.generated_body || '';
-      bodyInput.scrollTop = 0;
+// Global Esc key listener to dismiss side drawer
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const drawer = document.getElementById('reviewEmailDrawer');
+    if (drawer && !drawer.classList.contains('hidden')) {
+      closeReviewEmailDrawer();
     }
-    isDraftDirty = false;
-    updateDraftSaveStatus('saved');
   }
-
-  setupDraftInputListeners();
-
-  const resume = state.config.resume_path || '';
-  const resFilenameEl = document.getElementById('draftResumeFilename');
-  if (resFilenameEl) resFilenameEl.textContent = resume.split('/').pop() || 'None';
-}
-
-async function openPostInReview(postId) {
-  switchTab('tabReview');
-  let post = state.reviewPosts.find((p) => p.id === postId) || state.posts.find((p) => p.id === postId);
-  if (!post) {
-    try {
-      const res = await fetch(`/api/posts/${postId}`);
-      if (res.ok) post = await res.json();
-    } catch (_) {}
-  }
-  if (post) selectReviewPost(post);
-}
+});
 
 async function saveActiveDraftEdits(options = {}) {
   const silent = Boolean(options && options.silent);
@@ -409,7 +695,7 @@ async function saveActiveDraftEdits(options = {}) {
 
 async function generateEmailForActiveDraft() {
   if (!state.activeReviewPost || !state.activePostId) {
-    showToast('Please select a job post from the left queue to generate outreach email.', 'warn');
+    showToast('Please select a post first to generate outreach email.', 'warn');
     return;
   }
   const postId = state.activePostId;
@@ -417,7 +703,7 @@ async function generateEmailForActiveDraft() {
 
   const confirmed = await showConfirm(
     'Generate Outreach Email from JD',
-    `This will submit the full job description for "${author}" to ChatGPT and generate a tailored cold outreach subject & body, replacing the current draft. Proceed?`,
+    `This will submit the full job description for "${author}" to ChatGPT and generate a tailored cold outreach email. Proceed?`,
     { confirmText: 'Generate Now' }
   );
   if (!confirmed) return;
@@ -452,8 +738,8 @@ async function generateEmailForActiveDraft() {
       if (btn) {
         btn.disabled = false;
         btn.innerHTML = `
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-          <span>Generate Mail from JD</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <span id="btnGenerateMailLabel">Re-generate</span>
         `;
       }
     }, 2500);
@@ -491,15 +777,10 @@ function updateSelectedDraftsUI() {
   if (countEl) countEl.textContent = String(count);
   if (countCancelEl) countCancelEl.textContent = String(count);
   if (countGenEl) countGenEl.textContent = String(count);
-  if (btnBatch) {
-    btnBatch.classList.toggle('hidden', count === 0);
-  }
-  if (btnCancelBatch) {
-    btnCancelBatch.classList.toggle('hidden', count === 0);
-  }
-  if (btnGenBatch) {
-    btnGenBatch.classList.toggle('hidden', count === 0);
-  }
+  if (btnBatch) btnBatch.classList.toggle('hidden', count === 0);
+  if (btnCancelBatch) btnCancelBatch.classList.toggle('hidden', count === 0);
+  if (btnGenBatch) btnGenBatch.classList.toggle('hidden', count === 0);
+
   if (checkAll) {
     checkAll.checked = state.reviewPosts.length > 0 && count === state.reviewPosts.length;
     checkAll.indeterminate = count > 0 && count < state.reviewPosts.length;
@@ -507,6 +788,8 @@ function updateSelectedDraftsUI() {
 
   document.querySelectorAll('.draft-checkbox').forEach((cb) => {
     cb.checked = state.selectedDraftIds.has(cb.value);
+    const row = cb.closest('tr');
+    if (row) row.classList.toggle('selected', state.selectedDraftIds.has(cb.value));
   });
 }
 
@@ -707,9 +990,10 @@ async function markPostSentById(postId) {
     if (res.ok) {
       showToast(`✓ Marked application as SENT`, 'success');
       if (state.activeReviewPost && state.activeReviewPost.id === postId) {
-        state.activeReviewPost = null;
+        closeReviewEmailDrawer();
       }
-      loadDashboardData();
+      await fetchReviewPosts();
+      if (typeof loadDashboardData === 'function') loadDashboardData();
     } else {
       const err = await res.json();
       showAlert('Error', err.detail || 'Failed to mark as sent.');
@@ -717,6 +1001,11 @@ async function markPostSentById(postId) {
   } catch (err) {
     showAlert('Error', err.message);
   }
+}
+
+function markActivePostSpam() {
+  if (!state.activeReviewPost) return;
+  openCancelReasonModal(state.activeReviewPost.id, state.activeReviewPost.author_name, 'Scam: Suspicious contact or recruitment fraud', true);
 }
 
 function cancelActiveApplication() {
@@ -817,6 +1106,7 @@ function cancelBatchSelectedDrafts() {
 
   state.pendingCancelPostIds = Array.from(state.selectedDraftIds);
   state.pendingCancelPostId = null;
+  state.pendingCancelSource = 'review';
   state.isSpamCancelMode = false;
 
   const titleEl = document.getElementById('cancelModalTitle');
@@ -829,18 +1119,23 @@ function cancelBatchSelectedDrafts() {
     descEl.innerHTML = `Select a ready suggestion below or type a custom comment. All <strong>${count} selected applications</strong> will be moved to your <strong>Others</strong> history.`;
   }
 
-  const btnConfirm = document.getElementById('btnConfirmCancelModal');
-  if (btnConfirm) {
-    btnConfirm.textContent = `✕ Cancel ${count} Applications`;
+  const checkAddToDismissed = document.getElementById('checkAddToDismissedRoles');
+  if (checkAddToDismissed) checkAddToDismissed.checked = false;
+
+  const btnPostOnly = document.getElementById('btnDismissPostOnly');
+  if (btnPostOnly) {
+    btnPostOnly.textContent = `Dismiss ${count} Application${count === 1 ? '' : 's'} Only`;
+  }
+  const btnBlacklist = document.getElementById('btnDismissAndBlacklist');
+  if (btnBlacklist) {
+    btnBlacklist.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg><span>🚫 Dismiss & Add Roles (${count})</span>`;
   }
 
   const nameEl = document.getElementById('cancelModalCandidate');
   if (nameEl) nameEl.textContent = `for ${count} selected drafts`;
 
   const input = document.getElementById('inputCancelReason');
-  if (input) {
-    input.value = '';
-  }
+  if (input) input.value = '';
 
   document.querySelectorAll('#cancelReasonModal .reason-chip').forEach((c) => {
     c.classList.remove('active');
@@ -853,58 +1148,75 @@ function cancelBatchSelectedDrafts() {
   }, 50);
 }
 
-function openCancelReasonModal(postId, candidateName, defaultReason = '', isSpamMode = false) {
+function openCancelReasonModal(postId, candidateName, defaultReason = '', isSpamMode = false, source = null) {
   state.pendingCancelPostId = postId;
   state.pendingCancelPostIds = [];
+  if (source) {
+    state.pendingCancelSource = source;
+  } else if (!state.pendingCancelSource) {
+    state.pendingCancelSource = state.activeTab === 'tabDiscovered' ? 'discovered'
+                              : (state.activeTab === 'tabEasyApply' ? 'easy_apply'
+                              : (state.activeTab === 'tabIndeedApply' ? 'indeed_apply' : 'review'));
+  }
   state.isSpamCancelMode = !!isSpamMode;
 
-  if (!candidateName) {
+  // Uncheck the "Also register role title in Dismissed Roles" checkbox on each open
+  const checkAddToDismissed = document.getElementById('checkAddToDismissedRoles');
+  if (checkAddToDismissed) checkAddToDismissed.checked = false;
+
+  if (!candidateName && postId) {
     const p = (state.posts || []).find((item) => item.id === postId)
-           || (state.reviewPosts || []).find((item) => item.id === postId);
-    candidateName = p?.author_name || '';
+           || (state.reviewPosts || []).find((item) => item.id === postId)
+           || (typeof easyApplyPosts !== 'undefined' && Array.isArray(easyApplyPosts) ? easyApplyPosts.find((item) => item.id === postId) : null)
+           || (typeof indeedState !== 'undefined' && Array.isArray(indeedState.posts) ? indeedState.posts.find((item) => item.id === postId) : null);
+    candidateName = p?.author_headline || p?.author_name || '';
   }
 
   const titleEl = document.getElementById('cancelModalTitle');
   if (titleEl) {
-    titleEl.textContent = isSpamMode ? 'Cancel Job as Spam / Scam' : 'Cancel Application';
+    titleEl.textContent = 'Dismiss Post';
   }
 
   const descEl = document.getElementById('cancelModalDesc');
   if (descEl) {
-    descEl.innerHTML = isSpamMode
-      ? 'This job will be cancelled and marked as <strong>Scam</strong> in your records. Confirm below or customize the comment:'
-      : 'Select a ready suggestion below or type a custom comment. This will be saved to your <strong>Others</strong> history.';
+    descEl.innerHTML = 'Select a reason below or type a custom comment. This will be saved to your <strong>Others</strong> history.';
   }
 
-  const btnConfirm = document.getElementById('btnConfirmCancelModal');
-  if (btnConfirm) {
-    btnConfirm.textContent = isSpamMode ? '✕ Cancel as Scam' : '✕ Cancel & Discard';
+  // Update button labels
+  const btnPostOnly = document.getElementById('btnDismissPostOnly');
+  if (btnPostOnly) {
+    btnPostOnly.textContent = 'Dismiss Only';
+  }
+  const btnBlacklist = document.getElementById('btnDismissAndBlacklist');
+  if (btnBlacklist) {
+    btnBlacklist.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg><span>🚫 Dismiss & Add to Dismissed Roles</span>`;
   }
 
   const nameEl = document.getElementById('cancelModalCandidate');
   if (nameEl) nameEl.textContent = candidateName ? `for ${candidateName}` : '';
 
+  // Default option: "Irrelevant tech stack" unless explicitly provided
+  const initialReason = defaultReason || 'Irrelevant tech stack';
   const input = document.getElementById('inputCancelReason');
-  if (input) {
-    input.value = defaultReason || '';
-  }
+  if (input) input.value = initialReason;
 
   document.querySelectorAll('#cancelReasonModal .reason-chip').forEach((c) => {
     const chipVal = c.getAttribute('data-reason') || c.textContent.trim();
-    c.classList.toggle('active', !!(defaultReason && chipVal.toLowerCase() === defaultReason.toLowerCase()));
+    c.classList.toggle('active', chipVal.toLowerCase() === initialReason.toLowerCase());
   });
 
   const modal = document.getElementById('cancelReasonModal');
   if (modal) modal.classList.remove('hidden');
   setTimeout(() => {
     input?.focus();
-    if (defaultReason) input?.select();
+    if (initialReason) input?.select();
   }, 50);
 }
 
 function closeCancelReasonModal() {
   state.pendingCancelPostId = null;
   state.pendingCancelPostIds = [];
+  state.pendingCancelSource = null;
   state.isSpamCancelMode = false;
   const modal = document.getElementById('cancelReasonModal');
   if (modal) modal.classList.add('hidden');
@@ -922,9 +1234,23 @@ function selectPreMadeReason(reason) {
   });
 }
 
-async function confirmCancelWithReason() {
+async function confirmCancelWithReason(explicitAddToDismissed = null) {
+  const source = state.pendingCancelSource || (state.activeTab === 'tabDiscovered' ? 'discovered'
+               : (state.activeTab === 'tabEasyApply' ? 'easy_apply'
+               : (state.activeTab === 'tabIndeedApply' ? 'indeed_apply' : 'review')));
+  const isDiscovered = source === 'discovered';
+  const isEasyApply = source === 'easy_apply';
+  const isIndeedApply = source === 'indeed_apply';
+
+  // Determine whether to register headline in Dismissed Roles blacklist
+  const checkboxVal = document.getElementById('checkAddToDismissedRoles')?.checked || false;
+  const addToDismissed = explicitAddToDismissed !== null ? !!explicitAddToDismissed : checkboxVal;
+
   const input = document.getElementById('inputCancelReason');
-  const reason = (input?.value || '').trim() || (state.isSpamCancelMode ? 'Scam' : 'Unspecified');
+  const defaultReason = isDiscovered ? 'Dismissed from Discovered'
+                      : (isEasyApply ? 'Dismissed from Easy Apply'
+                      : (isIndeedApply ? 'Dismissed from Indeed' : 'Unspecified'));
+  const reason = (input?.value || '').trim() || defaultReason;
 
   // Multi-item bulk cancel handling
   if (state.pendingCancelPostIds && state.pendingCancelPostIds.length > 0) {
@@ -933,21 +1259,50 @@ async function confirmCancelWithReason() {
       const res = await fetch('/api/posts/reject-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ post_ids: postIds, reason }),
+        body: JSON.stringify({ post_ids: postIds, reason, add_to_dismissed_roles: addToDismissed }),
       });
       if (res.ok) {
         const data = await res.json();
         const count = data.count || postIds.length;
         closeCancelReasonModal();
-        state.selectedDraftIds.clear();
-        updateSelectedDraftsUI();
-        await fetchReviewPosts();
-        await fetchSentPosts();
+
+        if (isDiscovered) {
+          state.selectedIds.clear();
+          if (typeof updateSelectedCountUI === 'function') updateSelectedCountUI();
+          if (typeof fetchDiscoveredPosts === 'function') await fetchDiscoveredPosts();
+          if (state.activeDiscoveredPostId && postIds.includes(state.activeDiscoveredPostId)) {
+            if (state.posts && state.posts.length > 0) {
+              openDiscoveredDetailDrawer(state.posts[0].id);
+            } else {
+              closeDiscoveredDetailDrawer();
+            }
+          }
+        } else if (isEasyApply) {
+          if (typeof selectedEasyJobIds !== 'undefined') {
+            selectedEasyJobIds.clear();
+          }
+          if (typeof updateEasyKPIs === 'function') updateEasyKPIs();
+          if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
+        } else if (isIndeedApply) {
+          if (typeof clearIndeedSelection === 'function') {
+            clearIndeedSelection();
+          }
+          if (typeof fetchIndeedApplyPosts === 'function') await fetchIndeedApplyPosts();
+        } else {
+          state.selectedDraftIds.clear();
+          if (typeof updateSelectedDraftsUI === 'function') updateSelectedDraftsUI();
+          await fetchReviewPosts();
+        }
+
+        if (typeof fetchSentPosts === 'function') await fetchSentPosts();
         if (typeof loadDashboardData === 'function') loadDashboardData();
+        if (addToDismissed && typeof loadDismissedRolesPage === 'function' && state.activeTab === 'tabDismissedRoles') {
+          loadDismissedRolesPage();
+        }
 
         const undoAction = {
           label: 'Undo',
-          payload: { post_ids: postIds, target_status: 'EMAIL_GENERATED' },
+          payload: { post_ids: postIds, target_status: isDiscovered ? 'DISCOVERED' : 'EMAIL_GENERATED' },
           onClick: async () => {
             try {
               const revRes = await fetch('/api/posts/revert-batch', {
@@ -956,34 +1311,50 @@ async function confirmCancelWithReason() {
                 body: JSON.stringify({ post_ids: postIds }),
               });
               if (revRes.ok) {
-                showToast(`✓ Restored ${count} application(s) to Review queue`, 'success');
-                await fetchReviewPosts();
-                await fetchSentPosts();
+                showToast(`✓ Restored ${count} ${isDiscovered ? 'post(s)' : 'item(s)'}`, 'success');
+                if (isDiscovered) {
+                  if (typeof fetchDiscoveredPosts === 'function') await fetchDiscoveredPosts();
+                } else if (isEasyApply) {
+                  if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
+                } else if (isIndeedApply) {
+                  if (typeof fetchIndeedApplyPosts === 'function') await fetchIndeedApplyPosts();
+                } else {
+                  await fetchReviewPosts();
+                }
+                if (typeof fetchSentPosts === 'function') await fetchSentPosts();
+                if (typeof loadDashboardData === 'function') loadDashboardData();
               }
             } catch (e) {
-              showToast('Error restoring drafts: ' + e.message, 'error');
+              showToast('Error restoring: ' + e.message, 'error');
             }
           },
         };
 
+        const itemLabel = isDiscovered ? 'post' : (isEasyApply || isIndeedApply ? 'job' : 'application');
+        const notifTitle = isDiscovered ? 'Posts Dismissed'
+                         : (isEasyApply ? 'Easy Apply Jobs Dismissed'
+                         : (isIndeedApply ? 'Indeed Jobs Dismissed' : 'Applications Cancelled'));
+        const blacklistNotice = addToDismissed ? ' (Roles added to Dismissed Roles)' : '';
+        const notifMsg = `Dismissed ${count} ${itemLabel}${count === 1 ? '' : 's'}: ${reason}${blacklistNotice}`;
+
         if (typeof sendAppNotification === 'function') {
           sendAppNotification({
-            title: 'Applications Cancelled',
-            message: `Cancelled ${count} applications: ${reason}`,
+            title: notifTitle,
+            message: notifMsg,
             type: 'warn',
             action: undoAction,
           });
         }
         if (typeof showSnackbar === 'function') {
           showSnackbar({
-            title: 'Applications Cancelled',
-            message: `Cancelled ${count} applications: ${reason}`,
+            title: notifTitle,
+            message: notifMsg,
             type: 'warn',
             duration: 14000,
             action: undoAction,
           });
         } else {
-          showToast(`✕ Cancelled ${count} applications: ${reason}`, 'info');
+          showToast(`✕ ${notifMsg}`, 'info');
         }
       } else {
         const err = await res.json();
@@ -998,69 +1369,140 @@ async function confirmCancelWithReason() {
   const postId = state.pendingCancelPostId;
   if (!postId) return;
 
+  // IMPORTANT: Capture active state and position index BEFORE any network calls or re-fetching
+  const prevDiscoveredIndex = isDiscovered && postId ? (state.posts || []).findIndex((p) => p.id === postId) : -1;
+  const wasActiveInDrawer = isDiscovered && postId && state.activeDiscoveredPostId === postId;
+
+  const prevReviewIndex = !isDiscovered && !isEasyApply && !isIndeedApply && postId
+    ? (state.reviewPosts || []).findIndex((p) => p.id === postId) : -1;
+  const wasActiveReview = !isDiscovered && !isEasyApply && !isIndeedApply && postId
+    && state.activeReviewPost && state.activeReviewPost.id === postId;
+
   try {
-    const endpoint = (state.isSpamCancelMode || reason.toLowerCase() === 'scam' || reason.toLowerCase().includes('spam'))
+    const endpoint = (reason.toLowerCase() === 'scam' || reason.toLowerCase().includes('spam'))
       ? `/api/posts/${postId}/spam`
       : `/api/posts/${postId}/reject`;
 
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, add_to_dismissed_roles: addToDismissed }),
     });
     if (res.ok) {
       closeCancelReasonModal();
-      if (state.activeReviewPost && state.activeReviewPost.id === postId) {
-        state.activeReviewPost = null;
-      }
       await loadDashboardData();
 
-      if (state.activeTab === 'tabReview' || (state.reviewPosts && state.reviewPosts.length > 0)) {
-        const remaining = state.reviewPosts.filter((p) => p.id !== postId);
-        if (remaining.length > 0) {
-          await openPostInReview(remaining[0].id);
-        } else {
-          document.getElementById('workspacePanel')?.classList.add('hidden');
-          document.getElementById('emptyReviewState')?.classList.remove('hidden');
+      if (isDiscovered) {
+        if (state.selectedIds && state.selectedIds.has(postId)) {
+          state.selectedIds.delete(postId);
+          if (typeof updateSelectedCountUI === 'function') updateSelectedCountUI();
         }
+
+        // If the dismissed post was currently shown in the window, show the NEXT row
+        if (wasActiveInDrawer) {
+          if (state.posts && state.posts.length > 0) {
+            const nextIdx = (prevDiscoveredIndex >= 0 && prevDiscoveredIndex < state.posts.length)
+              ? prevDiscoveredIndex
+              : state.posts.length - 1;
+            const nextPost = state.posts[nextIdx];
+            if (nextPost) {
+              openDiscoveredDetailDrawer(nextPost.id);
+            } else {
+              closeDiscoveredDetailDrawer();
+            }
+          } else {
+            closeDiscoveredDetailDrawer();
+          }
+        }
+        if (typeof fetchDiscoveredPosts === 'function') await fetchDiscoveredPosts();
+      } else if (isEasyApply) {
+        if (typeof selectedEasyJobIds !== 'undefined') {
+          selectedEasyJobIds.delete(postId);
+        }
+        if (typeof updateEasyKPIs === 'function') updateEasyKPIs();
+        if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
+      } else if (isIndeedApply) {
+        if (typeof indeedState !== 'undefined' && indeedState.selectedIds) {
+          indeedState.selectedIds.delete(postId);
+        }
+        if (typeof fetchIndeedApplyPosts === 'function') await fetchIndeedApplyPosts();
+      } else {
+        // Review drafts workspace
+        if (wasActiveReview) {
+          if (state.reviewPosts && state.reviewPosts.length > 0) {
+            const nextIdx = (prevReviewIndex >= 0 && prevReviewIndex < state.reviewPosts.length)
+              ? prevReviewIndex
+              : state.reviewPosts.length - 1;
+            const nextReviewPost = state.reviewPosts[nextIdx];
+            if (nextReviewPost) {
+              openReviewDraftDrawer(nextReviewPost.id);
+            } else {
+              closeReviewEmailDrawer();
+            }
+          } else {
+            closeReviewEmailDrawer();
+          }
+        }
+        await fetchReviewPosts();
+      }
+
+      if (typeof fetchSentPosts === 'function') await fetchSentPosts();
+      if (addToDismissed && typeof loadDismissedRolesPage === 'function' && state.activeTab === 'tabDismissedRoles') {
+        loadDismissedRolesPage();
       }
 
       const undoAction = {
         label: 'Undo',
-        payload: { post_ids: [postId], target_status: 'EMAIL_GENERATED' },
+        payload: { post_ids: [postId], target_status: isDiscovered ? 'DISCOVERED' : 'EMAIL_GENERATED' },
         onClick: async () => {
           try {
             const revRes = await fetch(`/api/posts/${postId}/revert`, { method: 'POST' });
             if (revRes.ok) {
-              showToast('✓ Restored application to Review queue', 'success');
-              await fetchReviewPosts();
-              await fetchSentPosts();
-              await openPostInReview(postId);
+              showToast(`✓ Restored ${isDiscovered ? 'post' : 'item'}`, 'success');
+              if (isDiscovered) {
+                if (typeof fetchDiscoveredPosts === 'function') await fetchDiscoveredPosts();
+              } else if (isEasyApply) {
+                if (typeof fetchEasyApplyPosts === 'function') await fetchEasyApplyPosts();
+              } else if (isIndeedApply) {
+                if (typeof fetchIndeedApplyPosts === 'function') await fetchIndeedApplyPosts();
+              } else {
+                await fetchReviewPosts();
+                await openReviewDraftDrawer(postId);
+              }
+              if (typeof fetchSentPosts === 'function') await fetchSentPosts();
+              if (typeof loadDashboardData === 'function') loadDashboardData();
             }
           } catch (e) {
-            showToast('Error restoring draft: ' + e.message, 'error');
+            showToast('Error restoring: ' + e.message, 'error');
           }
         },
       };
 
+      const itemLabel = isDiscovered ? 'post' : (isEasyApply || isIndeedApply ? 'job' : 'application');
+      const notifTitle = isDiscovered ? 'Post Dismissed'
+                       : (isEasyApply ? 'Easy Apply Job Dismissed'
+                       : (isIndeedApply ? 'Indeed Job Dismissed' : 'Application Cancelled'));
+      const blacklistNotice = addToDismissed ? ' (Role added to Dismissed Roles)' : '';
+      const notifMsg = `Dismissed ${itemLabel}: ${reason}${blacklistNotice}`;
+
       if (typeof sendAppNotification === 'function') {
         sendAppNotification({
-          title: 'Application Cancelled',
-          message: `Application cancelled: ${reason}`,
+          title: notifTitle,
+          message: notifMsg,
           type: 'warn',
           action: undoAction,
         });
       }
       if (typeof showSnackbar === 'function') {
         showSnackbar({
-          title: 'Application Cancelled',
-          message: `Application cancelled: ${reason}`,
+          title: notifTitle,
+          message: notifMsg,
           type: 'warn',
           duration: 12000,
           action: undoAction,
         });
       } else {
-        showToast(`✕ Application cancelled: ${reason}`, 'info');
+        showToast(`✕ ${notifMsg}`, 'info');
       }
     } else {
       const err = await res.json();
@@ -1073,6 +1515,32 @@ async function confirmCancelWithReason() {
 
 async function rejectActivePost() {
   return cancelActiveApplication();
+}
+
+function copyDraftSubject() {
+  const subj = document.getElementById('draftSubject')?.value || '';
+  if (!subj) {
+    showToast('Subject line is empty', 'warn');
+    return;
+  }
+  navigator.clipboard.writeText(subj).then(() => {
+    showToast('✓ Subject copied to clipboard', 'success');
+  }).catch(() => {
+    showToast('Could not copy to clipboard', 'error');
+  });
+}
+
+function copyTargetEmail() {
+  const email = document.getElementById('reviewTargetEmail')?.textContent || '';
+  if (!email || email === 'No email detected') {
+    showToast('No recipient email available', 'warn');
+    return;
+  }
+  navigator.clipboard.writeText(email).then(() => {
+    showToast(`✓ Copied email: ${email}`, 'success');
+  }).catch(() => {
+    showToast('Could not copy to clipboard', 'error');
+  });
 }
 
 // Mail Return Prompt
@@ -1104,15 +1572,26 @@ window.addEventListener('focus', async () => {
   }
 });
 
+async function selectReviewPostById(postId) {
+  if (!postId) return;
+  await openReviewDraftDrawer(postId);
+}
+
 // Global Bindings
 window.handleSearchReview = handleSearchReview;
 window.applyReviewDateFilter = applyReviewDateFilter;
+window.applyReviewSourceFilter = applyReviewSourceFilter;
+window.setReviewFilter = setReviewFilter;
 window.clearReviewFilters = clearReviewFilters;
 window.fetchReviewPosts = fetchReviewPosts;
 window.selectReviewPost = selectReviewPost;
+window.selectReviewPostById = selectReviewPostById;
 window.openPostInReview = openPostInReview;
+window.openReviewDraftDrawer = openReviewDraftDrawer;
+window.closeReviewEmailDrawer = closeReviewEmailDrawer;
 window.saveActiveDraftEdits = saveActiveDraftEdits;
 window.generateEmailForActiveDraft = generateEmailForActiveDraft;
+window.triggerGenerateSingleReviewPost = triggerGenerateSingleReviewPost;
 window.toggleSelectDraft = toggleSelectDraft;
 window.toggleSelectAllDrafts = toggleSelectAllDrafts;
 window.updateSelectedDraftsUI = updateSelectedDraftsUI;
@@ -1122,6 +1601,7 @@ window.generateBatchSelectedDrafts = generateBatchSelectedDrafts;
 window.quickGenerateAllReviewDrafts = quickGenerateAllReviewDrafts;
 window.openActivePostInGmail = openActivePostInGmail;
 window.markActivePostSent = markActivePostSent;
+window.markActivePostSpam = markActivePostSpam;
 window.markPostSentById = markPostSentById;
 window.cancelActiveApplication = cancelActiveApplication;
 window.cancelBatchSelectedDrafts = cancelBatchSelectedDrafts;
@@ -1131,4 +1611,8 @@ window.selectPreMadeReason = selectPreMadeReason;
 window.confirmCancelWithReason = confirmCancelWithReason;
 window.rejectActivePost = rejectActivePost;
 window.changeReviewPage = changeReviewPage;
+window.changeReviewRowsPerPage = changeReviewRowsPerPage;
 window.updateReviewPaginationUI = updateReviewPaginationUI;
+window.copyDraftSubject = copyDraftSubject;
+window.copyTargetEmail = copyTargetEmail;
+window.cleanActiveDraftFields = cleanActiveDraftFields;

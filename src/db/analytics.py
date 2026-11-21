@@ -81,6 +81,12 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'DISCOVERED') AS easy_apply_pending,
         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_questionnaire,
         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY') AS indeed_total,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'DISCOVERED') AS indeed_pending,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS indeed_questionnaire,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'APPLIED') AS indeed_applied,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'NOT_FOUND') AS indeed_not_found,
+        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND array_length(contact_emails, 1) > 0) AS indeed_emails_harvested,
         COUNT(*) FILTER (WHERE is_potential_spam = TRUE) AS potential_spam_total,
         COUNT(*) FILTER (WHERE array_length(contact_emails, 1) > 0) AS with_emails,
         COUNT(*) FILTER (WHERE status = 'REJECTED' AND (rejection_reason = 'Experience Requirement Mismatch' OR rejection_reason ILIKE '%experience%')) AS experience_cancelled_total
@@ -104,6 +110,12 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
                 "easy_apply_pending": 0,
                 "easy_apply_questionnaire": 0,
                 "easy_apply_applied": 0,
+                "indeed_total": 0,
+                "indeed_pending": 0,
+                "indeed_questionnaire": 0,
+                "indeed_applied": 0,
+                "indeed_not_found": 0,
+                "indeed_emails_harvested": 0,
                 "potential_spam_total": 0,
                 "with_emails": 0,
                 "experience_cancelled_total": 0,
@@ -121,6 +133,12 @@ def get_stats(db_url: str = DEFAULT_DB_URL) -> Dict[str, int]:
                 stats["question_bank_pending"] = get_unanswered_screening_questions_count()
             except Exception:
                 stats["question_bank_pending"] = 0
+            try:
+                from src.db.dismissed_roles import get_dismissed_roles_stats
+                d_stats = get_dismissed_roles_stats()
+                stats["dismissed_roles_total"] = d_stats.get("total", 0)
+            except Exception:
+                stats["dismissed_roles_total"] = 0
             return stats
 
 
@@ -167,9 +185,14 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND created_at >= %s::date) AS easy_apply_total,
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED' AND COALESCE(sent_at, updated_at, created_at) >= %s::date) AS easy_apply_applied,
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE' AND updated_at >= %s::date) AS easy_apply_screened,
-                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND created_at >= %s::date) AS indeed_total,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'APPLIED' AND COALESCE(sent_at, updated_at, created_at) >= %s::date) AS indeed_applied,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE' AND updated_at >= %s::date) AS indeed_screened,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status IN ('DISCOVERED', 'READY')) AS indeed_ready,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND array_length(contact_emails, 1) > 0 AND created_at >= %s::date) AS indeed_emails_harvested
                     FROM posts;
-                """, (cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date))
+                """, (cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date, cutoff_date))
             else:
                 cur.execute("""
                     SELECT
@@ -183,7 +206,12 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY') AS easy_apply_total,
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'APPLIED') AS easy_apply_applied,
                         COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS easy_apply_screened,
-                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready
+                        COUNT(*) FILTER (WHERE category = 'EASY_APPLY' AND status IN ('DISCOVERED', 'READY')) AS easy_apply_ready,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY') AS indeed_total,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'APPLIED') AS indeed_applied,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE') AS indeed_screened,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND status IN ('DISCOVERED', 'READY')) AS indeed_ready,
+                        COUNT(*) FILTER (WHERE category = 'INDEED_APPLY' AND array_length(contact_emails, 1) > 0) AS indeed_emails_harvested
                     FROM posts;
                 """)
             kpi_row = dict(cur.fetchone() or {})
@@ -481,6 +509,11 @@ def get_analytics_summary(days: Optional[int] = 30, db_url: str = DEFAULT_DB_URL
                     "easy_apply_applied": kpi_row.get("easy_apply_applied") or 0,
                     "easy_apply_screened": kpi_row.get("easy_apply_screened") or 0,
                     "easy_apply_ready": kpi_row.get("easy_apply_ready") or 0,
+                    "indeed_total": kpi_row.get("indeed_total") or 0,
+                    "indeed_applied": kpi_row.get("indeed_applied") or 0,
+                    "indeed_screened": kpi_row.get("indeed_screened") or 0,
+                    "indeed_ready": kpi_row.get("indeed_ready") or 0,
+                    "indeed_emails_harvested": kpi_row.get("indeed_emails_harvested") or 0,
                     "question_bank_total": total_questions,
                     "question_bank_answered": answered_questions,
                     "question_bank_pending": pending_questions,

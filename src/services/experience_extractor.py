@@ -10,7 +10,7 @@ Parses natural language, unstructured LinkedIn post text to extract:
 """
 
 import re
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 def extract_experience(text: str) -> Dict[str, Any]:
@@ -139,3 +139,56 @@ def _build_result(
         "is_fresher": is_fresher,
         "seniority_level": seniority,
     }
+
+
+def extract_phone_numbers(text: Optional[str]) -> List[str]:
+    """
+    Extract contact / WhatsApp phone numbers from unstructured post text.
+    Handles international prefixes (+91, +1, etc.), labeled phone/WhatsApp numbers,
+    and standard 10-digit mobile numbers with duplicate prevention by last 10 digits.
+    """
+    if not text:
+        return []
+
+    cleaned = text.replace("\xa0", " ").replace("\u200b", " ")
+    results: List[str] = []
+    seen_digits = set()
+
+    # Pattern A: Explicit label (phone/mobile/whatsapp/call/contact/ph/tel/reach) followed by number
+    pattern_labeled = re.compile(
+        r"(?:(?:phone|mobile|mob|contact|call|whatsapp|tel|ph|reach)(?:\s*(?:no|number|us|at|on|me))?[\s:—–\-]+)"
+        r"((\+?[0-9]{1,4}[\s\-.]?)?[0-9]{2,5}[\s\-.]?[0-9]{3,5}[\s\-.]?[0-9]{0,5})",
+        re.IGNORECASE,
+    )
+    for m in pattern_labeled.finditer(cleaned):
+        raw_num = m.group(1).strip()
+        raw_num = re.sub(r"[\.,;:—–\-]+$", "", raw_num).strip()
+        pure_digits = re.sub(r"\D", "", raw_num)
+        if 8 <= len(pure_digits) <= 15:
+            last10 = pure_digits[-10:]
+            if last10 not in seen_digits:
+                seen_digits.add(last10)
+                results.append(raw_num)
+
+    # Pattern B: Standard International (+91 ..., +1 ...)
+    pattern_intl = re.compile(r"\+(?:91|1|44|971|65|60|61)[\s\-]?[6-9][0-9]{4}[\s\-]?[0-9]{5}\b")
+    for m in pattern_intl.finditer(cleaned):
+        s = m.group(0).strip()
+        pure_digits = re.sub(r"\D", "", s)
+        last10 = pure_digits[-10:]
+        if last10 not in seen_digits:
+            seen_digits.add(last10)
+            results.append(s)
+
+    # Pattern C: Indian 10-digit mobile standing alone (starts with 6-9)
+    pattern_ind = re.compile(r"\b([6-9]\d{4}[\s\-]?\d{5})\b")
+    for m in pattern_ind.finditer(cleaned):
+        s = m.group(1).strip()
+        pure_digits = re.sub(r"\D", "", s)
+        if len(pure_digits) == 10:
+            last10 = pure_digits
+            if last10 not in seen_digits:
+                seen_digits.add(last10)
+                results.append(s)
+
+    return results

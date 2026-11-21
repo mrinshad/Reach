@@ -301,16 +301,18 @@ async function triggerLinkedInScrape() {
 }
 
 function markPostAsSpam(postId) {
+  state.pendingCancelSource = 'discovered';
   const p = (state.posts || []).find((item) => item.id === postId);
   if (typeof openCancelReasonModal === 'function') {
-    openCancelReasonModal(postId, p?.author_name || '', 'Scam', true);
+    openCancelReasonModal(postId, p?.author_name || '', 'Irrelevant tech stack', false);
   }
 }
 
 function cancelDiscoveredPost(postId, authorName) {
+  state.pendingCancelSource = 'discovered';
   const p = (state.posts || []).find((item) => item.id === postId);
   if (typeof openCancelReasonModal === 'function') {
-    openCancelReasonModal(postId, authorName || p?.author_name || '', '', false);
+    openCancelReasonModal(postId, authorName || p?.author_name || '', 'Irrelevant tech stack', false);
   }
 }
 

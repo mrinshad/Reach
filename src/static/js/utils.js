@@ -421,6 +421,12 @@ function copyEmailToClipboard(email) {
   });
 }
 
+function copyPhoneToClipboard(phone) {
+  navigator.clipboard.writeText(phone).then(() => {
+    showToast(`Copied phone: ${phone}`, 'success');
+  });
+}
+
 async function copyJobDescription() {
   const textEl = document.getElementById('reviewFullText');
   const text = textEl ? textEl.textContent : '';
@@ -501,9 +507,133 @@ function persistCyclesSetting(key, val) {
   }, 400);
 }
 
+/**
+ * Clean an email body by:
+ * 1. Stripping leading ChatGPT / Canvas UI artifacts (e.g. 'Send', 'Send email', 'Connect email', etc.)
+ * 2. Trimming any assistant commentary, notes, or canvas buttons after the signature.
+ */
+function cleanEmailBody(body) {
+  if (!body) return '';
+
+  let lines = body.trim().split('\n');
+  let startIdx = 0;
+  const leadingArtifactPattern = /^(?:send(?:\s+email)?|connect email.*|recipients.*|email(?:\s+draft)?[:\s]*|draft[:\s]*|to[:\s]+.*|from[:\s]+.*|cc[:\s]+.*|bcc[:\s]+.*|(?:\*\*)?subject(?:\*\*)?:.*|```.*|---)$/i;
+
+  while (startIdx < lines.length) {
+    const line = lines[startIdx].trim();
+    if (!line) {
+      startIdx++;
+      continue;
+    }
+    if (leadingArtifactPattern.test(line)) {
+      startIdx++;
+      continue;
+    }
+    break;
+  }
+
+  lines = lines.slice(startIdx);
+  if (!lines.length) return '';
+
+  const signOffPattern = /^(?:\*\*)?(?:(?:best|warm|kind|with)?\s*regards|sincerely(?:\s+yours)?|thanks\s*(?:&|and)\s*regards|thanks|thank\s+you|best|cheers|respectfully|yours\s+(?:sincerely|faithfully))(?:\*\*)?\b[,\s]*/i;
+
+  let signOffIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (signOffPattern.test(lines[i].trim())) {
+      signOffIdx = i;
+      break;
+    }
+  }
+
+  if (signOffIdx !== -1) {
+    const contactLinePattern = /^(?:(?:\+?\d[\d\s\-\(\)\.]{7,}\d)|.*@.*\..*|(?:phone|tel|mobile|cell|email|linkedin|github|portfolio|website|web)[:\s].*|https?:\/\/.*|linkedin\.com\/.*|github\.com\/.*|(?:full[\s\-]stack|software|frontend|backend|web|devops|cloud)?\s*(?:developer|engineer|consultant|architect|specialist))\b/i;
+
+    let sigEndIdx = signOffIdx;
+    const signOffLine = lines[signOffIdx].trim();
+    const hasNameOnSameLine = /^(?:\*\*)?(?:(?:best|warm|kind|with)?\s*regards|sincerely(?:\s+yours)?|thanks\s*(?:&|and)\s*regards|thanks|thank\s+you|best|cheers)(?:\*\*)?[,\s]+[A-Za-z]+/i.test(signOffLine);
+
+    let curr = signOffIdx + 1;
+    let nameFound = hasNameOnSameLine;
+
+    while (curr < lines.length) {
+      const cline = lines[curr].trim();
+      if (!cline) {
+        if (!nameFound && curr + 1 < lines.length && lines[curr + 1].trim()) {
+          curr++;
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      if (!nameFound) {
+        if (!/^(?:note:|ps:|p\.s\.|let me know|hope this|good luck|feel free|why this|copy|edit|regenerate|share|---)/i.test(cline)) {
+          nameFound = true;
+          sigEndIdx = curr;
+          curr++;
+          continue;
+        } else {
+          break;
+        }
+      } else {
+        if (contactLinePattern.test(cline) || cline.toLowerCase().includes('rinshad')) {
+          sigEndIdx = curr;
+          curr++;
+          continue;
+        } else {
+          break;
+        }
+      }
+    }
+
+    lines = lines.slice(0, sigEndIdx + 1);
+  }
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * Parse a raw text copied or generated from ChatGPT into clean { subject, body }.
+ */
+function parseAndCleanEmailInput(rawText) {
+  if (!rawText) return { subject: '', body: '' };
+
+  let text = rawText.trim();
+  let subject = '';
+
+  const lines = text.split('\n');
+  let subjectLineIdx = -1;
+
+  for (let i = 0; i < Math.min(lines.length, 6); i++) {
+    const l = lines[i].trim();
+    const subMatch = l.match(/^(?:\*\*)?Subject(?:\*\*)?:\s*(.+)$/i);
+    const appMatch = l.match(/^(?:Application|Outreach|Cold Outreach)\s*[-–—:]\s*(.+)$/i);
+    if (subMatch) {
+      subject = subMatch[1].replace(/\*\*/g, '').trim();
+      subjectLineIdx = i;
+      break;
+    } else if (appMatch || l.toLowerCase().startsWith('application for ')) {
+      subject = l.replace(/\*\*/g, '').trim();
+      subjectLineIdx = i;
+      break;
+    }
+  }
+
+  let bodyText = text;
+  if (subjectLineIdx !== -1) {
+    const remainingLines = lines.slice(0, subjectLineIdx).concat(lines.slice(subjectLineIdx + 1));
+    bodyText = remainingLines.join('\n');
+  }
+
+  const cleanedBody = cleanEmailBody(bodyText);
+  return { subject, body: cleanedBody };
+}
+
 // Bind utilities globally
 window.stepCycles = stepCycles;
 window.persistCyclesSetting = persistCyclesSetting;
+window.cleanEmailBody = cleanEmailBody;
+window.parseAndCleanEmailInput = parseAndCleanEmailInput;
 window.showConfirm = showConfirm;
 window.showCenterAlert = showCenterAlert;
 window.closeCustomDialog = closeCustomDialog;
@@ -519,5 +649,6 @@ window.formatPostDateTimeWithRelative = formatPostDateTimeWithRelative;
 window.formatDateTime = formatDateTime;
 window.formatDate = formatDate;
 window.copyEmailToClipboard = copyEmailToClipboard;
+window.copyPhoneToClipboard = copyPhoneToClipboard;
 window.copyJobDescription = copyJobDescription;
 window.copyEmailDraft = copyEmailDraft;

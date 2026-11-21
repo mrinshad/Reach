@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from playwright.sync_api import sync_playwright
 from src.services.firefox_connector import launch_firefox_context
-from src.services.experience_extractor import extract_experience
+from src.services.experience_extractor import extract_experience, extract_phone_numbers
 from src.db import (
     init_db,
     upsert_post,
@@ -33,6 +33,8 @@ from src.db import (
     get_setting,
     check_comment_bait,
     COMMENT_BAIT_PATTERNS,
+    get_dismissed_role_titles,
+    check_title_previously_dismissed,
 )
 
 ARTIFACT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
@@ -472,9 +474,14 @@ def main():
         existing_identifiers = get_existing_post_identifiers()
         print(f"  [DB Deduplication] Preloaded {len(existing_identifiers)} existing post signatures/URLs from database.")
 
+        # Preload previously dismissed titles
+        dismissed_titles = get_dismissed_role_titles()
+        print(f"  [Auto-Dismiss] Preloaded {len(dismissed_titles)} previously dismissed role titles.")
+
         email_posts = []
         draft_posts = []
         spam_posts = []
+        auto_dismissed_posts = []
         processed_snippets = set()
         skipped_existing_count = 0
         consecutive_older_posts = 0
@@ -552,8 +559,29 @@ def main():
                 exp_info = data["experience"]
                 exp_label = exp_info["raw_text"] if exp_info["raw_text"] else exp_info["seniority_level"]
 
-                # Categorize: Email Hiring Post vs Draft Post vs Spam / Scam
-                if data["is_comment_bait"]:
+                # Extract contact phones if present in post text
+                contact_phones = extract_phone_numbers(data.get("full_text", ""))
+                data["contact_phones"] = contact_phones
+
+                # Check if role was previously dismissed by the user
+                is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(data.get("author_headline", ""), dismissed_titles)
+                if not is_prev_dismissed and data.get("full_text"):
+                    first_lines = [ln.strip() for ln in data["full_text"].split("\n")[:4] if len(ln.strip()) > 3]
+                    for ln in first_lines:
+                        d_hit, d_why = check_title_previously_dismissed(ln, dismissed_titles)
+                        if d_hit:
+                            is_prev_dismissed, dismiss_reason = d_hit, d_why
+                            break
+
+                # Categorize: Auto-Dismissed vs Spam/Scam vs Email Hiring Post vs Draft Post
+                if is_prev_dismissed:
+                    data["category"] = "DRAFT_PORTAL"
+                    data["status"] = "REJECTED"
+                    data["rejection_reason"] = dismiss_reason
+                    data["is_dismissed"] = True
+                    auto_dismissed_posts.append(data)
+                    print(f"    🚫 [Auto-Dismissed] {data['author_name']} | Headline: {data.get('author_headline')} | ❌ {dismiss_reason}")
+                elif data["is_comment_bait"]:
                     data["category"] = "DRAFT_PORTAL"
                     data["status"] = "REJECTED"
                     data["rejection_reason"] = "Scam: Comment bait ('comment below' / 'comment interested')"

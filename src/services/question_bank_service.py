@@ -123,6 +123,158 @@ def infer_question_category(question_text: str) -> str:
     return "profile"
 
 
+def match_option_to_answer(answer: str, options: List[str], prompt: str = "") -> Optional[str]:
+    """
+    Intelligently match a stored Question Bank answer or candidate profile value
+    to one of the available multiple-choice radio or dropdown options.
+    Supports exact match, numeric experience ranges, notice period, yes/no semantics,
+    and substring/token containment.
+    """
+    if not answer or not options:
+        return None
+    ans_clean = str(answer).strip()
+    if not ans_clean:
+        return None
+    ans_low = ans_clean.lower()
+    prompt_low = (prompt or "").lower()
+
+    # Clean option map: list of (original, cleaned_lower)
+    opt_map = [(opt, str(opt).strip().lower()) for opt in options if str(opt).strip()]
+    if not opt_map:
+        return None
+
+    # 1. Exact match (case-insensitive)
+    for orig, low in opt_map:
+        if low == ans_low:
+            return orig
+
+    # 2. Number / Experience Range matching
+    is_exp_q = any(k in prompt_low for k in ["experience", "year", "ctc", "salary"]) or any(k in ans_low for k in ["year", "exp", "lpa"])
+    num_val = None
+    m_ans = re.search(r'(\d+(?:\.\d+)?)', ans_clean)
+    if m_ans:
+        try:
+            num_val = float(m_ans.group(1))
+        except Exception:
+            pass
+    elif ans_low in ["0", "none", "no experience", "nil", "zero", "no", "nope"] and is_exp_q:
+        num_val = 0.0
+
+    if num_val is not None:
+        # Zero experience check
+        if num_val == 0:
+            for orig, low in opt_map:
+                if any(k in low for k in ["no professional", "no experience", "none", "0 year", "0-", "zero"]):
+                    return orig
+            for orig, low in opt_map:
+                if low in ["no", "none"]:
+                    return orig
+
+        # Range check: '3–4 years', '1 - 2 years', '2 to 4'
+        for orig, low in opt_map:
+            m_range = re.search(r'(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)', low)
+            if m_range:
+                try:
+                    r_low = float(m_range.group(1))
+                    r_high = float(m_range.group(2))
+                    if r_low <= num_val <= r_high:
+                        return orig
+                except Exception:
+                    pass
+
+        # Less than check: 'Less than 3 years', '< 1 year'
+        for orig, low in opt_map:
+            m_less = re.search(r'(?:less than|<|under)\s*(\d+(?:\.\d+)?)', low)
+            if m_less:
+                try:
+                    max_v = float(m_less.group(1))
+                    if num_val < max_v and (num_val > 0 or not any("no" in o[1] or "none" in o[1] for o in opt_map)):
+                        return orig
+                except Exception:
+                    pass
+
+        # Greater than / Plus check: '6+ years', '5+ years', '> 5 years'
+        for orig, low in opt_map:
+            m_plus = re.search(r'(?:(\d+(?:\.\d+)?)\s*\+|\b(?:more than|>)\s*(\d+(?:\.\d+)?))', low)
+            if m_plus:
+                try:
+                    min_v = float(m_plus.group(1) or m_plus.group(2))
+                    if num_val >= min_v:
+                        return orig
+                except Exception:
+                    pass
+
+    # 3. Notice Period / Immediate Joiner handling
+    is_notice_q = any(k in prompt_low for k in ["notice", "joiner", "immediate", "serving"])
+    if is_notice_q:
+        is_immediate = any(k in ans_low for k in ["immediate", "serving", "lwd", "15 days", "30 days", "0 days", "yes", "true"])
+        if is_immediate:
+            for orig, low in opt_map:
+                if low in ["yes", "immediate", "serving notice period", "yes, immediate", "15-30 days", "< 15 days", "1- 15 days", "1-15 days"]:
+                    return orig
+                if "yes" in low:
+                    return orig
+
+    # 4. Affirmative / Negative matching
+    is_affirmative = (
+        ans_low in ["yes", "true", "y", "i do", "i have", "definitely", "open", "comfortable", "agreed", "sure"]
+        or ans_low.startswith("yes,")
+        or ans_low.startswith("yes ")
+    )
+    is_negative = (
+        ans_low in ["no", "false", "n", "nope", "i have not", "none", "not yet", "not comfortable", "nil"]
+        or ans_low.startswith("no,")
+        or ans_low.startswith("no ")
+    )
+
+    if is_affirmative:
+        for orig, low in opt_map:
+            if low == "yes":
+                return orig
+        yes_starts = [orig for orig, low in opt_map if low.startswith("yes")]
+        if yes_starts:
+            return yes_starts[0]
+        for orig, low in opt_map:
+            if "yes" in low:
+                return orig
+
+    if is_negative:
+        for orig, low in opt_map:
+            if low == "no":
+                return orig
+        no_starts = [orig for orig, low in opt_map if low.startswith("no")]
+        if no_starts:
+            return no_starts[0]
+        for orig, low in opt_map:
+            if "no" in low or "none" in low:
+                return orig
+
+    # 5. Substring / Prefix match
+    for orig, low in opt_map:
+        if len(low) >= 3 and low in ans_low:
+            return orig
+        if len(ans_low) >= 3 and ans_low in low:
+            return orig
+
+    # 6. Fallback word overlap
+    ans_words = set(re.findall(r'\b\w{3,}\b', ans_low))
+    if ans_words:
+        best_opt = None
+        best_score = 0
+        for orig, low in opt_map:
+            opt_words = set(re.findall(r'\b\w{3,}\b', low))
+            if opt_words:
+                overlap = len(ans_words.intersection(opt_words)) / max(len(ans_words), len(opt_words))
+                if overlap > 0.6 and overlap > best_score:
+                    best_score = overlap
+                    best_opt = orig
+        if best_opt:
+            return best_opt
+
+    return None
+
+
+
 from src.db.question_bank import (
     STANDARD_BASIC_QUESTIONS,
     normalize_question_key,

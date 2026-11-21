@@ -27,6 +27,7 @@ from src.db.posts import (
 )
 from src.db.settings import get_setting
 from src.db.question_bank import lookup_answer_for_question, upsert_screening_question
+from src.services.question_bank_service import match_option_to_answer
 from src.services.chatgpt_service import ask_chatgpt_for_question_answer
 from src.config import load_config
 
@@ -255,12 +256,18 @@ def extract_all_search_job_cards(page: Page, max_jobs: Optional[int] = None) -> 
                 }
             }
 
+            const fullText = (c.innerText || '').toLowerCase();
+            const footerEl = c.querySelector('.job-card-container__footer-job-state, [class*="footer-job-state"]');
+            const footerText = footerEl ? (footerEl.innerText || '').toLowerCase() : '';
+            const isApplied = footerText.includes('applied') || /\bapplied\b/.test(fullText);
+
             results.push({
                 job_id: jid,
                 title: title,
                 company: company || 'Company',
                 location: loc || '',
-                url: `https://www.linkedin.com/jobs/view/${jid}/`
+                url: `https://www.linkedin.com/jobs/view/${jid}/`,
+                is_already_applied: isApplied
             });
         }
 
@@ -291,12 +298,16 @@ def extract_all_search_job_cards(page: Page, max_jobs: Optional[int] = None) -> 
                     if (locEl) loc = locEl.innerText.split('\\n')[0].trim();
                 }
 
+                const cText = container ? (container.innerText || '').toLowerCase() : '';
+                const isApplied = /\bapplied\b/.test(cText);
+
                 results.push({
                     job_id: jid,
                     title: title,
                     company: company || 'Company',
                     location: loc || '',
-                    url: `https://www.linkedin.com/jobs/view/${jid}/`
+                    url: `https://www.linkedin.com/jobs/view/${jid}/`,
+                    is_already_applied: isApplied
                 });
             }
         }
@@ -317,12 +328,16 @@ def extract_all_search_job_cards(page: Page, max_jobs: Optional[int] = None) -> 
                 const compEl = c.querySelector('.artdeco-entity-lockup__subtitle, .job-card-container__company-name');
                 const locEl = c.querySelector('.artdeco-entity-lockup__caption, .job-card-container__metadata-item');
 
+                const cText = (c.innerText || '').toLowerCase();
+                const isApplied = /\bapplied\b/.test(cText);
+
                 results.push({
                     job_id: idFromHref,
                     title: title,
                     company: compEl ? compEl.innerText.split('\\n')[0].trim() : 'Company',
                     location: locEl ? locEl.innerText.split('\\n')[0].trim() : '',
-                    url: `https://www.linkedin.com/jobs/view/${idFromHref}/`
+                    url: `https://www.linkedin.com/jobs/view/${idFromHref}/`,
+                    is_already_applied: isApplied
                 });
             }
         }
@@ -698,7 +713,10 @@ def dismiss_easy_apply_modal(page: Page):
             "button:has-text('Done')"
         ).first
         if dismiss_btn.count() > 0 and dismiss_btn.is_visible():
-            dismiss_btn.click(force=True)
+            try:
+                dismiss_btn.click(force=True, timeout=2500, no_wait_after=True)
+            except Exception:
+                page.evaluate("el => { if (el) el.click(); }", dismiss_btn.element_handle())
             page.wait_for_timeout(800)
 
             # Confirm discard dialog if it appears
@@ -707,7 +725,10 @@ def dismiss_easy_apply_modal(page: Page):
                 "button:has-text('Discard')"
             ).first
             if discard_btn.count() > 0 and discard_btn.is_visible():
-                discard_btn.click(force=True)
+                try:
+                    discard_btn.click(force=True, timeout=2500, no_wait_after=True)
+                except Exception:
+                    page.evaluate("el => { if (el) el.click(); }", discard_btn.element_handle())
                 page.wait_for_timeout(600)
     except Exception:
         pass
@@ -727,16 +748,24 @@ def fill_contact_info(page: Page):
         pass
 
     try:
-        city_input = page.locator("input[id*='city'], input[name*='city'], input[placeholder*='city']").first
+        city_input = page.locator(
+            "input[id*='city' i], input[name*='city' i], input[placeholder*='city' i], "
+            "input[aria-label*='city' i], input[id*='location' i], input[name*='location' i], "
+            "input[placeholder*='location' i], input[aria-label*='location' i]"
+        ).first
         if city_input.count() > 0 and city_input.is_visible():
             current_val = city_input.input_value().strip()
             if not current_val:
+                city_val = "Malappuram"
+                ans_city, _ = lookup_answer_for_question("City")
+                if ans_city and ans_city != "__EMPTY__":
+                    city_val = ans_city.split(",")[0].strip()
                 city_input.click()
-                city_input.press_sequentially("Malappuram", delay=25)
+                city_input.press_sequentially(city_val, delay=25)
                 page.wait_for_timeout(600)
                 
                 # Explicitly click the floating autocomplete suggestion to close the popover
-                options = page.locator("[data-floating-ui-portal] p, [data-floating-ui-portal] li, [data-floating-ui-portal] [role='option'], .basic-typeahead__selectable-list li").all()
+                options = page.locator("[data-floating-ui-portal] p, [data-floating-ui-portal] li, [data-floating-ui-portal] [role='option'], .basic-typeahead__selectable-list li, .search-typeahead-v2__hit").all()
                 if options:
                     try:
                         options[0].click(timeout=2000)
@@ -996,8 +1025,13 @@ def handle_screening_form_step(
         # NEVER treat resume files, documents, or uploads as questions
         if any(ext in t for ext in [".pdf", ".docx", ".doc", ".rtf", ".odt", ".txt"]):
             return True
-        if any(s in t for s in standard_skip):
-            return True
+        for s in standard_skip:
+            if s == "search":
+                # Standalone word match only to avoid false matches on 'Elasticsearch'
+                if re.search(r'\bsearch\b', t) and "elasticsearch" not in t:
+                    return True
+            elif s in t:
+                return True
         if any(s in t for s in ["resume", "choose a resume", "select a resume", "uploaded resume", "choose resume", "cv"]):
             return True
         return False
@@ -1005,20 +1039,30 @@ def handle_screening_form_step(
     # 1. Inspect Fieldsets (Radio Groups)
     try:
         fieldsets = page.locator("fieldset:visible, [role='radiogroup']:visible").all()
-        for fs in fieldsets:
+        for idx, fs in enumerate(fieldsets):
             try:
-                legend_el = fs.locator("legend").first
-                prompt = legend_el.inner_text().strip() if legend_el.count() > 0 else ""
-                if not prompt:
-                    prompt = fs.get_attribute("aria-label") or ""
-                if not prompt:
-                    r = fs.locator("div[role='radio'][aria-label], input[type='radio'][aria-label]").first
-                    if r.count() > 0:
-                        prompt = r.get_attribute("aria-label") or ""
-                if not prompt:
-                    pre_el = fs.locator("xpath=preceding::p[1] | preceding::h3[1] | preceding::label[1]").first
-                    if pre_el.count() > 0:
-                        prompt = pre_el.inner_text().strip()
+                # Robust multi-strategy prompt extraction
+                prompt = fs.evaluate("""el => {
+                    const leg = el.querySelector('legend');
+                    if (leg && leg.innerText.trim()) return leg.innerText.trim();
+                    if (el.getAttribute('aria-label') && el.getAttribute('aria-label').trim()) return el.getAttribute('aria-label').trim();
+                    const inp = el.querySelector('input[aria-label]');
+                    if (inp && inp.getAttribute('aria-label').trim()) return inp.getAttribute('aria-label').trim();
+                    let prev = el.previousElementSibling;
+                    while (prev) {
+                        const txt = prev.innerText ? prev.innerText.trim() : '';
+                        if (txt && txt.length > 2) return txt;
+                        prev = prev.previousElementSibling;
+                    }
+                    const parent = el.closest('[data-test-form-element], .jobs-easy-apply-form-section__grouping, .fb-dash-form-element') || el.parentElement;
+                    if (parent) {
+                        const h = parent.querySelector('h3, legend, .fb-dash-form-element__label, span[class*="header"], p[class*="header"]');
+                        if (h && h.innerText.trim()) return h.innerText.trim();
+                    }
+                    return '';
+                }""")
+                if prompt:
+                    prompt = re.sub(r'[\*\:]+\s*$', '', prompt).strip()
                 if not prompt or is_skip(prompt):
                     continue
 
@@ -1026,17 +1070,46 @@ def handle_screening_form_step(
                 if any(ext in prompt.lower() for ext in [".pdf", ".docx", ".doc"]):
                     continue
 
-                # Collect available options from radio group
-                radio_labels = fs.locator("div[role='radio']:visible, label:visible, .fb-radio-label:visible, .artdeco-radio-button__label:visible").all()
-                extracted_options = []
-                for ro in radio_labels:
-                    try:
-                        p_el = ro.locator("p").first
-                        txt = p_el.inner_text().strip() if p_el.count() > 0 else ro.inner_text().strip()
-                        if txt and len(txt) < 80 and txt not in extracted_options:
-                            extracted_options.append(txt)
-                    except Exception:
-                        pass
+                # Check whether fieldset contains radio buttons or checkboxes
+                is_checkbox_group = fs.locator("input[type='checkbox']").count() > 0
+
+                # Collect available options from radio or checkbox group using resilient DOM evaluation
+                options_data = []
+                try:
+                    options_data = fs.evaluate("""e => {
+                        const inputs = e.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+                        const list = [];
+                        inputs.forEach((inp, idx) => {
+                            const optWrap = inp.closest('.gvymfa, .fb-radio, .fb-checkbox, .artdeco-radio-button, .artdeco-checkbox, [data-test-radio-button], [data-test-checkbox]') || inp.parentElement.parentElement;
+                            let txt = '';
+                            if (optWrap) {
+                                const p = optWrap.querySelector('p, span:not([aria-hidden="true"])');
+                                if (p && p.innerText && p.innerText.trim()) txt = p.innerText.trim();
+                                else if (optWrap.innerText && optWrap.innerText.trim()) txt = optWrap.innerText.trim();
+                            }
+                            if (!txt && inp.id) {
+                                const lbl = document.querySelector('label[for="' + inp.id + '"]');
+                                if (lbl && lbl.innerText && lbl.innerText.trim()) txt = lbl.innerText.trim();
+                            }
+                            if (!txt) txt = inp.getAttribute('value') || '';
+                            list.push({ index: idx, id: inp.id || '', text: txt, type: inp.type });
+                        });
+                        return list;
+                    }""")
+                except Exception:
+                    pass
+
+                extracted_options = [o['text'] for o in options_data if o.get('text') and len(o['text']) < 120]
+                if not extracted_options:
+                    labels = fs.locator("div[role='radio']:visible, label:visible, .fb-radio-label:visible, .artdeco-radio-button__label:visible, .fb-checkbox-label:visible").all()
+                    for ro in labels:
+                        try:
+                            p_el = ro.locator("p").first
+                            txt = p_el.inner_text().strip() if p_el.count() > 0 else ro.inner_text().strip()
+                            if txt and len(txt) < 120 and txt not in extracted_options:
+                                extracted_options.append(txt)
+                        except Exception:
+                            pass
 
                 # If options contain document files, skip fieldset (it's the resume picker)
                 if any(any(ext in o.lower() for ext in [".pdf", ".docx", ".doc"]) for o in extracted_options):
@@ -1048,7 +1121,7 @@ def handle_screening_form_step(
 
                 if is_explicit_empty:
                     answered.append(f"{prompt} -> (empty)")
-                    logger(f"  ✓ Left radio choice empty for '{prompt}' as configured")
+                    logger(f"  ✓ Left choice empty for '{prompt}' as configured")
                     continue
 
                 if not ans and not is_explicit_empty:
@@ -1088,84 +1161,107 @@ def handle_screening_form_step(
 
                 clicked = False
                 if ans:
-                    ans_low = ans.lower().strip()
-
-                    # Exact text match first
-                    for opt in radio_labels:
-                        p_el = opt.locator("p").first
-                        opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
-                        if opt_txt == ans_low:
-                            is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
-                            if not is_checked:
-                                opt.click(force=True)
+                    if is_checkbox_group:
+                        ans_parts = [p.strip() for p in re.split(r'[,;|\n]', ans) if p.strip()]
+                        for part in ans_parts:
+                            matched_text = match_option_to_answer(part, extracted_options, prompt)
+                            if matched_text:
+                                for item in options_data:
+                                    if item.get("text") == matched_text and item.get("id"):
+                                        page.evaluate("""id => {
+                                            const el = document.getElementById(id);
+                                            if (el && !el.checked) {
+                                                el.click();
+                                                el.dispatchEvent(new Event('change', { bubbles: true }));
+                                            }
+                                        }""", item["id"])
+                                        clicked = True
+                                        answered.append(f"{prompt} -> {matched_text}")
+                                        logger(f"  ✓ Checkbox selected for '{prompt[:50]}': {matched_text}")
+                    else:
+                        matched_opt_text = match_option_to_answer(ans, extracted_options, prompt)
+                        target_id = None
+                        if matched_opt_text and options_data:
+                            for item in options_data:
+                                if item.get("text") == matched_opt_text:
+                                    target_id = item.get("id")
+                                    break
+                        if target_id:
+                            page.evaluate("""id => {
+                                const el = document.getElementById(id);
+                                if (el) {
+                                    el.click();
+                                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                            }""", target_id)
                             clicked = True
-                            break
 
-                    # Substring match if exact didn't match
-                    if not clicked:
-                        for opt in radio_labels:
-                            p_el = opt.locator("p").first
-                            opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
-                            if (opt_txt and opt_txt in ans_low) or (ans_low and ans_low in opt_txt):
-                                is_checked = opt.get_attribute("aria-checked") == "true" or opt.locator("input[type='radio']:checked").count() > 0
-                                if not is_checked:
+                        if not clicked:
+                            ans_low = ans.lower().strip()
+                            radio_labels = fs.locator("div[role='radio']:visible, label:visible, .fb-radio-label:visible, .artdeco-radio-button__label:visible").all()
+                            for opt in radio_labels:
+                                p_el = opt.locator("p").first
+                                opt_txt = p_el.inner_text().strip().lower() if p_el.count() > 0 else opt.inner_text().strip().lower()
+                                if opt_txt and (opt_txt == ans_low or opt_txt in ans_low or ans_low in opt_txt):
                                     opt.click(force=True)
-                                clicked = True
-                                break
+                                    clicked = True
+                                    break
 
-                    # Keyword match for Yes / No
-                    if not clicked:
-                        if any(w in ans_low for w in ["yes", "true", "comfortable", "immediate", "open"]) or (ans_low.isdigit() and int(ans_low) > 0):
-                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
-                            if yes_opt.count() > 0:
-                                yes_opt.click(force=True)
-                                clicked = True
-                        elif any(w in ans_low for w in ["no", "false", "not comfortable"]) or (ans_low.isdigit() and int(ans_low) == 0):
-                            no_opt = fs.locator("div[role='radio']:has-text('No'), label:has-text('No'), input[value='No'], div[role='radio'][aria-label*='No']").first
-                            if no_opt.count() > 0:
-                                no_opt.click(force=True)
-                                clicked = True
+                        if clicked:
+                            selected_display = matched_opt_text if matched_opt_text else ans
+                            answered.append(f"{prompt} -> {selected_display}")
+                            logger(f"  ✓ Radio selected for '{prompt[:60]}': {selected_display}")
 
                     if clicked:
-                        answered.append(f"{prompt} -> {ans}")
-                        logger(f"  ✓ Radio selected for '{prompt[:60]}': {ans}")
                         page.wait_for_timeout(250)
                     else:
                         if prompt not in unanswered:
                             upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                             unanswered.append(prompt)
                         if fill_dummies_to_advance:
-                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
-                            if yes_opt.count() > 0:
-                                yes_opt.click(force=True)
-                                clicked = True
-                            elif radio_labels:
-                                radio_labels[0].click(force=True)
-                                clicked = True
+                            if is_checkbox_group:
+                                none_item = next((item for item in options_data if "none" in item.get("text", "").lower()), None)
+                                pick_id = none_item["id"] if none_item else (options_data[0]["id"] if options_data else None)
+                                if pick_id:
+                                    page.evaluate("id => { const el = document.getElementById(id); if (el && !el.checked) { el.click(); } }", pick_id)
+                                    clicked = True
+                            else:
+                                yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                                if yes_opt.count() > 0:
+                                    yes_opt.click(force=True)
+                                    clicked = True
+                                elif options_data and options_data[0].get("id"):
+                                    page.evaluate("id => { const el = document.getElementById(id); if (el) { el.click(); } }", options_data[0]["id"])
+                                    clicked = True
                             if clicked:
                                 filled_placeholders.append(prompt)
-                                logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
+                                logger(f"  ℹ️ Selected compliant placeholder choice for '{prompt[:60]}' to advance step")
                                 page.wait_for_timeout(250)
                 else:
-                    # Neither DB nor ChatGPT had an answer (or user_response_needed)
-                    checked_count = fs.locator("input[type='radio']:checked, div[role='radio'][aria-checked='true']").count()
+                    checked_count = fs.locator("input:checked, div[role='radio'][aria-checked='true']").count()
                     is_basic = any(b in prompt.lower() for b in basic_profile_terms)
                     if not is_basic and prompt not in unanswered:
                         upsert_screening_question(prompt, sample_job=job_label, options=extracted_options)
                         unanswered.append(prompt)
 
-                    # If still not clicked and dummy mode enabled to advance step
                     if checked_count == 0 and fill_dummies_to_advance:
-                        yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
-                        if yes_opt.count() > 0:
-                            yes_opt.click(force=True)
-                            clicked = True
-                        elif radio_labels:
-                            radio_labels[0].click(force=True)
-                            clicked = True
+                        if is_checkbox_group:
+                            none_item = next((item for item in options_data if "none" in item.get("text", "").lower()), None)
+                            pick_id = none_item["id"] if none_item else (options_data[0]["id"] if options_data else None)
+                            if pick_id:
+                                page.evaluate("id => { const el = document.getElementById(id); if (el && !el.checked) { el.click(); } }", pick_id)
+                                clicked = True
+                        else:
+                            yes_opt = fs.locator("div[role='radio']:has-text('Yes'), label:has-text('Yes'), input[value='Yes'], div[role='radio'][aria-label*='Yes']").first
+                            if yes_opt.count() > 0:
+                                yes_opt.click(force=True)
+                                clicked = True
+                            elif options_data and options_data[0].get("id"):
+                                page.evaluate("id => { const el = document.getElementById(id); if (el) { el.click(); } }", options_data[0]["id"])
+                                clicked = True
                         if clicked:
                             filled_placeholders.append(prompt)
-                            logger(f"  ℹ️ Selected compliant placeholder radio for '{prompt[:60]}' to advance step")
+                            logger(f"  ℹ️ Selected compliant placeholder choice for '{prompt[:60]}' to advance step")
                             page.wait_for_timeout(250)
             except Exception as e:
                 logger(f"  Notice inspecting fieldset: {e}")
@@ -1247,25 +1343,34 @@ def handle_screening_form_step(
 
                 matched_opt_val = None
                 if ans:
-                    ans_low = ans.lower().strip()
-                    for opt in sel_opts:
-                        otxt = opt.inner_text().strip().lower()
-                        oval = (opt.get_attribute("value") or "").strip().lower()
-                        if (
-                            otxt == ans_low
-                            or oval == ans_low
-                            or (ans_low and ans_low in otxt)
-                            or (otxt and otxt in ans_low)
-                            or (ans_low.replace("+", "") and ans_low.replace("+", "") in otxt)
-                        ):
-                            matched_opt_val = opt.get_attribute("value")
-                            break
+                    best_opt_text = match_option_to_answer(ans, extracted_options, prompt)
+                    if best_opt_text:
+                        for opt in sel_opts:
+                            if opt.inner_text().strip().lower() == best_opt_text.lower():
+                                matched_opt_val = opt.get_attribute("value")
+                                break
+
+                    if matched_opt_val is None:
+                        ans_low = ans.lower().strip()
+                        for opt in sel_opts:
+                            otxt = opt.inner_text().strip().lower()
+                            oval = (opt.get_attribute("value") or "").strip().lower()
+                            if (
+                                otxt == ans_low
+                                or oval == ans_low
+                                or (ans_low and ans_low in otxt)
+                                or (otxt and otxt in ans_low)
+                                or (ans_low.replace("+", "") and ans_low.replace("+", "") in otxt)
+                            ):
+                                matched_opt_val = opt.get_attribute("value")
+                                break
 
                     if matched_opt_val is not None:
                         if sel.input_value() != matched_opt_val:
                             sel.select_option(value=matched_opt_val)
-                        answered.append(f"{prompt} -> {ans}")
-                        logger(f"  ✓ Dropdown selected for '{prompt}': {ans}")
+                        selected_display = best_opt_text if best_opt_text else ans
+                        answered.append(f"{prompt} -> {selected_display}")
+                        logger(f"  ✓ Dropdown selected for '{prompt}': {selected_display}")
                         page.wait_for_timeout(250)
                     else:
                         curr_val = sel.input_value()
@@ -1413,6 +1518,18 @@ def handle_screening_form_step(
                         inp.click(force=True)
                         inp.fill("")
                         inp.press_sequentially(fill_val, delay=15)
+                        if any(k in prompt.lower() for k in ["city", "location"]):
+                            page.wait_for_timeout(600)
+                            auto_options = page.locator("[data-floating-ui-portal] p, [data-floating-ui-portal] li, [data-floating-ui-portal] [role='option'], .basic-typeahead__selectable-list li, .search-typeahead-v2__hit").all()
+                            if auto_options:
+                                try:
+                                    auto_options[0].click(timeout=1500)
+                                except Exception:
+                                    inp.press("ArrowDown")
+                                    inp.press("Enter")
+                            else:
+                                inp.press("ArrowDown")
+                                inp.press("Enter")
                     answered.append(f"{prompt} -> {fill_val}")
                     logger(f"  ✓ Filled input for '{prompt}': {fill_val}")
                     page.wait_for_timeout(200)
@@ -1459,6 +1576,66 @@ def handle_screening_form_step(
         "unanswered": unanswered,
         "filled_placeholders": filled_placeholders,
     }
+
+
+def safe_click_button(page: Page, locator, timeout_ms: int = 4000, desc: str = "button") -> bool:
+    """
+    Robustly clicks an element with multiple fallbacks:
+    1. Center-scrolls into viewport so sticky headers/navbars do not overlap it.
+    2. Tries Playwright click with no_wait_after=True so background network requests don't time out the click.
+    3. Tries Playwright force=True click with no_wait_after=True.
+    4. Falls back to direct DOM JavaScript click and MouseEvent dispatch (immune to coordinate/occlusion/focus bugs).
+    Returns True if click succeeded, False if all attempts failed.
+    """
+    if not locator:
+        return False
+    try:
+        if locator.count() == 0:
+            return False
+    except Exception:
+        return False
+
+    target = locator.first
+
+    # 1. Scroll into center of viewport
+    try:
+        page.evaluate("el => { if (el) el.scrollIntoView({ block: 'center', inline: 'nearest' }); }", target.element_handle())
+    except Exception:
+        try:
+            target.scroll_into_view_if_needed(timeout=1500)
+        except Exception:
+            pass
+
+    # 2. Standard Playwright click with no_wait_after=True
+    try:
+        target.click(timeout=timeout_ms, no_wait_after=True)
+        return True
+    except Exception:
+        pass
+
+    # 3. Forced Playwright click with no_wait_after=True
+    try:
+        target.click(force=True, timeout=timeout_ms, no_wait_after=True)
+        return True
+    except Exception:
+        pass
+
+    # 4. Direct DOM JavaScript click and event dispatch
+    try:
+        page.evaluate("""el => {
+            if (el) {
+                el.scrollIntoView({ block: 'center', inline: 'nearest' });
+                el.focus();
+                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                el.click();
+            }
+        }""", target.element_handle())
+        return True
+    except Exception:
+        pass
+
+    return False
 
 
 def execute_easy_apply(
@@ -1545,18 +1722,13 @@ def execute_easy_apply(
             return "FAILED", "Easy Apply button not visible on page"
 
         logger("  Clicking 'Easy Apply' button...")
-        try:
-            apply_btn.scroll_into_view_if_needed(timeout=2000)
-        except Exception:
-            pass
-        try:
-            apply_btn.click(timeout=4000)
-        except Exception:
-            apply_btn.click(force=True, timeout=4000)
+        clicked = safe_click_button(page, apply_btn, timeout_ms=3500, desc="Easy Apply")
+        if not clicked:
+            logger("  ⚠️ Standard click and DOM click on 'Easy Apply' did not resolve cleanly.")
 
         try:
             page.wait_for_selector(
-                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text'], button[aria-label='Dismiss']",
+                "button:has-text('Next'), button:has-text('Submit'), button:has-text('Review'), input[type='tel'], input[type='text'], button[aria-label='Dismiss'], button[aria-label='Close'], div[role='dialog'], .artdeco-modal",
                 timeout=9000
             )
         except Exception:
@@ -1569,8 +1741,9 @@ def execute_easy_apply(
             dismiss_easy_apply_modal(page)
             return "RATE_LIMITED", rate_limit_msg
 
-        dismiss_btn = page.locator("button[aria-label='Dismiss'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
-        if dismiss_btn.count() == 0:
+        dismiss_btn = page.locator("button[aria-label='Dismiss'], button[aria-label='Close'], button.artdeco-modal__dismiss, [data-test-modal-close-btn]").first
+        dialog_el = page.locator("div[role='dialog'], .artdeco-modal, [data-test-modal]").first
+        if dismiss_btn.count() == 0 and (dialog_el.count() == 0 or not dialog_el.is_visible()):
             logger("  ⚠️ Easy Apply dialog did not open.")
             return "FAILED", "Easy Apply dialog did not open"
 
@@ -1659,10 +1832,7 @@ def execute_easy_apply(
                         return "REQUIRES_QUESTIONNAIRE", f"Questions: {q_summary}"
 
                     logger("  Submitting application...")
-                    try:
-                        submit_btn.click(timeout=5000)
-                    except Exception:
-                        submit_btn.click(force=True, timeout=5000)
+                    safe_click_button(page, submit_btn, timeout_ms=5000, desc="Submit application")
                     page.wait_for_timeout(2500)
 
                     # Check for LinkedIn daily limit or rate limit immediately after clicking submit
@@ -1673,9 +1843,9 @@ def execute_easy_apply(
                         return "RATE_LIMITED", rate_limit_msg
 
                     # Check confirmation
-                    done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss']").first
+                    done_btn = page.locator("button:has-text('Done'), button[aria-label='Dismiss'], button[aria-label='Close']").first
                     if done_btn.count() > 0 and done_btn.is_visible():
-                        done_btn.click()
+                        safe_click_button(page, done_btn, timeout_ms=3000, desc="Done confirmation")
 
                     logger("  ✓ Easy Apply successfully submitted!")
                     return "APPLIED", "Application submitted successfully"
@@ -1687,16 +1857,9 @@ def execute_easy_apply(
             ).first
 
             if review_btn.count() > 0:
-                try:
-                    review_btn.scroll_into_view_if_needed()
-                except Exception:
-                    pass
                 if review_btn.is_visible():
                     logger(f"  Step {step}: Reviewing application...")
-                    try:
-                        review_btn.click(timeout=5000)
-                    except Exception:
-                        review_btn.click(force=True, timeout=5000)
+                    safe_click_button(page, review_btn, timeout_ms=5000, desc="Review application")
                     page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
@@ -1707,16 +1870,9 @@ def execute_easy_apply(
             ).first
 
             if next_btn.count() > 0:
-                try:
-                    next_btn.scroll_into_view_if_needed()
-                except Exception:
-                    pass
                 if next_btn.is_visible():
                     logger(f"  Step {step}: Advancing to next step...")
-                    try:
-                        next_btn.click(timeout=5000)
-                    except Exception:
-                        next_btn.click(force=True, timeout=5000)
+                    safe_click_button(page, next_btn, timeout_ms=5000, desc="Next step")
                     page.wait_for_timeout(random.randint(1500, 2500))
                     continue
 
@@ -1907,11 +2063,12 @@ def run_easy_apply_crawler(
             if task_manager:
                 task_manager.update_progress(idx - 1, f"[{idx}/{len(extracted_jobs)}] {title} @ {company}")
 
-            # Check if this role was previously dismissed by the user
+            # 1. Check if this role was previously dismissed by the user
             is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(title, dismissed_titles)
+            post_id_seed = f"easy_apply_{job.get('job_id') or hashlib.sha256(job_url.encode()).hexdigest()[:12]}"
+
             if is_prev_dismissed:
                 logger(f"  ✕ {dismiss_reason}")
-                post_id_seed = f"easy_apply_{job.get('job_id') or hashlib.sha256(job_url.encode()).hexdigest()[:12]}"
                 post_record = {
                     "id": post_id_seed,
                     "post_url": job_url,
@@ -1922,6 +2079,7 @@ def run_easy_apply_crawler(
                     "category": "EASY_APPLY",
                     "status": "REJECTED",
                     "rejection_reason": dismiss_reason,
+                    "is_dismissed": True,
                 }
                 upsert_post(post_record)
                 auto_dismissed_count += 1
@@ -1929,13 +2087,67 @@ def run_easy_apply_crawler(
                     task_manager.update_progress(idx)
                 continue
 
-            # Click job card or navigate to load full details
+            # 2. Check if card indicates already applied on LinkedIn
+            if job.get("is_already_applied"):
+                logger(f"  ✓ Card indicates already applied on LinkedIn. Saved to Cancelled history.")
+                post_record = {
+                    "id": post_id_seed,
+                    "post_url": job_url,
+                    "author_name": company,
+                    "author_headline": title,
+                    "location": loc,
+                    "full_text": f"Role: {title}\nCompany: {company}\nLocation: {loc}\nNotice: Already applied on LinkedIn",
+                    "category": "EASY_APPLY",
+                    "status": "REJECTED",
+                    "rejection_reason": "Already applied on LinkedIn",
+                    "is_already_applied": True,
+                }
+                upsert_post(post_record)
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
+
+            # 3. Exact Opening Duplicate Pre-Check
+            from src.db.posts import is_post_already_saved
+            if is_post_already_saved(post_url=job_url, author_name=company):
+                logger(f"  ℹ️ Exact job opening already in database ({post_id_seed}). Skipping duplicate.")
+                if task_manager:
+                    task_manager.update_progress(idx)
+                continue
+
+            # 4. Click job card or navigate to load full details
             full_text = ""
             try:
                 card_link = page.locator(f"[componentkey*='{job['job_id']}'], a[href*='{job['job_id']}']").first if job.get("job_id") else None
                 if card_link and card_link.count() > 0:
                     card_link.click(force=True)
                     page.wait_for_timeout(1800)
+
+                # Check if opened job pane indicates already applied
+                pane_applied = page.evaluate("""() => {
+                    const applyBtn = document.querySelector('.jobs-apply-button, button[class*="jobs-apply-button"]');
+                    if (applyBtn && (applyBtn.innerText || '').toLowerCase().includes('applied')) return true;
+                    const badges = Array.from(document.querySelectorAll('.artdeco-entity-lockup__badge, .jobs-s-apply, .jobs-details-top-card__actions'));
+                    return badges.some(b => (b.innerText || '').toLowerCase().includes('applied'));
+                }""")
+                if pane_applied:
+                    logger(f"  ✓ Job pane confirms already applied on LinkedIn. Saved to Cancelled history.")
+                    post_record = {
+                        "id": post_id_seed,
+                        "post_url": job_url,
+                        "author_name": company,
+                        "author_headline": title,
+                        "location": loc,
+                        "full_text": f"Role: {title}\nCompany: {company}\nLocation: {loc}\nNotice: Already applied on LinkedIn",
+                        "category": "EASY_APPLY",
+                        "status": "REJECTED",
+                        "rejection_reason": "Already applied on LinkedIn",
+                        "is_already_applied": True,
+                    }
+                    upsert_post(post_record)
+                    if task_manager:
+                        task_manager.update_progress(idx)
+                    continue
 
                 desc_text = page.evaluate("""() => {
                     const all = Array.from(document.querySelectorAll('div, h2, h3, section'));
@@ -2211,8 +2423,22 @@ def apply_to_batch_easy_apply_posts(
                 logger("🛑 Batch Easy Apply stopped upon user request.")
                 break
 
-            # Browser health recovery check
+            # Browser health recovery & tab cleanup check
             try:
+                # Close any auxiliary tabs/popups opened during prior job submissions
+                if len(context.pages) > 1:
+                    for extra_page in context.pages[1:]:
+                        try:
+                            if not extra_page.is_closed():
+                                extra_page.close()
+                        except Exception:
+                            pass
+                page = context.pages[0] if context.pages else context.new_page()
+                try:
+                    page.bring_to_front()
+                except Exception:
+                    pass
+
                 if page.is_closed():
                     logger("  🔄 Browser page was closed. Opening a fresh page...")
                     page = context.new_page()

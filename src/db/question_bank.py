@@ -442,8 +442,17 @@ def upsert_screening_question(
                     is_standard, default_placeholder, occurrences, sample_jobs, options, status, updated_at
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, %s, %s, CURRENT_TIMESTAMP)
                 ON CONFLICT (question_key) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    answer = COALESCE(EXCLUDED.answer, screening_questions.answer),
+                    status = CASE 
+                        WHEN screening_questions.status = 'ANSWERED' THEN 'ANSWERED'
+                        WHEN EXCLUDED.status = 'ANSWERED' THEN 'ANSWERED'
+                        WHEN screening_questions.status = 'AI_SUGGESTED' AND EXCLUDED.status = 'PENDING' THEN 'AI_SUGGESTED'
+                        ELSE EXCLUDED.status
+                    END,
+                    answer = CASE
+                        WHEN screening_questions.status = 'ANSWERED' AND (EXCLUDED.status != 'ANSWERED' OR EXCLUDED.answer IS NULL) 
+                            THEN screening_questions.answer
+                        ELSE COALESCE(EXCLUDED.answer, screening_questions.answer)
+                    END,
                     options = CASE 
                         WHEN array_length(EXCLUDED.options, 1) > 0 THEN EXCLUDED.options
                         ELSE screening_questions.options
@@ -523,6 +532,7 @@ def save_screening_answers(answers: Dict[str, str]) -> Dict[str, Any]:
             upsert_screening_question(
                 question_text=k_clean,
                 answer=ans_raw,
+                status="ANSWERED",
                 conn=conn
             )
             saved_count += 1

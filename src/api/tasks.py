@@ -115,6 +115,9 @@ def build_crawler_labels(source: str, query: Optional[str] = None, location: Opt
     if s_lower in ("linkedin_jobs", "easy_apply"):
         src_title = "LinkedIn Easy Apply"
         short_name = "Easy Apply Crawler"
+    elif s_lower in ("indeed_jobs", "indeed", "indeed_apply"):
+        src_title = "Indeed Apply"
+        short_name = "Indeed Apply Crawler"
     elif s_lower == "linkedin":
         src_title = "LinkedIn"
         short_name = "LinkedIn Scraper"
@@ -663,6 +666,184 @@ def api_trigger_single_easy_apply(post_id: str):
         metadata={"post_id": post_id, "title": title, "company": company},
     )
     msg = f"Queued Easy Apply for {title} (Position #{res['position']})" if res["queued"] else f"Easy Apply started for {title}."
+    return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/indeed-apply")
+def api_trigger_scrape_indeed_apply(payload: Optional[ScrapePayload] = None):
+    """Enqueue the Indeed Job Portal & Indeed Apply crawler in persistent Firefox."""
+    from src.services.automation_tasks import run_indeed_apply_scraper
+    query = payload.search_query if payload else None
+    loc = payload.location if payload else None
+    time_filter = (payload.time_filter or "24h") if payload else "24h"
+    cycles = payload.cycles if payload else None
+    pacing = payload.pacing if payload else None
+    max_jobs = (payload.max_jobs or payload.limit) if payload else None
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
+
+    full_name, short_name, snippet = build_crawler_labels("indeed_jobs", query=query, location=loc, time_filter=time_filter)
+    res = task_manager.enqueue_task(
+        task_type="crawler",
+        task_name=full_name,
+        short_name=short_name,
+        snippet=snippet,
+        runner_func=run_indeed_apply_scraper,
+        args=(query, loc, time_filter, cycles, pacing, max_jobs),
+        metadata={"source": "indeed_jobs", "query": query, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
+    )
+    msg = f"Queued {short_name} ({snippet}) (Position #{res['position']})" if res["queued"] else f"{short_name} started."
+    return {"success": True, "message": msg, **res}
+
+
+@router.post("/scrape/indeed-apply/batch")
+def api_trigger_scrape_indeed_apply_batch(payload: EasyApplyBatchScrapePayload):
+    """Enqueue multiple Indeed Apply crawler tasks sequentially for a list of keywords."""
+    from src.services.automation_tasks import run_indeed_apply_scraper
+    keywords = [k.strip() for k in payload.keywords if k and k.strip()]
+    if not keywords:
+        raise HTTPException(status_code=400, detail="No valid keywords provided for bulk search.")
+
+    queued = []
+    loc = payload.location or "India"
+    time_filter = payload.time_filter or "24h"
+    cycles = payload.cycles
+    pacing = payload.pacing
+    max_jobs = payload.max_jobs
+    if cycles and cycles > 0 and (not max_jobs or max_jobs <= 25):
+        max_jobs = max(max_jobs or 25, cycles * 5)
+
+    for kw in keywords:
+        full_name, short_name, snippet = build_crawler_labels("indeed_jobs", query=kw, location=loc, time_filter=time_filter)
+        res = task_manager.enqueue_task(
+            task_type="crawler",
+            task_name=full_name,
+            short_name=short_name,
+            snippet=snippet,
+            runner_func=run_indeed_apply_scraper,
+            args=(kw, loc, time_filter, cycles, pacing, max_jobs),
+            metadata={"source": "indeed_jobs", "query": kw, "location": loc, "time_filter": time_filter, "cycles": cycles, "pacing": pacing, "max_jobs": max_jobs},
+        )
+        queued.append({"keyword": kw, **res})
+
+    first_pos = queued[0]["position"] if queued else 1
+    return {
+        "success": True,
+        "message": f"Queued {len(queued)} Indeed Apply searches in FIFO queue (starting at Position #{first_pos}).",
+        "count": len(queued),
+        "tasks": queued,
+    }
+
+
+@router.post("/indeed-apply/batch")
+def api_trigger_batch_indeed_apply(payload: EasyApplyBatchApplyPayload):
+    """
+    Enqueue sequential batch Indeed Apply submissions for selected jobs or all ready jobs.
+    """
+    from src.services.automation_tasks import run_batch_indeed_apply
+    target_ids: List[str] = []
+
+    if payload.all_ready:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'INDEED_APPLY' AND status IN ('DISCOVERED', 'READY')
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No ready-to-apply jobs found in DISCOVERED/READY status on Indeed."
+            )
+    elif payload.all_screened:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id FROM posts
+                    WHERE category = 'INDEED_APPLY' AND status = 'REQUIRES_QUESTIONNAIRE'
+                    ORDER BY created_at DESC;
+                """)
+                target_ids = [r[0] for r in cur.fetchall()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No screened applications found in REQUIRES_QUESTIONNAIRE status on Indeed."
+            )
+    elif payload.post_ids:
+        target_ids = [p.strip() for p in payload.post_ids if p and p.strip()]
+        if not target_ids:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid post IDs provided for batch Indeed Apply."
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Must specify post_ids, all_ready=True, or all_screened=True for batch Indeed Apply."
+        )
+
+    count = len(target_ids)
+    pacing = payload.pacing or "safe"
+    if payload.all_screened:
+        task_name = f"Batch Indeed Apply — Rerun Screened ({count} applications)"
+        snippet = f"{count} screened jobs"
+    elif payload.all_ready:
+        task_name = f"Batch Indeed Apply — All Ready Jobs ({count} applications)"
+        snippet = f"{count} ready jobs"
+    else:
+        task_name = f"Batch Indeed Apply ({count} applications)"
+        snippet = f"{count} jobs"
+
+    res = task_manager.enqueue_task(
+        task_type="indeed_apply_batch",
+        task_name=task_name,
+        short_name="Batch Indeed Apply",
+        snippet=snippet,
+        runner_func=run_batch_indeed_apply,
+        args=(target_ids, pacing),
+        metadata={
+            "count": count,
+            "all_screened": payload.all_screened,
+            "all_ready": payload.all_ready,
+            "pacing": pacing,
+            "post_ids": target_ids[:50],
+        },
+    )
+    msg = (
+        f"Queued batch Indeed Apply for {count} jobs (Position #{res['position']})"
+        if res["queued"]
+        else f"Batch Indeed Apply started for {count} jobs."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "count": count,
+        "all_screened": payload.all_screened,
+        "all_ready": payload.all_ready,
+        **res,
+    }
+
+
+@router.post("/indeed-apply/{post_id}")
+def api_trigger_single_indeed_apply(post_id: str):
+    """Enqueue Indeed Apply submission for a specific job post."""
+    from src.services.automation_tasks import run_single_indeed_apply
+    post = get_post_by_id(post_id)
+    title = (post.get("author_headline") if post else None) or f"Job #{post_id[:8]}"
+    company = (post.get("author_name") if post else None) or "Company"
+
+    res = task_manager.enqueue_task(
+        task_type="indeed_apply",
+        task_name=f"Indeed Apply — {title} @ {company}",
+        short_name="Indeed Apply",
+        snippet=f"{company}",
+        runner_func=run_single_indeed_apply,
+        args=(post_id,),
+        metadata={"post_id": post_id, "title": title, "company": company},
+    )
+    msg = f"Queued Indeed Apply for {title} (Position #{res['position']})" if res["queued"] else f"Indeed Apply started for {title}."
     return {"success": True, "message": msg, **res}
 
 

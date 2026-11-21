@@ -30,8 +30,15 @@ WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if WORKSPACE_ROOT not in sys.path:
     sys.path.insert(0, WORKSPACE_ROOT)
 
-from src.db import init_db, upsert_post, get_existing_post_identifiers, update_post_status
-from src.services.experience_extractor import extract_experience
+from src.db import (
+    init_db,
+    upsert_post,
+    get_existing_post_identifiers,
+    update_post_status,
+    get_dismissed_role_titles,
+    check_title_previously_dismissed,
+)
+from src.services.experience_extractor import extract_experience, extract_phone_numbers
 from src.services.chatgpt_service import clean_and_truncate_reason
 
 INFOPARK_JOBS_URL = "https://infopark.in/companies-job"
@@ -264,11 +271,16 @@ def scrape_infopark_jobs(
     existing_identifiers = get_existing_post_identifiers()
     print(f"  [DB Deduplication] Preloaded {len(existing_identifiers)} existing post signatures/URLs from database.")
 
+    # Preload previously dismissed titles
+    dismissed_titles = get_dismissed_role_titles()
+    print(f"  [Auto-Dismiss] Preloaded {len(dismissed_titles)} previously dismissed role titles.")
+
     total_scanned = 0
     added_email_outreach = 0
     added_draft_portal = 0
     skipped_existing = 0
     skipped_other_date = 0
+    skipped_dismissed = 0
 
     new_jobs = []
 
@@ -321,6 +333,33 @@ def scrape_infopark_jobs(
                 print(f"  ⏩ [Skipped - Already Added] {company} | {title}")
                 continue
 
+            # 1b. Check if this role was previously dismissed by the user
+            is_prev_dismissed, dismiss_reason = check_title_previously_dismissed(title, dismissed_titles)
+            if is_prev_dismissed:
+                headline = f"{title} • Deadline: {last_date}" if last_date else title
+                post_record = {
+                    "author_name": company,
+                    "author_headline": headline,
+                    "author_profile": "",
+                    "post_date": post_date,
+                    "post_url": detail_url,
+                    "full_text": f"Role: {title}\nCompany: {company}\nApplication Deadline: {last_date}\nJob URL: {detail_url}",
+                    "detected_emails": [],
+                    "detected_links": [detail_url],
+                    "category": "DRAFT_PORTAL",
+                    "status": "REJECTED",
+                    "rejection_reason": dismiss_reason,
+                    "is_dismissed": True,
+                    "location": "Kochi",
+                }
+                upsert_post(post_record, skip_if_exists=True)
+                existing_identifiers.add(clean_url)
+                existing_identifiers.add(detail_url)
+                existing_identifiers.add(sig)
+                skipped_dismissed += 1
+                print(f"  🚫 [Auto-Dismissed] {company} | {title} | ❌ {dismiss_reason}")
+                continue
+
             # 2. Fetch Detail Page
             try:
                 details = parse_job_detail_page(detail_url)
@@ -356,6 +395,9 @@ def scrape_infopark_jobs(
             if last_date:
                 headline += f" • Deadline: {last_date}"
 
+            # Extract direct phone / WhatsApp numbers if available
+            contact_phones = extract_phone_numbers(full_jd)
+
             post_record = {
                 "author_name": company,
                 "author_headline": headline,
@@ -364,6 +406,7 @@ def scrape_infopark_jobs(
                 "post_url": detail_url,
                 "full_text": full_jd,
                 "detected_emails": emails,
+                "contact_phones": contact_phones,
                 "detected_links": [detail_url],
                 "experience": exp_info,
                 "category": category,

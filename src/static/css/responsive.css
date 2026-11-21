@@ -410,21 +410,28 @@
       flex-shrink: 0;
     }
 
-    /* Sent History Table as Cards */
+    /* Sent History & Dismissed Roles Tables as Cards */
     #tabSent .reach-table,
     #tabSent .reach-table thead,
     #tabSent .reach-table tbody,
     #tabSent .reach-table tr,
-    #tabSent .reach-table td {
+    #tabSent .reach-table td,
+    #tabDismissedRoles .reach-table,
+    #tabDismissedRoles .reach-table thead,
+    #tabDismissedRoles .reach-table tbody,
+    #tabDismissedRoles .reach-table tr,
+    #tabDismissedRoles .reach-table td {
       display: block !important;
       width: 100% !important;
     }
 
-    #tabSent .reach-table thead {
+    #tabSent .reach-table thead,
+    #tabDismissedRoles .reach-table thead {
       display: none !important;
     }
 
-    #tabSent .reach-table tr {
+    #tabSent .reach-table tr,
+    #tabDismissedRoles .reach-table tr {
       display: flex !important;
       flex-direction: column !important;
       background: var(--bg-surface) !important;
@@ -435,36 +442,88 @@
       gap: 0.45rem !important;
       box-shadow: var(--shadow-sm) !important;
       cursor: pointer !important;
+      position: relative !important;
       transition: transform 0.15s ease, border-color 0.15s ease;
     }
 
-    #tabSent .reach-table tr:hover {
+    #tabSent .reach-table tr:hover,
+    #tabDismissedRoles .reach-table tr:hover {
       border-color: rgba(99, 102, 241, 0.45) !important;
     }
 
-    #tabSent .reach-table td {
+    #tabSent .reach-table td,
+    #tabDismissedRoles .reach-table td {
       padding: 0 !important;
       border-bottom: none !important;
       margin-bottom: 0.25rem;
     }
 
-    #tabSent .reach-table td:last-child {
+    #tabSent .reach-table td:last-child,
+    #tabDismissedRoles .reach-table td:last-child {
       margin-top: 0.35rem;
       padding-top: 0.5rem !important;
       border-top: 1px solid var(--border-subtle) !important;
     }
 
-    /* Table Footer / Pagination Controls */
-    .table-footer {
+    /* Dismissed Roles Mobile Card Specifics */
+    #tabDismissedRoles .reach-table td:nth-child(1) {
+      position: absolute !important;
+      top: 1rem !important;
+      right: 1rem !important;
+      width: auto !important;
+      z-index: 2;
+    }
+
+    #tabDismissedRoles .reach-table td:nth-child(1) .table-cb {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    #tabDismissedRoles .reach-table td:nth-child(2) {
+      padding-right: 2.2rem !important;
+    }
+
+    #tabDismissedRoles .role-title-cell {
+      max-width: 100% !important;
+      font-size: 0.95rem;
+      white-space: normal !important;
+    }
+
+    #tabDismissedRoles .role-reason-cell {
+      max-width: 100% !important;
+      white-space: normal !important;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xs);
+      padding: 0.45rem 0.65rem;
+      font-size: 0.76rem;
+    }
+
+    #tabDismissedRoles .reach-table td:last-child {
+      display: flex !important;
+      justify-content: flex-end !important;
+    }
+
+    /* Table Top Bar & Footer / Pagination Controls */
+    .table-footer,
+    .table-header-bar {
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-sm);
-      margin-top: 0.75rem;
       flex-direction: column;
       align-items: stretch;
       gap: 0.75rem;
       padding: 0.75rem 0.85rem;
       text-align: center;
+    }
+
+    .table-footer {
+      margin-top: 0.75rem;
+    }
+
+    .table-header-bar {
+      margin-bottom: 0.75rem;
     }
 
     .pagination-info {

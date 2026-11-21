@@ -348,6 +348,28 @@
 
   <!-- Main Table Section using Reach Table System -->
   <div class="table-card">
+    <!-- Top Table Header Bar / Pagination Controls -->
+    <div class="table-header-bar" id="easyTableHeaderBar">
+      <div class="pagination-info" id="easyPaginationInfoTop">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectEasyLimitTop" onchange="changeEasyRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="easyPageButtonsTop">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
     <table class="reach-table" id="easyApplyTable">
       <thead>
         <tr>
@@ -371,5 +393,27 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- Table Footer / Pagination Controls -->
+    <div class="table-footer" id="easyTableFooter">
+      <div class="pagination-info" id="easyPaginationInfo">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectEasyLimit" onchange="changeEasyRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="easyPageButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
   </div>
 </div>

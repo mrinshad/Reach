@@ -41,6 +41,7 @@
 
   .kpi-card.kpi-discovered::before { background: #38bdf8; }
   .kpi-card.kpi-easy-apply::before { background: #10b981; }
+  .kpi-card.kpi-indeed::before { background: #2164f3; }
   .kpi-card.kpi-questionnaires::before { background: #f59e0b; }
   .kpi-card.kpi-qbank::before { background: #8b5cf6; }
   .kpi-card.kpi-outreach::before { background: #6366f1; }

@@ -310,6 +310,41 @@ body {
     border: 1px solid rgba(14, 165, 233, 0.3);
   }
 
+  /* Simple Small Monitoring Badges */
+  .badge-dismissed {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 9999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    line-height: 1.25;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: help;
+  }
+
+  .badge-already-applied {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 9999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    line-height: 1.25;
+    white-space: nowrap;
+    vertical-align: middle;
+    cursor: help;
+  }
+
   .btn-sm {
     padding: 0.35rem 0.65rem;
     font-size: 0.76rem;

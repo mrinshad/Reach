@@ -208,12 +208,86 @@ function filterEasyApplyStatus(status) {
     if (el) el.classList.toggle('active', key === status);
   });
 
+  easyApplyPage = 1;
   updateEasyClearFiltersButton();
+  renderEasyApplyTable();
+}
+
+let easyApplyPage = 1;
+let easyApplyLimit = 50;
+
+function renderEasyPagination(total) {
+  const isAll = easyApplyLimit === -1;
+  const totalPages = isAll ? 1 : (Math.ceil(total / easyApplyLimit) || 1);
+  const startRow = total === 0 ? 0 : (isAll ? 1 : (easyApplyPage - 1) * easyApplyLimit + 1);
+  const endRow = isAll ? total : Math.min(easyApplyPage * easyApplyLimit, total);
+  const textInfo = `Showing ${startRow}–${endRow} of ${total} jobs`;
+
+  const infoEl = document.getElementById('easyPaginationInfo');
+  if (infoEl) infoEl.textContent = textInfo;
+  const infoTopEl = document.getElementById('easyPaginationInfoTop');
+  if (infoTopEl) infoTopEl.textContent = textInfo;
+
+  // Sync rows per page selects
+  const selLimit = document.getElementById('selectEasyLimit');
+  if (selLimit) selLimit.value = String(easyApplyLimit);
+  const selLimitTop = document.getElementById('selectEasyLimitTop');
+  if (selLimitTop) selLimitTop.value = String(easyApplyLimit);
+
+  const containers = [
+    document.getElementById('easyPageButtons'),
+    document.getElementById('easyPageButtonsTop')
+  ].filter(Boolean);
+
+  containers.forEach(container => {
+    container.innerHTML = '';
+    if (isAll || totalPages <= 1) return;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.textContent = '‹';
+    prevBtn.disabled = easyApplyPage <= 1;
+    prevBtn.onclick = () => goToEasyPage(easyApplyPage - 1);
+    container.appendChild(prevBtn);
+
+    const startPage = Math.max(1, easyApplyPage - 2);
+    const endPage = Math.min(totalPages, easyApplyPage + 2);
+
+    for (let p = startPage; p <= endPage; p++) {
+      const pBtn = document.createElement('button');
+      pBtn.className = `page-btn ${p === easyApplyPage ? 'active' : ''}`;
+      pBtn.textContent = String(p);
+      pBtn.onclick = () => goToEasyPage(p);
+      container.appendChild(pBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.textContent = '›';
+    nextBtn.disabled = easyApplyPage >= totalPages;
+    nextBtn.onclick = () => goToEasyPage(easyApplyPage + 1);
+    container.appendChild(nextBtn);
+  });
+}
+
+function goToEasyPage(p) {
+  easyApplyPage = p;
+  renderEasyApplyTable();
+}
+
+function changeEasyRowsPerPage(val) {
+  easyApplyLimit = parseInt(val, 10);
+  easyApplyPage = 1;
+  const sel = document.getElementById('selectEasyLimit');
+  if (sel) sel.value = String(easyApplyLimit);
+  const selTop = document.getElementById('selectEasyLimitTop');
+  if (selTop) selTop.value = String(easyApplyLimit);
   renderEasyApplyTable();
 }
 
 function handleEasyTableSearch(query) {
   easyTableSearchQuery = (query || '').trim().toLowerCase();
+  easyApplyPage = 1;
   updateEasyClearFiltersButton();
   renderEasyApplyTable();
 }
@@ -242,6 +316,8 @@ function renderEasyApplyTable() {
     });
   }
 
+  renderEasyPagination(filtered.length);
+
   if (filtered.length === 0) {
     let emptyMsg = 'No LinkedIn Easy Apply jobs in queue yet. Click "Collect Jobs" to discover matching roles!';
     if (easyTableSearchQuery) {
@@ -253,8 +329,11 @@ function renderEasyApplyTable() {
     return;
   }
 
+  const isAll = easyApplyLimit === -1;
+  const pageItems = isAll ? filtered : filtered.slice((easyApplyPage - 1) * easyApplyLimit, easyApplyPage * easyApplyLimit);
+
   tbody.innerHTML = '';
-  filtered.forEach((post) => {
+  pageItems.forEach((post) => {
     const tr = document.createElement('tr');
     tr.id = `easy-row-${post.id}`;
     const isSelected = selectedEasyJobIds.has(post.id);
@@ -269,8 +348,13 @@ function renderEasyApplyTable() {
       statusBadgeText = '📋 Screening';
       statusBadgeClass = 'questionnaire';
     } else if (post.status === 'REJECTED') {
-      statusBadgeText = '✕ Dismissed';
-      statusBadgeClass = 'rejected';
+      if (post.rejection_reason && post.rejection_reason.toLowerCase().includes('already applied')) {
+        statusBadgeText = '✓ Already Applied';
+        statusBadgeClass = 'rejected';
+      } else {
+        statusBadgeText = '✕ Dismissed';
+        statusBadgeClass = 'rejected';
+      }
     } else if (post.status === 'NOT_FOUND') {
       statusBadgeText = '🚫 Not Found';
       statusBadgeClass = 'not-found';
@@ -296,8 +380,11 @@ function renderEasyApplyTable() {
           <button class="status-menu-opt opt-not-found" onclick="setEasyPostStatus('${post.id}', 'NOT_FOUND', event)">
             <span>🚫</span><span>Not Found / Closed</span>
           </button>
-          <button class="status-menu-opt opt-rejected" onclick="setEasyPostStatus('${post.id}', 'REJECTED', event)">
-            <span>✕</span><span>Dismissed</span>
+          <button class="status-menu-opt opt-rejected" onclick="setEasyPostStatus('${post.id}', 'REJECTED', event, false)">
+            <span>✕</span><span>Dismiss Job Only</span>
+          </button>
+          <button class="status-menu-opt opt-rejected" style="color: #f43f5e;" onclick="setEasyPostStatus('${post.id}', 'REJECTED', event, true)">
+            <span>🚫</span><span>Dismiss & Add Role</span>
           </button>
         </div>
       </div>
@@ -344,6 +431,8 @@ function renderEasyApplyTable() {
               <span style="opacity: 0.85;">📍</span>
               <span>${locText}</span>
             </span>
+            ${post.is_dismissed || (post.rejection_reason && post.rejection_reason.toLowerCase().includes('dismissed')) ? `<span class="badge-dismissed" title="${escapeHtml(post.rejection_reason || 'Previously dismissed role')}">🚫 Dismissed</span>` : ''}
+            ${post.rejection_reason && post.rejection_reason.toLowerCase().includes('already applied') ? `<span class="badge-already-applied" title="Already applied">✓ Already Applied</span>` : ''}
             ${post.status === 'NOT_FOUND' && post.rejection_reason ? `<span class="col-closed-reason" style="color: #94a3b8; font-size: 0.68rem; background: rgba(148, 163, 184, 0.12); padding: 0.05rem 0.35rem; border-radius: 4px; border: 1px solid rgba(148, 163, 184, 0.22); line-height: 1.3;" title="${escapeHtml(post.rejection_reason)}">🚫 ${escapeHtml(post.rejection_reason)}</span>` : ''}
           </div>
           <span class="easy-role-subline">
@@ -441,43 +530,17 @@ async function triggerEasyApplyCrawl() {
   }
 }
 
-async function dismissSingleEasyJob(postId, event) {
+function dismissSingleEasyJob(postId, event) {
   if (event) event.stopPropagation();
   const post = easyApplyPosts.find((p) => p.id === postId);
-  const prevStatus = post ? post.status : 'DISCOVERED';
   const title = post ? (post.author_headline || post.author_name || 'Job') : 'Job';
-
-  try {
-    const res = await fetch(`/api/posts/${postId}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: 'Dismissed by user' }),
-    });
-    if (res.ok) {
-      if (post) {
-        post.status = 'REJECTED';
-        post.rejection_reason = 'Dismissed by user';
-      }
-      selectedEasyJobIds.delete(postId);
-      updateEasyKPIs();
-      renderEasyApplyTable();
-
-      const undoAction = {
-        label: 'Undo',
-        payload: { post_ids: [postId], target_status: prevStatus },
-        onClick: async () => {
-          await revertPostsToStatus([postId], prevStatus);
-        },
-      };
-
-      if (typeof sendAppNotification === 'function') {
-        sendAppNotification({
-          title: 'Job Dismissed',
-          message: `Dismissed "${title}"`,
-          type: 'warn',
-          action: undoAction,
-        });
-      }
+  state.pendingCancelPostId = postId;
+  state.pendingCancelPostIds = [];
+  state.pendingCancelSource = 'easy_apply';
+  if (typeof openCancelReasonModal === 'function') {
+    openCancelReasonModal(postId, title, 'Dismissed from Easy Apply', false, 'easy_apply');
+  }
+}
 
       if (typeof showSnackbar === 'function') {
         showSnackbar({
@@ -606,6 +669,13 @@ async function openEasyDetailsModal(postOrId) {
   const linkEl = document.getElementById('easyModalLink');
   if (linkEl) {
     linkEl.href = post.post_url || '#';
+    if (post.category === 'INDEED_APPLY') {
+      linkEl.innerHTML = '<span>↗ Open on Indeed</span>';
+      linkEl.title = 'Open on Indeed';
+    } else {
+      linkEl.innerHTML = '<span>↗ Open on LinkedIn</span>';
+      linkEl.title = 'Open on LinkedIn';
+    }
   }
 
   // Questionnaire box
@@ -907,66 +977,14 @@ function batchCopyEasyLinks() {
   });
 }
 
-async function batchDismissEasyJobs() {
+function batchDismissEasyJobs() {
   const size = selectedEasyJobIds.size;
   if (size === 0) return;
-
-  const confirmed = await showConfirm('Dismiss Selected', `Dismiss ${size} selected jobs from queue?`);
-  if (!confirmed) return;
-
-  const ids = Array.from(selectedEasyJobIds);
-  try {
-    const res = await fetch('/api/posts/reject-batch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_ids: ids, reason: 'Dismissed by user' }),
-    });
-    if (res.ok) {
-      ids.forEach((id) => {
-        const post = easyApplyPosts.find((p) => p.id === id);
-        if (post) {
-          post.status = 'REJECTED';
-          post.rejection_reason = 'Dismissed by user';
-        }
-      });
-      selectedEasyJobIds.clear();
-      updateEasyKPIs();
-      renderEasyApplyTable();
-
-      const undoAction = {
-        label: 'Undo',
-        payload: { post_ids: ids, target_status: 'DISCOVERED' },
-        onClick: async () => {
-          await revertPostsToStatus(ids, 'DISCOVERED');
-        },
-      };
-
-      if (typeof sendAppNotification === 'function') {
-        sendAppNotification({
-          title: 'Jobs Dismissed',
-          message: `Dismissed ${size} job(s) from queue`,
-          type: 'warn',
-          action: undoAction,
-        });
-      }
-
-      if (typeof showSnackbar === 'function') {
-        showSnackbar({
-          title: 'Jobs Dismissed',
-          message: `Dismissed ${size} job(s) from queue`,
-          type: 'warn',
-          duration: 14000,
-          action: undoAction,
-        });
-      } else {
-        showToast(`✓ Dismissed ${size} jobs from queue`, 'success');
-      }
-    } else {
-      const err = await res.json();
-      showAlert('Dismiss Failed', err.detail || 'Could not dismiss selected jobs');
-    }
-  } catch (err) {
-    showAlert('Error', err.message);
+  state.pendingCancelPostId = null;
+  state.pendingCancelPostIds = Array.from(selectedEasyJobIds);
+  state.pendingCancelSource = 'easy_apply';
+  if (typeof openCancelReasonModal === 'function') {
+    openCancelReasonModal(null, `${size} selected jobs`, 'Dismissed from Easy Apply', false, 'easy_apply');
   }
 }
 
@@ -1157,7 +1175,7 @@ document.addEventListener('click', (e) => {
 window.addEventListener('scroll', closeAllEasyStatusMenus, true);
 window.addEventListener('resize', closeAllEasyStatusMenus);
 
-async function setEasyPostStatus(postId, newStatus, event) {
+async function setEasyPostStatus(postId, newStatus, event, addToDismissed = false) {
   if (event) event.stopPropagation();
   const wrap = document.getElementById(`status-wrap-${postId}`);
   if (wrap) wrap.classList.remove('open');
@@ -1169,7 +1187,7 @@ async function setEasyPostStatus(postId, newStatus, event) {
     const res = await fetch(`/api/posts/${postId}/status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status: newStatus, add_to_dismissed_roles: !!addToDismissed }),
     });
 
     if (res.ok) {
@@ -1184,6 +1202,10 @@ async function setEasyPostStatus(postId, newStatus, event) {
       updateEasyKPIs();
       renderEasyApplyTable();
 
+      if (addToDismissed && typeof loadDismissedRolesPage === 'function' && state.activeTab === 'tabDismissedRoles') {
+        loadDismissedRolesPage();
+      }
+
       if (newStatus === 'REJECTED') {
         const undoAction = {
           label: 'Undo',
@@ -1192,10 +1214,11 @@ async function setEasyPostStatus(postId, newStatus, event) {
             await revertPostsToStatus([postId], prevStatus);
           },
         };
+        const blacklistNotice = addToDismissed ? ' & added role to Dismissed Roles' : '';
         if (typeof sendAppNotification === 'function') {
           sendAppNotification({
             title: 'Job Dismissed',
-            message: `Moved "${title}" to Dismissed`,
+            message: `Moved "${title}" to Dismissed${blacklistNotice}`,
             type: 'warn',
             action: undoAction,
           });
@@ -1203,13 +1226,13 @@ async function setEasyPostStatus(postId, newStatus, event) {
         if (typeof showSnackbar === 'function') {
           showSnackbar({
             title: 'Job Dismissed',
-            message: `Moved "${title}" to Dismissed`,
+            message: `Moved "${title}" to Dismissed${blacklistNotice}`,
             type: 'warn',
             duration: 12000,
             action: undoAction,
           });
         } else {
-          showToast(`✓ Status updated to ${newStatus}`, 'success');
+          showToast(`✓ Status updated to ${newStatus}${blacklistNotice}`, 'success');
         }
       } else {
         showToast(`✓ Status updated to ${newStatus}`, 'success');
@@ -1223,15 +1246,19 @@ async function setEasyPostStatus(postId, newStatus, event) {
   }
 }
 
-async function batchSetEasyStatus(newStatus) {
+async function batchSetEasyStatus(newStatus, addToDismissed = false) {
   const ids = Array.from(selectedEasyJobIds);
   if (ids.length === 0) return;
+
+  if (newStatus === 'REJECTED' && !addToDismissed) {
+    return batchDismissEasyJobs();
+  }
 
   try {
     const res = await fetch('/api/posts/status-batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ post_ids: ids, status: newStatus }),
+      body: JSON.stringify({ post_ids: ids, status: newStatus, add_to_dismissed_roles: !!addToDismissed }),
     });
 
     if (res.ok) {
@@ -1327,6 +1354,7 @@ function parseScreeningQuestions(rejectionReason) {
     'multi-step questionnaire (saved for screening)',
     'multi-step form required manual input',
     'exceeded step limit, saved for screening',
+    'incomplete wizard steps',
   ];
 
   // Try JSON format first
@@ -1338,19 +1366,21 @@ function parseScreeningQuestions(rejectionReason) {
           label: (q.label || q || '').trim(),
           type: q.type || null,
           step: q.step || null,
+          options: Array.isArray(q.options) ? q.options : null,
         }))
         .filter((q) => q.label && !genericPlaceholders.includes(q.label.toLowerCase()));
     }
   } catch (_) {}
 
-  // Legacy string format: "Questions: Q1; Q2; Q3" or semicolon-separated
+  // String format: "Questions: Q1; Q2; Q3" or "Requires answers for: Q1, Q2"
   let raw = rejectionReason.trim();
-  if (raw.toLowerCase().startsWith('questions:')) {
-    raw = raw.replace(/^questions:\s*/i, '').trim();
-  }
+  raw = raw.replace(/^(?:questions|requires answers for|requires answer for):\s*/i, '').trim();
+
+  // Split by semicolon if present, else by comma
+  const delimiter = raw.includes(';') ? ';' : (raw.includes(',') ? ',' : ';');
 
   return raw
-    .split(';')
+    .split(delimiter)
     .map((q) => q.replace(/^\s*\*\s*|\s*\*\s*$/g, '').trim())
     .filter((q) => q && !genericPlaceholders.includes(q.toLowerCase()))
     .map((q) => ({ label: q, type: null, step: null }));
@@ -1410,7 +1440,10 @@ function setScreeningInpValue(normKey, val) {
 }
 
 function openScreeningModal(postId) {
-  const post = easyApplyPosts.find((p) => p.id === postId);
+  let post = easyApplyPosts.find((p) => p.id === postId);
+  if (!post && typeof indeedState !== 'undefined' && indeedState.posts) {
+    post = indeedState.posts.find((p) => p.id === postId) || (indeedState.filteredPosts && indeedState.filteredPosts.find((p) => p.id === postId));
+  }
   if (!post) return;
   activeScreeningPost = post;
 
@@ -1428,7 +1461,16 @@ function openScreeningModal(postId) {
   document.getElementById('screeningJobDate').textContent = `📅 ${dateText}`;
 
   const linkEl = document.getElementById('screeningOpenLink');
-  if (linkEl) linkEl.href = post.post_url || '#';
+  if (linkEl) {
+    linkEl.href = post.post_url || '#';
+    if (post.category === 'INDEED_APPLY') {
+      linkEl.innerHTML = '<span>↗ Open on Indeed</span>';
+      linkEl.title = 'Open on Indeed';
+    } else {
+      linkEl.innerHTML = '<span>↗ Open on LinkedIn</span>';
+      linkEl.title = 'Open on LinkedIn';
+    }
+  }
 
   // Parse and render questions
   const questions = parseScreeningQuestions(post.rejection_reason);
@@ -1453,6 +1495,15 @@ function openScreeningModal(postId) {
         allQuestionsAnswered = false;
       }
 
+      // Check if question has defined options in questionBankData
+      let qObj = null;
+      if (questionBankData && Array.isArray(questionBankData.questions)) {
+        qObj = questionBankData.questions.find((x) => x.key === normKey || (x.question && x.question.toLowerCase().replace(/[^a-z0-9]/g, '') === normKey));
+      }
+      const optList = (qObj && Array.isArray(qObj.options) && qObj.options.length > 0)
+        ? qObj.options
+        : (Array.isArray(q.options) && q.options.length > 0 ? q.options : ['Yes', 'No']);
+
       let answerRow = '';
       if (savedAnswer === '__EMPTY__') {
         answerRow = `<div class="screening-saved-ans-pill" style="margin-top: 0.45rem; font-size: 0.74rem; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 0.2rem 0.55rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.35rem;">
@@ -1463,11 +1514,14 @@ function openScreeningModal(postId) {
                        <span>✓ Saved in Question Bank:</span> <strong>${escapeHtml(savedAnswer)}</strong>
                      </div>`;
       } else {
+        const optionButtons = optList.map((opt) => `
+          <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', ${JSON.stringify(opt)})">${escapeHtml(opt)}</button>
+        `).join('');
+
         answerRow = `
           <div class="screening-inline-ans-box" id="screeningAnsBox_${normKey}">
             <div style="display: flex; gap: 0.35rem; align-items: center; margin-bottom: 0.35rem; flex-wrap: wrap;">
-              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'Yes')">Yes</button>
-              <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem;" onclick="setScreeningInpValue('${normKey}', 'No')">No</button>
+              ${optionButtons}
               <button type="button" class="btn btn-outline btn-xs" style="font-size: 0.7rem; padding: 0.12rem 0.45rem; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="setScreeningInpValue('${normKey}', '__EMPTY__')">🚫 Leave Blank</button>
             </div>
             <div style="display: flex; gap: 0.4rem; align-items: center;">
@@ -1504,6 +1558,50 @@ function openScreeningModal(postId) {
     listEl.innerHTML = '';
     emptyEl.classList.remove('hidden');
     if (applyNowBtn) applyNowBtn.classList.add('hidden');
+
+    const reasonLow = (post.rejection_reason || '').toLowerCase();
+    if (reasonLow.includes('recaptcha') || reasonLow.includes('verification')) {
+      emptyEl.innerHTML = `
+        <span style="font-size: 1.8rem;">🛡️</span>
+        <h4 style="color: #fbbf24; margin: 0.35rem 0 0.2rem 0; font-size: 0.95rem;">Human Verification Required (reCAPTCHA)</h4>
+        <p style="color: #cbd5e1; font-size: 0.82rem; max-width: 480px; margin: 0 auto 0.6rem auto;">
+          All questionnaire fields were successfully answered, but an anti-bot challenge ('I\\'m not a robot') was presented before submission.
+        </p>
+        <p style="font-size: 0.76rem; color: #94a3b8; max-width: 480px; margin: 0 auto 1rem auto;">
+          Automated solving of CAPTCHA challenges is avoided for safety. Open the listing directly or run in a visible desktop browser to complete.
+        </p>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+          <a href="${escapeHtml(post.post_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+            <span>↗ Complete on ${post.category === 'INDEED_APPLY' ? 'Indeed' : 'LinkedIn'}</span>
+          </a>
+          <button type="button" class="btn btn-outline btn-sm" onclick="${post.category === 'INDEED_APPLY' ? `applySingleIndeedJob('${post.id}')` : `applyToCurrentScreeningPost()`}">
+            <span>⚡ Rerun Now</span>
+          </button>
+        </div>
+      `;
+    } else if (reasonLow.includes('review')) {
+      emptyEl.innerHTML = `
+        <span style="font-size: 1.8rem;">📋</span>
+        <h4 style="color: #38bdf8; margin: 0.35rem 0 0.2rem 0; font-size: 0.95rem;">All Questionnaire Fields Answered</h4>
+        <p style="color: #cbd5e1; font-size: 0.82rem; max-width: 480px; margin: 0 auto 0.6rem auto;">
+          All screening questions for this role have been answered from Question Bank. The application reached the final review step.
+        </p>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin-top: 0.85rem;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="${post.category === 'INDEED_APPLY' ? `applySingleIndeedJob('${post.id}')` : `applyToCurrentScreeningPost()`}">
+            <span>⚡ Rerun Application</span>
+          </button>
+          <a href="${escapeHtml(post.post_url)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+            <span>↗ Open Listing</span>
+          </a>
+        </div>
+      `;
+    } else {
+      emptyEl.innerHTML = `
+        <span style="font-size: 1.5rem;">🔍</span>
+        <p>No unanswered screening questions were found for this position.</p>
+        <p style="font-size: 0.72rem; color: var(--text-muted);">Click "Re-Scan Questions" to re-crawl all form pages, or open the job directly to review manually.</p>
+      `;
+    }
   }
 
   modal.classList.remove('hidden');
@@ -1591,8 +1689,13 @@ async function saveSingleInlineAnswer(normKey, label, btn) {
 async function applyToCurrentScreeningPost() {
   if (!activeScreeningPost) return;
   const postId = activeScreeningPost.id;
+  const isIndeed = activeScreeningPost.category === 'INDEED_APPLY';
   closeScreeningModal();
-  await triggerSingleEasyApply(postId);
+  if (isIndeed && typeof applySingleIndeedJob === 'function') {
+    await applySingleIndeedJob(postId);
+  } else {
+    await triggerSingleEasyApply(postId);
+  }
 }
 
 function openScreeningFromDetails() {
@@ -1655,17 +1758,33 @@ async function triggerScreeningRescan() {
 // =============================================
 
 let bulkParsedKeywords = [];
+let bulkTargetPlatform = 'linkedin';
 
-function openBulkSearchModal() {
+function openBulkSearchModal(platform = 'linkedin') {
+  bulkTargetPlatform = platform;
   const modal = document.getElementById('modalBulkEasySearch');
   if (!modal) return;
 
+  const isIndeed = platform === 'indeed';
+
+  // Update modal titles/subtitles
+  const titleEl = modal.querySelector('.modal-title');
+  if (titleEl) {
+    titleEl.textContent = isIndeed ? 'Bulk Indeed Search & Discovery' : 'Bulk LinkedIn Easy Apply Search';
+  }
+  const subtitleEl = modal.querySelector('.modal-subtitle');
+  if (subtitleEl) {
+    subtitleEl.textContent = isIndeed
+      ? 'Search multiple roles across Indeed sequentially in visible/headless Firefox.'
+      : 'Search multiple roles across LinkedIn Easy Apply sequentially in visible/headless Firefox.';
+  }
+
   // Pre-fill location, time filter, pacing & cycles from active crawler form if set
-  const currentLoc = document.getElementById('easySearchLocation')?.value || 'India';
-  const currentTime = document.getElementById('easyTimeFilter')?.value || '24h';
-  const currentPacing = document.getElementById('selectEasyPacing')?.value || 'safe';
-  const currentCycles = document.getElementById('easyCrawlerCycles')?.value || '8';
-  const currentMaxJobs = document.getElementById('easyMaxJobs')?.value || '50';
+  const currentLoc = (isIndeed ? document.getElementById('indeedSearchLocation')?.value : document.getElementById('easySearchLocation')?.value) || 'India';
+  const currentTime = (isIndeed ? document.getElementById('indeedTimeFilter')?.value : document.getElementById('easyTimeFilter')?.value) || '24h';
+  const currentPacing = (isIndeed ? document.getElementById('selectIndeedPacing')?.value : document.getElementById('selectEasyPacing')?.value) || 'safe';
+  const currentCycles = (isIndeed ? document.getElementById('indeedCrawlerCycles')?.value : document.getElementById('easyCrawlerCycles')?.value) || '8';
+  const currentMaxJobs = (isIndeed ? document.getElementById('indeedMaxJobs')?.value : document.getElementById('easyMaxJobs')?.value) || '50';
 
   const locInput = document.getElementById('bulkSearchLocation');
   const timeSelect = document.getElementById('bulkTimeFilter');
@@ -1680,7 +1799,10 @@ function openBulkSearchModal() {
   if (maxJobsInput) maxJobsInput.value = currentMaxJobs;
 
   // Pre-fill keywords from active search query if textarea is currently empty
-  const activeQuery = (document.getElementById('easySearchQuery')?.value || '').trim();
+  const activeQuery = (isIndeed
+    ? (document.getElementById('indeedSearchQuery')?.value || '')
+    : (document.getElementById('easySearchQuery')?.value || '')
+  ).trim();
   const kwTextarea = document.getElementById('bulkKeywordsInput');
   if (kwTextarea && !kwTextarea.value.trim() && activeQuery) {
     kwTextarea.value = activeQuery;
@@ -1816,15 +1938,29 @@ async function submitBulkEasySearch() {
 
   const location = (document.getElementById('bulkSearchLocation')?.value || 'India').trim();
   const timeFilter = document.getElementById('bulkTimeFilter')?.value || '24h';
-  const cycles = parseInt(document.getElementById('bulkEasyCycles')?.value || document.getElementById('easyCrawlerCycles')?.value || '8', 10);
-  const maxJobs = parseInt(document.getElementById('bulkEasyMaxJobs')?.value || document.getElementById('easyMaxJobs')?.value || '50', 10);
-  const pacing = document.getElementById('bulkEasyPacing')?.value || document.getElementById('selectEasyPacing')?.value || 'safe';
+  const isIndeed = bulkTargetPlatform === 'indeed';
+  const defaultCycles = isIndeed
+    ? (document.getElementById('indeedCrawlerCycles')?.value || '8')
+    : (document.getElementById('easyCrawlerCycles')?.value || '8');
+  const defaultMaxJobs = isIndeed
+    ? (document.getElementById('indeedMaxJobs')?.value || '50')
+    : (document.getElementById('easyMaxJobs')?.value || '50');
+  const defaultPacing = isIndeed
+    ? (document.getElementById('selectIndeedPacing')?.value || 'safe')
+    : (document.getElementById('selectEasyPacing')?.value || 'safe');
+
+  const cycles = parseInt(document.getElementById('bulkEasyCycles')?.value || defaultCycles, 10);
+  const maxJobs = parseInt(document.getElementById('bulkEasyMaxJobs')?.value || defaultMaxJobs, 10);
+  const pacing = document.getElementById('bulkEasyPacing')?.value || defaultPacing;
   const pacingLabels = { safe: 'Safe (45-75s)', slow: 'Extra Slow (75-120s)', standard: 'Moderate (30-45s)' };
   const pacingLabel = pacingLabels[pacing] || pacing;
   const count = bulkParsedKeywords.length;
 
+  const platformTitle = isIndeed ? 'Launch Bulk Indeed Search' : 'Launch Bulk LinkedIn Search';
+  const endpoint = isIndeed ? '/api/scrape/indeed-apply/batch' : '/api/scrape/easy-apply/batch';
+
   const confirmed = await showConfirm(
-    'Launch Bulk LinkedIn Search',
+    platformTitle,
     `Enqueue ${count} searches sequentially in background for "${location}"?\n\n• Cycles: ${cycles} per role\n• Max Jobs: ${maxJobs} per role\n• Submission delay: ${pacingLabel}\n• Persistent headed/headless Firefox`,
     { confirmText: `Queue ${count} Searches` }
   );
@@ -1834,7 +1970,7 @@ async function submitBulkEasySearch() {
   if (submitBtn) submitBtn.disabled = true;
 
   try {
-    const res = await fetch('/api/scrape/easy-apply/batch', {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2249,4 +2385,6 @@ window.resumeEasyApplySafeguard = resumeEasyApplySafeguard;
 window.checkRateLimitSafeguard = checkRateLimitSafeguard;
 window.navigateToJobInEasyApply = navigateToJobInEasyApply;
 window.handleSampleJobClick = handleSampleJobClick;
+window.changeEasyRowsPerPage = changeEasyRowsPerPage;
+window.goToEasyPage = goToEasyPage;
 

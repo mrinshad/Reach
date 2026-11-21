@@ -1,0 +1,112 @@
+/* ==========================================================================
+   INDEED_APPLY.CSS — Indeed Job Portal & Apply Workspace
+   ========================================================================== */
+
+/* Indeed Brand Colors & Accents */
+:root {
+  --indeed-blue: #2164f3;
+  --indeed-blue-hover: #1b52c9;
+  --indeed-blue-subtle: rgba(33, 100, 243, 0.12);
+  --indeed-blue-border: rgba(33, 100, 243, 0.35);
+  --indeed-blue-glow: rgba(33, 100, 243, 0.2);
+}
+
+.indeed-theme-header {
+  border-top: 2px solid var(--indeed-blue);
+}
+
+.indeed-badge-icon {
+  background: var(--indeed-blue-subtle) !important;
+  border: 1px solid var(--indeed-blue-border) !important;
+  color: var(--indeed-blue) !important;
+  box-shadow: 0 0 16px var(--indeed-blue-glow) !important;
+}
+
+.btn-indeed-crawl {
+  background: var(--indeed-blue) !important;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(33, 100, 243, 0.35) !important;
+  transition: all 0.18s ease;
+}
+
+.btn-indeed-crawl:hover {
+  background: var(--indeed-blue-hover) !important;
+  box-shadow: 0 4px 12px rgba(33, 100, 243, 0.45) !important;
+  transform: translateY(-1px);
+}
+
+/* Recruiter Email Pill (In-Stream Discovery Badge) */
+.recruiter-email-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-family: var(--font-mono, monospace);
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 9999px;
+  padding: 0.12rem 0.5rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recruiter-email-chip:hover {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+  transform: translateY(-1px);
+}
+
+.recruiter-email-chip svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+/* Tag Status Variations for Indeed */
+.indeed-apply-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.indeed-apply-tag.discovered {
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.indeed-apply-tag.applied {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.indeed-apply-tag.questionnaire {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.indeed-apply-tag.not-found {
+  background: rgba(100, 116, 139, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.indeed-apply-tag.dismissed {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+}

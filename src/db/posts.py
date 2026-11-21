@@ -96,27 +96,109 @@ def check_email_spam(emails: List[str], cur) -> Tuple[bool, bool, Optional[str],
     return False, False, None, None
 
 
+def canonicalize_job_url(url: Optional[str]) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Sanitize and canonicalize a job URL, extracting platform name and native job ID.
+    Returns: (canonical_url, platform, platform_job_id)
+    """
+    if not url or not url.strip():
+        return None, None, None
+
+    u = url.strip()
+
+    # Manual or direct schemes
+    if u.startswith("manual://") or u.startswith("direct://"):
+        return u, ("manual" if u.startswith("manual://") else "direct"), None
+
+    # 1. LinkedIn Job View or currentJobId
+    li_job_m = re.search(r"(?:jobs/view/|currentJobId=)(\d{8,16})", u)
+    if li_job_m:
+        jid = li_job_m.group(1)
+        return f"https://www.linkedin.com/jobs/view/{jid}/", "linkedin", jid
+
+    # 2. LinkedIn Feed / Activity Post
+    li_post_m = re.search(r"(?:feed/update/urn:li:activity:|posts/.*?activity-)(\d{15,22})", u)
+    if li_post_m:
+        pid = li_post_m.group(1)
+        return f"https://www.linkedin.com/feed/update/urn:li:activity:{pid}/", "linkedin_post", pid
+
+    # 3. Indeed Job View / rc / clk
+    ind_m = re.search(r"(?:jk=|viewjob\?jk=)([a-f0-9]{12,24})", u, re.I)
+    if ind_m:
+        jk = ind_m.group(1)
+        domain = "in.indeed.com" if "in.indeed.com" in u else "www.indeed.com"
+        return f"https://{domain}/viewjob?jk={jk}", "indeed", jk
+
+    # 4. Infopark Kochi
+    info_m = re.search(r"/companies/job-search/detail/(\d+)", u)
+    if info_m:
+        ijid = info_m.group(1)
+        return f"https://infopark.in/companies/job-search/detail/{ijid}", "infopark", ijid
+
+    # 5. Generic URLs: strip tracking query params
+    clean_u = re.sub(
+        r"([?&])(refId|trackingId|tracking_id|utm_[a-z]+|eBP|from|vjs|tk|fccid|session_redirect|midToken|trk|trkInfo|refMarker|dest_url)=[^&#]*",
+        r"\1",
+        u,
+        flags=re.I,
+    )
+    clean_u = re.sub(r"[?&]+$", "", clean_u)
+    clean_u = clean_u.rstrip("/")
+    return clean_u, "generic", None
+
+
+def compute_exact_opening_signature(
+    author_name: str,
+    author_headline: str,
+    location: Optional[str] = None,
+    full_text: Optional[str] = None,
+) -> str:
+    """
+    Generate a normalized composite signature uniquely identifying an exact job opening.
+    (Company + Normalized Title + Location + Text snippet).
+    """
+    c_author = (author_name or "").strip().lower()
+    c_title = normalize_job_title(author_headline or "")
+    c_loc = (location or "").strip().lower()
+    c_snippet = re.sub(r"\s+", " ", (full_text or "").strip().lower())[:80]
+    return f"{c_author}|{c_title}|{c_loc}|{c_snippet}"
+
+
 def get_existing_post_identifiers(db_url: str = DEFAULT_DB_URL) -> Set[str]:
     """
-    Retrieve all existing post identifiers (URLs, IDs, content signatures)
+    Retrieve all existing post identifiers (URLs, IDs, platform IDs, content signatures)
     into an in-memory set for rapid O(1) duplicate checks during scraping.
     """
     identifiers = set()
-    sql = "SELECT id, post_url, author_name, substring(full_text, 1, 100) AS snippet FROM posts;"
+    sql = "SELECT id, post_url, author_name, author_headline, location, substring(full_text, 1, 100) AS snippet, platform_job_id FROM posts;"
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
             cur.execute(sql)
             for row in cur.fetchall():
-                pid, url, author, snippet = row[0], row[1], row[2], row[3]
+                pid, url, author, headline, loc, snippet, plat_id = (
+                    row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+                )
                 if pid:
                     identifiers.add(str(pid))
+                if plat_id:
+                    identifiers.add(str(plat_id))
+                    identifiers.add(f"easy_apply_{plat_id}")
+                    identifiers.add(f"ind_{plat_id}")
                 if url:
-                    clean_url = url.split("?")[0].rstrip("/")
-                    identifiers.add(clean_url)
+                    canonical_u, _, u_plat_id = canonicalize_job_url(url)
+                    if canonical_u:
+                        identifiers.add(canonical_u)
+                        identifiers.add(canonical_u.rstrip("/"))
+                    if u_plat_id:
+                        identifiers.add(u_plat_id)
+                    identifiers.add(url.split("?")[0].rstrip("/"))
                     identifiers.add(url.rstrip("/"))
                 if author and snippet:
-                    sig = f"{author.strip().lower()}:{snippet.strip()[:60]}"
+                    sig = f"{(author or '').strip().lower()}:{(snippet or '').strip()[:60]}"
                     identifiers.add(sig)
+                if author and headline:
+                    exact_sig = compute_exact_opening_signature(author, headline, loc, snippet)
+                    identifiers.add(exact_sig)
     return identifiers
 
 
@@ -162,23 +244,15 @@ def normalize_job_title(title: Optional[str]) -> str:
 
 def get_dismissed_role_titles(db_url: str = DEFAULT_DB_URL) -> Set[str]:
     """
-    Fetch all unique normalized job titles from posts with status='REJECTED'.
+    Fetch all unique normalized job titles from dismissed_roles table.
     Used by scrapers to automatically dismiss matching newly discovered roles.
     """
-    dismissed = set()
-    query = "SELECT DISTINCT author_headline FROM posts WHERE status = 'REJECTED' AND author_headline IS NOT NULL;"
     try:
-        with get_connection(db_url) as conn:
-            with conn.cursor() as cur:
-                cur.execute(query)
-                for (headline,) in cur.fetchall():
-                    if headline:
-                        norm = normalize_job_title(headline)
-                        if norm:
-                            dismissed.add(norm)
+        from src.db.dismissed_roles import get_dismissed_role_titles as _get_titles
+        return _get_titles(db_url)
     except Exception as e:
         print(f"Notice fetching dismissed role titles: {e}")
-    return dismissed
+        return set()
 
 
 def check_title_previously_dismissed(
@@ -187,14 +261,8 @@ def check_title_previously_dismissed(
     db_url: str = DEFAULT_DB_URL,
 ) -> Tuple[bool, Optional[str]]:
     """Check if title matches any previously dismissed role."""
-    if not title:
-        return False, None
-    if dismissed_set is None:
-        dismissed_set = get_dismissed_role_titles(db_url)
-    norm = normalize_job_title(title)
-    if norm in dismissed_set:
-        return True, f"Auto-dismissed: Matches previously dismissed role '{title}'"
-    return False, None
+    from src.db.dismissed_roles import check_title_previously_dismissed as _check_title
+    return _check_title(title, dismissed_set=dismissed_set, db_url=db_url)
 
 
 # Patterns indicating comment-bait / comment to get link / engagement farming
@@ -241,36 +309,107 @@ def upsert_post(
     db_url: str = DEFAULT_DB_URL
 ) -> Tuple[str, bool]:
     """
-    Insert or update a post in the database.
-    If skip_if_exists is True, existing posts are untouched to preserve workflow status.
+    Insert or update a post in the database with multi-layer exact job opening
+    deduplication, dismissed roles monitoring, and already-applied cancellation.
     Returns (post_id, was_created).
     """
-    post_url = post_data.get("post_url", "").strip() or None
-    author_name = post_data.get("author_name", "Unknown").strip()
-    full_text = post_data.get("full_text", "").strip()
+    raw_url = post_data.get("post_url", "").strip() or None
+    canonical_url, platform, platform_job_id = canonicalize_job_url(raw_url)
+    post_url = canonical_url or raw_url
 
-    # Deterministic ID if URL is present, otherwise hash content
-    if post_url:
+    author_name = post_data.get("author_name", "Unknown").strip()
+    author_headline = (post_data.get("author_headline") or "").strip()
+    full_text = post_data.get("full_text", "").strip()
+    location = (post_data.get("location") or "").strip() or None
+    incoming_id = (post_data.get("id") or "").strip()
+
+    # Deterministic ID resolution
+    if incoming_id and (incoming_id.startswith("easy_apply_") or incoming_id.startswith("ind_") or incoming_id.startswith("infopark_")):
+        record_id = incoming_id
+    elif platform == "linkedin" and platform_job_id:
+        record_id = f"easy_apply_{platform_job_id}"
+    elif platform == "indeed" and platform_job_id:
+        record_id = f"ind_{platform_job_id}"
+    elif platform == "infopark" and platform_job_id:
+        record_id = f"infopark_{platform_job_id}"
+    elif post_url:
         record_id = hashlib.sha256(post_url.encode()).hexdigest()[:32]
     else:
         sig = f"{author_name}:{full_text[:100]}"
         record_id = hashlib.sha256(sig.encode()).hexdigest()[:32]
 
+    snippet_80 = full_text[:80]
+
     with get_connection(db_url) as conn:
         with conn.cursor() as cur:
-            if post_url:
-                cur.execute("SELECT id FROM posts WHERE id = %s OR post_url = %s LIMIT 1;", (record_id, post_url))
-            else:
-                cur.execute(
-                    "SELECT id FROM posts WHERE id = %s OR (author_name = %s AND substring(full_text, 1, 80) = %s) LIMIT 1;",
-                    (record_id, author_name, full_text[:80])
-                )
+            # Multi-layer Exact Job Opening Duplicate Check
+            # Check 1: Record ID or incoming ID
+            # Check 2: Canonical or raw post_url
+            # Check 3: Platform Job ID
+            # Check 4: Exact composite opening signature (company, title, location, snippet)
+            dup_query = """
+                SELECT id, status, rejection_reason, is_dismissed, platform_job_id
+                FROM posts
+                WHERE id = %s
+                   OR id = %s
+                   OR (post_url IS NOT NULL AND post_url IN (%s, %s))
+                   OR (%s IS NOT NULL AND platform_job_id = %s)
+                   OR (
+                       LOWER(TRIM(author_name)) = LOWER(TRIM(%s))
+                       AND LOWER(TRIM(COALESCE(author_headline, ''))) = LOWER(TRIM(%s))
+                       AND LOWER(TRIM(COALESCE(location, ''))) = LOWER(TRIM(%s))
+                       AND substring(full_text, 1, 80) = %s
+                   )
+                LIMIT 1;
+            """
+            cur.execute(
+                dup_query,
+                (
+                    record_id,
+                    incoming_id or record_id,
+                    post_url,
+                    raw_url or post_url,
+                    platform_job_id,
+                    platform_job_id or "",
+                    author_name,
+                    author_headline,
+                    location or "",
+                    snippet_80,
+                ),
+            )
             existing = cur.fetchone()
+
+            is_already_applied = bool(post_data.get("is_already_applied", False))
+
             if existing:
+                existing_id, existing_status, existing_reason, existing_is_dismissed, existing_plat_id = existing
+
+                # If existing is already applied or sent, preserve it
+                if existing_status in ("APPLIED", "SENT"):
+                    return (existing_id, False)
+
+                # If new pass detects it has been applied on the platform, mark as CANCELLED
+                if is_already_applied:
+                    cur.execute(
+                        "UPDATE posts SET status = 'REJECTED', rejection_reason = 'Already applied', updated_at = CURRENT_TIMESTAMP WHERE id = %s;",
+                        (existing_id,)
+                    )
+                    conn.commit()
+                    return (existing_id, False)
+
+                # If already rejected / cancelled, preserve
+                if existing_status in ("REJECTED", "CANCELLED"):
+                    return (existing_id, False)
+
+                # If skip_if_exists is True, return existing record without duplicating
                 if skip_if_exists:
-                    return (existing[0], False)
+                    return (existing_id, False)
 
             emails = post_data.get("detected_emails", []) or []
+            phones = post_data.get("contact_phones")
+            if phones is None:
+                from src.services.experience_extractor import extract_phone_numbers
+                phones = extract_phone_numbers(full_text)
             links = post_data.get("detected_links", []) or []
 
             exp = post_data.get("experience", {})
@@ -289,31 +428,27 @@ def upsert_post(
                 is_scam = True
                 scam_reason = bait_reason
 
-            # Auto-dismiss check if role headline matches a previously dismissed role
-            headline = post_data.get("author_headline", "")
-            is_dismissed = False
-            dismissed_reason = None
-            if headline and post_data.get("status") in (None, "DISCOVERED"):
-                norm_h = normalize_job_title(headline)
-                if norm_h:
-                    cur.execute(
-                        "SELECT author_headline FROM posts WHERE status = 'REJECTED' AND author_headline IS NOT NULL "
-                        "AND LOWER(REGEXP_REPLACE(author_headline, '\\s+', ' ', 'g')) = %s LIMIT 1;",
-                        (norm_h,)
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        is_dismissed = True
-                        dismissed_reason = f"Auto-dismissed: Matches previously dismissed role '{row[0]}'"
+            # CHECK 1: Auto-dismiss check if role headline matches a previously dismissed role
+            is_dismissed = bool(post_data.get("is_dismissed", False))
+            dismissed_reason = post_data.get("rejection_reason") if is_dismissed else None
+            if not is_dismissed and author_headline and post_data.get("status") in (None, "DISCOVERED"):
+                is_prev_dismissed, prev_reason = check_title_previously_dismissed(author_headline, db_url=db_url)
+                if is_prev_dismissed:
+                    is_dismissed = True
+                    dismissed_reason = prev_reason
 
-            if is_scam:
+            # CHECK 2: Already Applied Check -> mark as CANCELLED (status = 'REJECTED', reason = 'Already applied')
+            if is_already_applied:
+                initial_status = "REJECTED"
+                initial_reason = "Already applied"
+            elif is_scam:
                 initial_status = "REJECTED"
                 initial_reason = scam_reason
             elif is_dismissed:
                 initial_status = "REJECTED"
                 initial_reason = dismissed_reason
             elif post_data.get("status"):
-                initial_status = post_data["status"]
+                initial_status = "REJECTED" if post_data["status"] == "CANCELLED" else post_data["status"]
                 initial_reason = post_data.get("rejection_reason")
             else:
                 initial_status = "DISCOVERED"
@@ -324,34 +459,34 @@ def upsert_post(
             if post_data.get("potential_spam_reason") is not None:
                 potential_spam_reason = post_data["potential_spam_reason"]
 
-            location = (post_data.get("location") or "").strip() or None
-
             insert_sql = """
             INSERT INTO posts (
                 id, post_url, author_name, author_headline, author_profile,
-                posted_date_raw, full_text, contact_emails, external_links,
+                posted_date_raw, full_text, contact_emails, contact_phones, external_links,
                 min_experience, max_experience, raw_experience, seniority_level,
                 is_fresher, category, status, rejection_reason, is_potential_spam, potential_spam_reason,
-                location, created_at, updated_at
+                location, platform_job_id, is_dismissed, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
-                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s,
-                %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             )
-            ON CONFLICT (post_url) DO NOTHING
+            ON CONFLICT (post_url) DO UPDATE SET
+                contact_phones = CASE WHEN cardinality(posts.contact_phones) = 0 THEN EXCLUDED.contact_phones ELSE posts.contact_phones END
             RETURNING id;
             """
             cur.execute(insert_sql, (
                 record_id,
                 post_url,
                 author_name,
-                post_data.get("author_headline", ""),
+                author_headline,
                 post_data.get("author_profile", ""),
                 post_data.get("post_date", ""),
                 full_text,
                 emails,
+                phones,
                 links,
                 min_exp,
                 max_exp,
@@ -364,6 +499,8 @@ def upsert_post(
                 is_potential_spam,
                 potential_spam_reason,
                 location,
+                platform_job_id,
+                is_dismissed,
             ))
             res = cur.fetchone()
             conn.commit()
@@ -481,6 +618,7 @@ def get_posts(
     experience_only: bool = False,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    has_email: Optional[bool] = None,
     limit: int = 50,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -510,7 +648,11 @@ def get_posts(
 
     if status and status != "ALL":
         if status in ("OTHERS", "HISTORY", "ARCHIVE"):
-            where_clauses.append("status IN ('SENT', 'REJECTED')")
+            where_clauses.append("status IN ('SENT', 'REJECTED', 'CANCELLED')")
+        elif status in ("REJECTED", "CANCELLED"):
+            where_clauses.append("status IN ('REJECTED', 'CANCELLED')")
+        elif status == "REVIEW_ALL":
+            where_clauses.append("(status IN ('EMAIL_GENERATED', 'DISCOVERED', 'SELECTED') OR (status = 'SENT' AND generated_body IS NOT NULL AND length(trim(generated_body)) > 0))")
         else:
             where_clauses.append("status = %s")
             params.append(status)
@@ -525,6 +667,8 @@ def get_posts(
             where_clauses.append("status IN ('SENT', 'REJECTED')")
         elif gen_status == "REJECTED":
             where_clauses.append("status = 'REJECTED'")
+        elif gen_status == "REVIEW_ALL":
+            where_clauses.append("(status IN ('EMAIL_GENERATED', 'DISCOVERED', 'SELECTED') OR (status = 'SENT' AND generated_body IS NOT NULL AND length(trim(generated_body)) > 0))")
         elif gen_status == "EVERYTHING":
             pass
     elif gen_status in ("ALL", "ALL_INCL_GENERATED"):
@@ -572,6 +716,11 @@ def get_posts(
         """)
         params.extend([min_exp, min_exp])
 
+    if has_email is True:
+        where_clauses.append("(contact_emails IS NOT NULL AND cardinality(contact_emails) > 0)")
+    elif has_email is False:
+        where_clauses.append("(contact_emails IS NULL OR cardinality(contact_emails) = 0)")
+
     if search:
         where_clauses.append("""
             (
@@ -602,6 +751,20 @@ def get_posts(
         order_sql = "ORDER BY author_name ASC, created_at DESC"
     elif order_by == "author_desc":
         order_sql = "ORDER BY author_name DESC, created_at DESC"
+    elif order_by in ("email_desc", "has_email", "email"):
+        order_sql = "ORDER BY CASE WHEN contact_emails IS NOT NULL AND cardinality(contact_emails) > 0 THEN 0 ELSE 1 END ASC, created_at DESC"
+    elif order_by == "generated_first":
+        order_sql = """
+        ORDER BY 
+          CASE 
+            WHEN status = 'EMAIL_GENERATED' THEN 0
+            WHEN status IN ('DISCOVERED', 'SELECTED') AND (generated_body IS NOT NULL AND generated_body != '') THEN 1
+            WHEN status IN ('DISCOVERED', 'SELECTED') THEN 2
+            WHEN status = 'SENT' THEN 3
+            ELSE 4
+          END ASC,
+          created_at DESC
+        """
     elif status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
         order_sql = "ORDER BY updated_at DESC"
     else:
@@ -644,6 +807,7 @@ def get_posts_paginated(
     experience_only: bool = False,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    has_email: Optional[bool] = None,
     limit: int = 25,
     offset: int = 0,
     db_url: str = DEFAULT_DB_URL
@@ -673,7 +837,11 @@ def get_posts_paginated(
 
     if status and status != "ALL":
         if status in ("OTHERS", "HISTORY", "ARCHIVE"):
-            where_clauses.append("status IN ('SENT', 'REJECTED')")
+            where_clauses.append("status IN ('SENT', 'REJECTED', 'CANCELLED')")
+        elif status in ("REJECTED", "CANCELLED"):
+            where_clauses.append("status IN ('REJECTED', 'CANCELLED')")
+        elif status == "REVIEW_ALL":
+            where_clauses.append("(status IN ('EMAIL_GENERATED', 'DISCOVERED', 'SELECTED') OR (status = 'SENT' AND generated_body IS NOT NULL AND length(trim(generated_body)) > 0))")
         else:
             where_clauses.append("status = %s")
             params.append(status)
@@ -688,6 +856,8 @@ def get_posts_paginated(
             where_clauses.append("status IN ('SENT', 'REJECTED')")
         elif gen_status == "REJECTED":
             where_clauses.append("status = 'REJECTED'")
+        elif gen_status == "REVIEW_ALL":
+            where_clauses.append("(status IN ('EMAIL_GENERATED', 'DISCOVERED', 'SELECTED') OR (status = 'SENT' AND generated_body IS NOT NULL AND length(trim(generated_body)) > 0))")
         elif gen_status == "EVERYTHING":
             pass
     elif gen_status in ("ALL", "ALL_INCL_GENERATED"):
@@ -735,6 +905,11 @@ def get_posts_paginated(
         """)
         params.extend([min_exp, min_exp])
 
+    if has_email is True:
+        where_clauses.append("(contact_emails IS NOT NULL AND cardinality(contact_emails) > 0)")
+    elif has_email is False:
+        where_clauses.append("(contact_emails IS NULL OR cardinality(contact_emails) = 0)")
+
     if search:
         where_clauses.append("""
             (
@@ -766,6 +941,20 @@ def get_posts_paginated(
         order_sql = "ORDER BY author_name ASC, created_at DESC"
     elif order_by == "author_desc":
         order_sql = "ORDER BY author_name DESC, created_at DESC"
+    elif order_by in ("email_desc", "has_email", "email"):
+        order_sql = "ORDER BY CASE WHEN contact_emails IS NOT NULL AND cardinality(contact_emails) > 0 THEN 0 ELSE 1 END ASC, created_at DESC"
+    elif order_by == "generated_first":
+        order_sql = """
+        ORDER BY 
+          CASE 
+            WHEN status = 'EMAIL_GENERATED' THEN 0
+            WHEN status IN ('DISCOVERED', 'SELECTED') AND (generated_body IS NOT NULL AND generated_body != '') THEN 1
+            WHEN status IN ('DISCOVERED', 'SELECTED') THEN 2
+            WHEN status = 'SENT' THEN 3
+            ELSE 4
+          END ASC,
+          created_at DESC
+        """
     elif status in ("OTHERS", "HISTORY", "ARCHIVE") or gen_status in ("OTHERS", "HISTORY", "ARCHIVE") or order_by == "updated_at":
         order_sql = "ORDER BY updated_at DESC"
     else:
@@ -861,6 +1050,12 @@ def update_post_status(
     if potential_spam_reason is not None:
         set_clauses.append("potential_spam_reason = %s")
         params.append(potential_spam_reason)
+
+    if new_status in ("REJECTED", "CANCELLED"):
+        if rejection_reason and "dismiss" in rejection_reason.lower():
+            set_clauses.append("is_dismissed = TRUE")
+    elif new_status in ("DISCOVERED", "APPLIED", "EMAIL_GENERATED", "REQUIRES_QUESTIONNAIRE", "SENT"):
+        set_clauses.append("is_dismissed = FALSE")
 
     params.append(post_id)
     sql = f"UPDATE posts SET {', '.join(set_clauses)} WHERE id = %s;"

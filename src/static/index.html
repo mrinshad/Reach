@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=5.0" />
+  <link rel="stylesheet" href="/static/style.css?v=5.1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -71,6 +71,13 @@
             <span class="nav-label">Easy Apply</span>
             <span class="badge-count" id="countEasyApply">0</span>
           </button>
+          <button class="nav-item" id="btnTabIndeedApply" onclick="switchTab('tabIndeedApply')" title="Indeed Job Portal & Apply">
+            <span class="nav-icon" style="color: #2164f3;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.65 1.5c-3.15 0-5.7 2.55-5.7 5.7 0 2.2 1.25 4.1 3.08 5.04v7.76c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-7.85c1.72-.99 2.87-2.83 2.87-4.95 0-3.15-2.55-5.7-5.7-5.7h2.45zm-.82 2.7c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3z"/></svg>
+            </span>
+            <span class="nav-label">Indeed Apply</span>
+            <span class="badge-count" id="countIndeedApply">0</span>
+          </button>
           <button class="nav-item" id="btnTabQuestionBank" onclick="switchTab('tabQuestionBank')" title="Screening Question Bank">
             <span class="nav-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -94,6 +101,16 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             </span>
             <span class="nav-label">Sent & History</span>
+          </button>
+          <button class="nav-item" id="btnTabDismissedRoles" onclick="switchTab('tabDismissedRoles')" title="Dismissed Roles">
+            <span class="nav-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+              </svg>
+            </span>
+            <span class="nav-label">Dismissed Roles</span>
+            <span class="badge-count" id="countSidebarDismissedRoles">0</span>
           </button>
         </nav>
       </div>
@@ -747,10 +764,14 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>
               <span>Generate (<span id="batchCountBadge">0</span>)</span>
             </button>
+            <button class="btn btn-cancel-app btn-sm hidden" id="btnBatchDismiss" onclick="cancelBatchSelectedDiscovered()" title="Dismiss / remove selected posts from Discovered Jobs">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Dismiss (<span id="batchDismissCountBadge">0</span>)</span>
+            </button>
           </div>
         </div>
 
-        <!-- Row 2: Secondary Dropdown Filters, Results Badge & Clear Filters Button -->
+        <!-- Row 2: Secondary Dropdown Filters (Source, Status, Category, Location) -->
         <div class="toolbar-row secondary-row">
           <div class="filters-group">
             <span class="filters-label">Filters:</span>
@@ -779,10 +800,19 @@
             <select id="selectLocationFilter" class="select-clean" onchange="applyFilters()" title="Filter by Job Location">
               <option value="ALL" selected>All Locations</option>
             </select>
+          </div>
+        </div>
 
-            <select id="selectReasonFilterDiscovered" class="select-clean" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
+        <!-- Row 3: Reason Dropdown, Separator, Dates, From-To, Sort, Results Badge & Clear Filters -->
+        <div class="toolbar-row secondary-row row-tertiary">
+          <div class="filters-group">
+            <span class="filters-label">Reason:</span>
+            <select id="selectReasonFilterDiscovered" class="select-clean select-reason-discovered" onchange="applyFilters()" title="Filter by cancellation / rejection reason">
               <option value="ALL" selected>All Reasons</option>
             </select>
+
+            <!-- Vertical Separator -->
+            <span class="toolbar-separator" aria-hidden="true"></span>
 
             <select id="selectDateFilter" class="select-clean" onchange="handleDateFilterSelectChange()" title="Filter by Crawled Date">
               <option value="ALL" selected>All Dates</option>
@@ -827,66 +857,164 @@
             <span>✕ Clear Filters</span>
           </button>
         </div>
+
+        <!-- Row 4: Active Filter Chips Bar (Displays on bottom with 'x' close buttons) -->
+        <div class="active-filters-bar hidden" id="discoveredActiveFiltersBar">
+          <span class="active-filters-label">Active:</span>
+          <div class="active-filters-list" id="discoveredActiveFiltersList"></div>
+          <button type="button" class="btn-clear-chips" onclick="clearDiscoveredFilters()" title="Clear all active filters">Clear all</button>
+        </div>
       </div>
 
-      <!-- Paginated Data Table Container -->
-      <div class="table-card">
-        <table class="reach-table">
-          <thead>
-            <tr>
-              <th width="35">
-                <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
-              </th>
-              <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
-                <div class="th-sort-wrapper">
-                  <span>Recruiter / Author</span>
-                  <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+      <!-- Main Workspace Layout: Scrollable Table + Docked Right-Side Window -->
+      <div class="discovered-workspace-wrapper" id="discoveredWorkspaceWrapper">
+        <!-- Left Area: Posts Table Container -->
+        <div class="discovered-table-container" id="discoveredTableContainer">
+          <div class="table-card">
+            <!-- Top Table Header Bar / Pagination Controls -->
+            <div class="table-header-bar" id="discoveredTableHeaderBar">
+              <div class="pagination-info" id="paginationInfoTop">
+                Showing 0–0 of 0 posts
+              </div>
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectLimitTop" onchange="changeRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
                 </div>
-              </th>
-              <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
-                <div class="th-sort-wrapper">
-                  <span>Experience</span>
-                  <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                <div class="page-buttons" id="pageButtonsTop">
+                  <!-- Dynamic page buttons -->
                 </div>
-              </th>
-              <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
-                <div class="th-sort-wrapper">
-                  <span>Date</span>
-                  <span class="sort-indicator" id="sortDateIndicator">↕</span>
-                </div>
-              </th>
-              <th width="190">Contact Email</th>
-              <th>Post Preview</th>
-              <th width="180" style="text-align: right;">Action</th>
-            </tr>
-          </thead>
-          <tbody id="postsTableBody">
-            <!-- Populated dynamically or with skeleton -->
-          </tbody>
-        </table>
-
-        <!-- Table Footer / Pagination Controls -->
-        <div class="table-footer">
-          <div class="pagination-info" id="paginationInfo">
-            Showing 0–0 of 0 posts
-          </div>
-
-          <div class="pagination-controls">
-            <div class="rows-per-page">
-              <span>Rows:</span>
-              <select id="selectLimit" onchange="changeRowsPerPage(this.value)">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
+              </div>
             </div>
 
-            <div class="page-buttons" id="pageButtons">
-              <!-- Rendered dynamically -->
+            <div class="table-scroll-container" id="discoveredTableScrollContainer">
+              <table class="reach-table discovered-table">
+                <thead>
+                  <tr>
+                    <th width="35">
+                      <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" />
+                    </th>
+                    <th class="sortable-th" onclick="toggleSort('author')" title="Click to sort by Recruiter / Author">
+                      <div class="th-sort-wrapper">
+                        <span>Recruiter / Author</span>
+                        <span class="sort-indicator" id="sortAuthorIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="135" class="sortable-th" onclick="toggleSort('exp')" title="Click to sort by Experience">
+                      <div class="th-sort-wrapper">
+                        <span>Experience</span>
+                        <span class="sort-indicator" id="sortExpIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="220" class="sortable-th" onclick="toggleSort('date')" title="Click to sort by Date">
+                      <div class="th-sort-wrapper">
+                        <span>Date</span>
+                        <span class="sort-indicator" id="sortDateIndicator">↕</span>
+                      </div>
+                    </th>
+                    <th width="180">Contact Email</th>
+                    <th width="160">Contact Number</th>
+                    <th width="180" style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="postsTableBody">
+                  <!-- Populated dynamically or with skeleton -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Table Footer / Pagination Controls -->
+            <div class="table-footer">
+              <div class="pagination-info" id="paginationInfo">
+                Showing 0–0 of 0 posts
+              </div>
+
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectLimit" onchange="changeRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+
+                <div class="page-buttons" id="pageButtons">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- Right Area: Minimal Docked Side Window -->
+        <aside class="discovered-detail-drawer hidden" id="discoveredDetailDrawer">
+          <!-- Top Bar: Recruiter Title & Close Button -->
+          <div class="drawer-top-bar">
+            <div class="drawer-top-left">
+              <span class="drawer-recruiter-title" id="discoveredDrawerAuthor">Recruiter Name</span>
+              <span id="discoveredDrawerSourceBadge"></span>
+            </div>
+            <div class="drawer-top-right">
+              <button type="button" class="btn-drawer-close" onclick="closeDiscoveredDetailDrawer()" title="Close details window (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Contact Bar: Email & Contact Phone -->
+          <div class="drawer-contact-bar">
+            <div class="drawer-contact-item">
+              <span class="drawer-contact-label">Email:</span>
+              <span class="drawer-contact-val" id="discoveredDrawerEmail">—</span>
+              <button type="button" class="btn-copy-micro hidden" id="btnCopyDiscoveredEmail" onclick="copyDiscoveredDrawerEmail()" title="Copy Email">Copy</button>
+            </div>
+            <div class="drawer-contact-item">
+              <span class="drawer-contact-label">Contact:</span>
+              <span class="drawer-contact-val" id="discoveredDrawerPhone">—</span>
+              <button type="button" class="btn-copy-micro hidden" id="btnCopyDiscoveredPhone" onclick="copyDiscoveredDrawerPhone()" title="Copy Contact">Copy</button>
+            </div>
+          </div>
+
+          <!-- Job Description Header & Body -->
+          <div class="drawer-jd-header">
+            <span>Job Description</span>
+            <button type="button" class="btn-copy-micro" onclick="copyDiscoveredDrawerJd()" title="Copy entire Job Description">Copy JD</button>
+          </div>
+          <div class="drawer-jd-content" id="discoveredDrawerJd">
+            <!-- Job Description Text -->
+          </div>
+
+          <!-- Bottom Action Bar: Generate Mail, Review, and Source Link -->
+          <div class="drawer-bottom-bar">
+            <div class="drawer-bottom-left">
+              <a id="discoveredDrawerSourceLink" href="#" target="_blank" class="btn btn-outline btn-xs" title="Open source job link">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                <span>Source</span>
+              </a>
+              <button type="button" class="btn btn-cancel-app btn-xs" id="btnDrawerDismissDiscovered" onclick="drawerDismissDiscovered()" title="Dismiss this post">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Dismiss</span>
+              </button>
+            </div>
+            <div class="drawer-bottom-right">
+              <button type="button" class="btn btn-primary btn-sm" id="btnDrawerGenerateMail" onclick="drawerGenerateMailDiscovered()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span id="drawerGenBtnText">Generate Mail</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnDrawerReview" onclick="drawerMoveToReviewDiscovered()">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                <span id="drawerReviewBtnText">Review</span>
+              </button>
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
 
@@ -1240,6 +1368,28 @@
 
   <!-- Main Table Section using Reach Table System -->
   <div class="table-card">
+    <!-- Top Table Header Bar / Pagination Controls -->
+    <div class="table-header-bar" id="easyTableHeaderBar">
+      <div class="pagination-info" id="easyPaginationInfoTop">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectEasyLimitTop" onchange="changeEasyRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="easyPageButtonsTop">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
     <table class="reach-table" id="easyApplyTable">
       <thead>
         <tr>
@@ -1263,190 +1413,652 @@
         </tr>
       </tbody>
     </table>
+
+    <!-- Table Footer / Pagination Controls -->
+    <div class="table-footer" id="easyTableFooter">
+      <div class="pagination-info" id="easyPaginationInfo">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectEasyLimit" onchange="changeEasyRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="easyPageButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-      <!-- TAB 2: Review & Drafts (Side-by-Side) -->
-    <div class="tab-panel hidden" id="tabReview">
-      <div class="review-split">
-        <!-- Sidebar: Items Ready -->
-        <aside class="review-queue">
-          <div class="queue-header">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span class="queue-title">Ready for Review</span>
-              <span class="badge-count" id="reviewQueueCount">0</span>
-            </div>
-            <button class="btn btn-outline btn-xs" id="btnQuickBatchGenerateReview" onclick="quickGenerateAllReviewDrafts()" title="Bulk generate outreach emails for drafts via ChatGPT" style="font-size: 0.7rem; padding: 0.2rem 0.5rem; gap: 0.25rem;">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-              <span>Bulk Gen</span>
-            </button>
-          </div>
-          <div class="queue-search" style="display: flex; flex-direction: column; gap: 0.4rem;">
-            <div style="display: flex; align-items: center; gap: 0.35rem;">
-              <div class="search-box sm" style="flex: 1;">
-                <svg class="search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="inputSearchReview" placeholder="Search drafts..." oninput="handleSearchReview(this.value)" style="width: 100%;" />
-              </div>
-              <button class="btn-clear-filters hidden" id="btnClearReviewFilters" onclick="clearReviewFilters()" title="Reset search and date range filters back to All" style="padding: 0.22rem 0.45rem; font-size: 0.68rem;">
-                <span>✕ Clear</span>
+      <!-- TAB: Indeed Job Portal & Indeed Apply Workspace -->
+<div class="tab-panel hidden" id="tabIndeedApply">
+  <!-- Top Header Toolbar -->
+  <div class="easy-apply-header indeed-theme-header">
+    <div class="header-left">
+      <div class="easy-apply-badge-icon indeed-badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M13.2 0C9.4 0 6.3 3.1 6.3 6.9c0 2.6 1.5 5 3.7 6.1v9.3c0 1 .8 1.7 1.7 1.7s1.7-.8 1.7-1.7v-9.5c2.1-1.2 3.5-3.4 3.5-6C16.9 3.1 13.8 0 13.2 0zm-1 3.3c2 0 3.6 1.6 3.6 3.6s-1.6 3.6-3.6 3.6-3.6-1.6-3.6-3.6 1.6-3.6 3.6-3.6z"/>
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.55rem;">
+          <h2 class="easy-apply-title">Indeed Job Portal &amp; Apply</h2>
+          <span class="tag-status live">Operational</span>
+        </div>
+        <p class="easy-apply-subtitle">
+          Autonomous Indeed job discovery, in-stream recruiter email harvesting from JDs, and sequential batch applications with Question Bank answers.
+        </p>
+      </div>
+    </div>
+
+    <!-- Crawler Launch Form -->
+    <div class="easy-crawler-form">
+      <div class="crawler-inputs-row">
+        <!-- Job Title / Keywords -->
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input type="text" id="indeedSearchQuery" class="easy-input" placeholder="Job title (leave empty for feed listings)..." value="" />
+        </div>
+
+        <!-- Location -->
+        <div class="easy-input-group">
+          <svg class="easy-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z" />
+          </svg>
+          <input type="text" id="indeedSearchLocation" class="easy-input" placeholder="Location..." value="India" />
+        </div>
+
+        <!-- Time Filter -->
+        <select id="indeedTimeFilter" class="select-clean easy-select-time" title="Filter jobs by posted date">
+          <option value="24h" selected>Past 24 Hours</option>
+          <option value="week">Past Week</option>
+          <option value="month">Past Month</option>
+          <option value="all">Anytime</option>
+        </select>
+
+        <!-- Safe Pacing -->
+        <select id="selectIndeedPacing" class="select-clean easy-select-pacing" title="Submission delay between applications to protect account from pace warnings">
+          <option value="safe" selected>🛡️ Safe (45-75s)</option>
+          <option value="slow">🐢 Extra Slow (75-120s)</option>
+          <option value="standard">⚡ Moderate (30-45s)</option>
+        </select>
+
+        <!-- Cycles Stepper -->
+        <div class="cycles-control-wrap" title="Number of scroll & discovery passes">
+          <label for="indeedCrawlerCycles" class="cycles-label">Cycles:</label>
+          <div class="cycles-stepper-box">
+            <input type="number" id="indeedCrawlerCycles" class="input-cycles-num" min="1" max="1000" value="8" />
+            <div class="cycles-stepper-btns">
+              <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('indeedCrawlerCycles', 1)" title="Increase cycles" aria-label="Increase cycles">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </svg>
+              </button>
+              <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('indeedCrawlerCycles', -1)" title="Decrease cycles" aria-label="Decrease cycles">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
               </button>
             </div>
-            <div class="date-filter-group" style="padding: 0.15rem 0.4rem; justify-content: space-between;" title="Filter drafts by date range">
+          </div>
+          <span class="tooltip-trigger" tabindex="0" aria-label="Cycle information">
+            <span class="tooltip-icon-circle">?</span>
+            <span class="tooltip-popover">
+              <strong>What is a Cycle?</strong><br>
+              A cycle is one scroll &amp; discovery pass across Indeed search results.<br>
+              Increase cycles (e.g. 5–20) to scroll deeper and discover more job cards.
+            </span>
+          </span>
+        </div>
+
+        <!-- Max Jobs Stepper -->
+        <div class="cycles-control-wrap" title="Maximum jobs to discover & collect">
+          <label for="indeedMaxJobs" class="cycles-label">Max Jobs:</label>
+          <div class="cycles-stepper-box">
+            <input type="number" id="indeedMaxJobs" class="input-cycles-num" min="5" max="1000" step="5" value="50" />
+            <div class="cycles-stepper-btns">
+              <button type="button" class="btn-cycle-stepper btn-cycle-up" onclick="stepCycles('indeedMaxJobs', 5)" title="Increase max jobs" aria-label="Increase max jobs">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="18 15 12 9 6 15"></polyline>
+                </svg>
+              </button>
+              <button type="button" class="btn-cycle-stepper btn-cycle-down" onclick="stepCycles('indeedMaxJobs', -5)" title="Decrease max jobs" aria-label="Decrease max jobs">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <span class="tooltip-trigger" tabindex="0" aria-label="Max jobs information">
+            <span class="tooltip-icon-circle">?</span>
+            <span class="tooltip-popover">
+              <strong>Maximum Jobs to Collect</strong><br>
+              Caps the number of job cards the crawler discovers and saves in one pass.<br>
+              Previously dismissed roles and duplicates are automatically filtered out.
+            </span>
+          </span>
+        </div>
+
+        <!-- Primary Action Button -->
+        <button class="btn btn-primary btn-easy-crawl btn-indeed-crawl" id="btnLaunchIndeedApplyCrawl" onclick="triggerIndeedApplyCrawl()"
+          title="Collect matching Indeed opportunities with cross-platform rejection sync">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span>Collect Jobs</span>
+        </button>
+
+        <!-- Question Bank shortcut -->
+        <button class="btn btn-outline btn-easy-answers" id="btnOpenIndeedQuestionBankModal" onclick="switchTab('tabQuestionBank')" title="View and answer screening questions in Question Bank">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span>Question Bank</span>
+        </button>
+
+        <!-- Bulk Search (CSV) -->
+        <button class="btn btn-outline btn-easy-import" id="btnOpenIndeedBulkSearchModal" onclick="openIndeedBulkSearchModal()" title="Import CSV or batch keywords to search multiple roles">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>Bulk Search (CSV)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Ribbon (5 cards) -->
+  <div class="easy-kpi-ribbon">
+    <div class="easy-kpi-card accent-blue" id="kpiIndeedTotal" onclick="filterIndeedApplyStatus('ALL')" title="View all Indeed opportunities">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="indeedKpiTotal">0</span>
+        <span class="kpi-icon-badge badge-blue">🎯</span>
+      </div>
+      <span class="kpi-lbl">Total Indeed Jobs</span>
+    </div>
+    <div class="easy-kpi-card accent-green" id="kpiIndeedApplied" onclick="filterIndeedApplyStatus('APPLIED')" title="View successfully submitted applications on Indeed">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="indeedKpiApplied">0</span>
+        <span class="kpi-icon-badge badge-green">✓</span>
+      </div>
+      <span class="kpi-lbl">Successfully Applied</span>
+    </div>
+    <div class="easy-kpi-card accent-amber" id="kpiIndeedQuestionnaire" onclick="filterIndeedApplyStatus('REQUIRES_QUESTIONNAIRE')" title="View roles requiring custom questionnaires">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="indeedKpiQuestionnaire">0</span>
+        <span class="kpi-icon-badge badge-amber">📋</span>
+      </div>
+      <span class="kpi-lbl">Screening (Questionnaires)</span>
+    </div>
+    <div class="easy-kpi-card accent-indigo" id="kpiIndeedReady" onclick="filterIndeedApplyStatus('DISCOVERED')" title="View jobs ready in queue for auto-apply">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="indeedKpiReady">0</span>
+        <span class="kpi-icon-badge badge-indigo">⚡</span>
+      </div>
+      <span class="kpi-lbl">Ready in Queue</span>
+    </div>
+    <div class="easy-kpi-card accent-slate" id="kpiIndeedNotFound" onclick="filterIndeedApplyStatus('NOT_FOUND')" title="View jobs marked as external ATS or closed">
+      <div class="kpi-card-header">
+        <span class="kpi-num" id="indeedKpiNotFound">0</span>
+        <span class="kpi-icon-badge badge-slate">🚫</span>
+      </div>
+      <span class="kpi-lbl">External / Closed</span>
+    </div>
+  </div>
+
+  <!-- Filter & Actions Bar -->
+  <div class="easy-filter-bar">
+    <div class="status-pill-group">
+      <button class="filter-pill active" id="pillIndeedAll" onclick="filterIndeedApplyStatus('ALL')">
+        <span>All Jobs</span>
+        <span class="pill-badge-count" id="countIndeedPillAll">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedDiscovered" onclick="filterIndeedApplyStatus('DISCOVERED')">
+        <span class="pill-dot cyan"></span>
+        <span>Ready to Apply</span>
+        <span class="pill-badge-count" id="countIndeedPillReady">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedQuestionnaire" onclick="filterIndeedApplyStatus('REQUIRES_QUESTIONNAIRE')">
+        <span class="pill-dot amber"></span>
+        <span>Requires Questionnaire</span>
+        <span class="pill-badge-count" id="countIndeedPillScreening">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedApplied" onclick="filterIndeedApplyStatus('APPLIED')">
+        <span class="pill-dot green"></span>
+        <span>Applied</span>
+        <span class="pill-badge-count" id="countIndeedPillApplied">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedNotFound" onclick="filterIndeedApplyStatus('NOT_FOUND')">
+        <span class="pill-dot slate"></span>
+        <span>External / Closed</span>
+        <span class="pill-badge-count" id="countIndeedPillNotFound">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedDismissed" onclick="filterIndeedApplyStatus('REJECTED')">
+        <span class="pill-dot rose"></span>
+        <span>Dismissed</span>
+        <span class="pill-badge-count" id="countIndeedPillDismissed">0</span>
+      </button>
+      <button class="filter-pill" id="pillIndeedHasEmail" onclick="filterIndeedApplyEmailOnly(true)" title="Filter roles that have detected recruiter contact emails in JD">
+        <span class="pill-dot" style="background-color: #38bdf8; box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);"></span>
+        <span>With Recruiter Email</span>
+        <span class="pill-badge-count" id="countIndeedPillEmail">0</span>
+      </button>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 0.65rem;">
+      <button class="btn-clean-filter" id="btnSortIndeedByEmail" onclick="toggleIndeedSortByEmail()" title="Sort roles with recruiter emails to the top" style="display: flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.75rem; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; transition: all 0.15s ease;">
+        <span style="font-size: 0.85rem;">📧</span>
+        <span id="lblSortIndeedEmail">Sort: Emails First</span>
+      </button>
+      <div class="date-filter-group" title="Filter Indeed jobs by date range">
+        <span class="date-label">From</span>
+        <input type="date" id="indeedDateFrom" class="input-date-clean" onchange="applyIndeedDateFilter()" title="Start date" />
+        <span class="date-label">To</span>
+        <input type="date" id="indeedDateTo" class="input-date-clean" onchange="applyIndeedDateFilter()" title="End date" />
+      </div>
+      <div class="easy-search-box">
+        <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="indeedFilterKeyword" placeholder="Filter by title, company, location, email..." oninput="handleIndeedTableSearch(this.value)" />
+      </div>
+      <button class="btn-easy-rerun" id="btnRerunScreenedIndeedApply" onclick="triggerRerunScreenedIndeedApply()" title="Re-run all screened applications using saved Question Bank answers">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+        </svg>
+        <span>Rerun Screened (<span id="countRerunScreenedIndeedBtn">0</span>)</span>
+      </button>
+      <button class="btn-clear-filters hidden" id="btnClearIndeedFilters" onclick="clearIndeedApplyFilters()" title="Reset all filters, date ranges, and search back to All">
+        <span>✕ Clear</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dedicated Floating Batch Action Banner -->
+  <div class="easy-batch-banner hidden" id="indeedBatchToolbar">
+    <div class="batch-banner-left">
+      <span class="selected-count-badge" id="indeedSelectedCount">0 selected</span>
+    </div>
+    <div class="batch-banner-center">
+      <span class="batch-action-lbl">Move Status:</span>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetIndeedStatus('DISCOVERED')" title="Move selected to Ready">
+        <span>⚡ Ready</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetIndeedStatus('REQUIRES_QUESTIONNAIRE')" title="Move selected to Screening">
+        <span>📋 Screening</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetIndeedStatus('APPLIED')" title="Move selected to Applied">
+        <span>✓ Applied</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetIndeedStatus('NOT_FOUND')" title="Mark selected as External / Closed">
+        <span>🚫 Not Found</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-status-batch" onclick="batchSetIndeedStatus('REJECTED')" title="Move selected to Dismissed">
+        <span>✕ Dismiss</span>
+      </button>
+    </div>
+    <div class="batch-banner-right">
+      <button class="btn btn-primary btn-xs" onclick="batchApplySelectedIndeedJobs()" title="Apply to selected jobs sequentially">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+        <span>Apply Selected</span>
+      </button>
+      <button class="btn btn-outline btn-xs" onclick="batchCopyIndeedLinks()" title="Copy links of selected jobs">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+        <span>Copy Links</span>
+      </button>
+      <button class="btn btn-outline btn-xs btn-danger-soft" onclick="batchDismissIndeedJobs()" title="Dismiss selected jobs">
+        <span>Dismiss</span>
+      </button>
+      <button class="btn-batch-close" onclick="clearIndeedSelection()" title="Clear selection">✕</button>
+    </div>
+  </div>
+
+  <!-- Main Table Section -->
+  <div class="table-card">
+    <!-- Top Table Header Bar / Pagination Controls -->
+    <div class="table-header-bar" id="indeedTableHeaderBar">
+      <div class="pagination-info" id="indeedPaginationInfoTop">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectIndeedLimitTop" onchange="changeIndeedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="indeedPageButtonsTop">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <table class="reach-table" id="indeedApplyTable">
+      <thead>
+        <tr>
+          <th class="col-check">
+            <input type="checkbox" id="selectAllIndeedCheck" onchange="toggleSelectAllIndeedJobs(this.checked)" title="Select all" />
+          </th>
+          <th class="col-role">Role &amp; Company</th>
+          <th class="col-location">Location</th>
+          <th class="col-exp">Experience</th>
+          <th class="col-status">Status</th>
+          <th class="col-date">Crawled</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="indeedApplyTableBody">
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 3rem; color: #64748b;">
+            Loading Indeed Apply opportunities...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Table Footer / Pagination Controls -->
+    <div class="table-footer" id="indeedTableFooter">
+      <div class="pagination-info" id="indeedPaginationInfo">
+        Showing 0–0 of 0 jobs
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectIndeedLimit" onchange="changeIndeedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="250">250</option>
+            <option value="-1">All</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="indeedPageButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+      <!-- TAB 2: Review & Drafts (List with Docked Right-Side Email Window) -->
+    <div class="tab-panel hidden" id="tabReview">
+      <!-- Toolbar: Quick Status Filter Pills, Search, Date Range & Actions -->
+      <div class="toolbar-tiered review-toolbar-tiered">
+        <!-- Row 1: Primary Status Pills & Actions -->
+        <div class="toolbar-row primary-row">
+          <div class="filter-pills" id="reviewStatusPills">
+            <button class="pill" data-review="ALL" onclick="setReviewFilter('ALL')">
+              <span>All Outreach</span> <span class="badge-count" id="countReviewAll">0</span>
+            </button>
+            <button class="pill active" data-review="GENERATED" onclick="setReviewFilter('GENERATED')">
+              <span>✨ Generated</span> <span class="badge-count" id="countReviewGenerated">0</span>
+            </button>
+            <button class="pill" data-review="PENDING" onclick="setReviewFilter('PENDING')">
+              <span>⏳ Yet to Generate</span> <span class="badge-count" id="countReviewPending">0</span>
+            </button>
+            <button class="pill" data-review="SENT" onclick="setReviewFilter('SENT')">
+              <span>✉ Sent History</span> <span class="badge-count" id="countReviewSent">0</span>
+            </button>
+          </div>
+
+          <div class="row-actions">
+            <!-- Search Box -->
+            <div class="search-box">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="inputSearchReview" placeholder="Search recruiter, email, role..." oninput="handleSearchReview(this.value)" />
+            </div>
+
+            <!-- Bulk Gen ChatGPT Trigger -->
+            <button class="btn btn-outline btn-sm" id="btnQuickBatchGenerateReview" onclick="quickGenerateAllReviewDrafts()" title="Bulk generate outreach emails for drafts via ChatGPT">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Bulk Gen</span>
+            </button>
+
+            <!-- Batch Multi-Select Action Triggers -->
+            <button id="btnGenerateBatchDrafts" class="btn btn-primary btn-sm hidden" onclick="generateBatchSelectedDrafts()" title="Generate outreach emails for selected posts via ChatGPT">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              <span>Gen (<span id="selectedDraftsGenCount">0</span>)</span>
+            </button>
+            <button id="btnSendBatchDrafts" class="btn btn-success btn-sm hidden" onclick="sendBatchSelectedDrafts()" title="Send selected applications directly">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              <span>Send (<span id="selectedDraftsCount">0</span>)</span>
+            </button>
+            <button id="btnCancelBatchDrafts" class="btn btn-cancel-app btn-sm hidden" onclick="cancelBatchSelectedDrafts()" title="Cancel & Discard selected applications">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              <span>Cancel (<span id="selectedDraftsCancelCount">0</span>)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 2: Secondary Filters (Date Range, Source & Clear) -->
+        <div class="toolbar-row secondary-row">
+          <div class="filters-group">
+            <span class="filters-label">Filters:</span>
+            <select id="selectReviewSource" class="select-clean" onchange="applyReviewSourceFilter(this.value)" title="Filter by Job Source">
+              <option value="ALL" selected>All Sources</option>
+              <option value="LINKEDIN">LinkedIn</option>
+              <option value="INFOPARK">Infopark Kochi</option>
+              <option value="MANUAL">Manual JDs</option>
+              <option value="DIRECT">Direct Outreach</option>
+            </select>
+
+            <div class="date-filter-group" title="Filter drafts by date range">
               <span class="date-label">From</span>
               <input type="date" id="reviewDateFrom" class="input-date-clean" onchange="applyReviewDateFilter()" title="Start date" />
               <span class="date-label">To</span>
               <input type="date" id="reviewDateTo" class="input-date-clean" onchange="applyReviewDateFilter()" title="End date" />
             </div>
+
+            <span class="filter-count-badge hidden" id="reviewResultsBadge"></span>
           </div>
-          <!-- Multi-Select Batch Actions Toolbar -->
-          <div class="queue-batch-bar" id="queueBatchBar">
-            <label class="queue-select-all-label" title="Select or Deselect All Drafts">
-              <input type="checkbox" id="selectAllDraftsCheckbox" onchange="toggleSelectAllDrafts(this.checked)" />
-              <span>Select All</span>
-            </label>
-            <div class="queue-batch-actions">
-              <button id="btnGenerateBatchDrafts" class="btn btn-gen-batch btn-xs hidden" onclick="generateBatchSelectedDrafts()" title="Generate / re-generate outreach emails for selected posts via ChatGPT">
+
+          <button class="btn-clear-filters hidden" id="btnClearReviewFilters" onclick="clearReviewFilters()" title="Reset search and date range filters back to All">
+            <span>✕ Clear Filters</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Workspace Layout: Scrollable Table + Docked Right-Side Email Window -->
+      <div class="review-workspace-wrapper" id="reviewWorkspaceWrapper">
+        <!-- Left Area: Posts Table Card (Full width when drawer closed, flex-1 when open) -->
+        <div class="review-table-container" id="reviewTableContainer">
+          <div class="table-card">
+            <!-- Top Table Header Bar / Pagination Controls -->
+            <div class="table-header-bar" id="reviewTableHeaderBar">
+              <div class="pagination-info" id="reviewPageInfoTop">Showing 0–0 of 0 posts</div>
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectReviewLimitTop" onchange="changeReviewRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+                <div class="pagination-buttons">
+                  <button class="btn btn-outline btn-xs" id="btnReviewPrevPageTop" onclick="changeReviewPage(-1)" disabled>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                    <span>Previous</span>
+                  </button>
+                  <button class="btn btn-outline btn-xs" id="btnReviewNextPageTop" onclick="changeReviewPage(1)" disabled>
+                    <span>Next</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="table-scroll-container" id="reviewTableScrollContainer">
+              <table class="reach-table review-table">
+                <thead>
+                  <tr>
+                    <th width="35">
+                      <input type="checkbox" id="selectAllDraftsCheckbox" onchange="toggleSelectAllDrafts(this.checked)" title="Select all on this page" />
+                    </th>
+                    <th>Recruiter / Author</th>
+                    <th width="140">Status</th>
+                    <th width="190">Contact Email</th>
+                    <th>Subject / Role Preview</th>
+                    <th width="115">Experience</th>
+                    <th width="120">Date</th>
+                    <th width="135" style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="reviewTableBody">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Table Footer / Pagination Controls -->
+            <div class="table-footer" id="reviewTableFooter">
+              <div class="pagination-info" id="reviewPageInfo">Showing 0–0 of 0 posts</div>
+              <div class="pagination-controls">
+                <div class="rows-per-page">
+                  <span>Rows:</span>
+                  <select id="selectReviewLimit" onchange="changeReviewRowsPerPage(this.value)">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </div>
+                <div class="pagination-buttons">
+                  <button class="btn btn-outline btn-xs" id="btnReviewPrevPage" onclick="changeReviewPage(-1)" disabled>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+                    <span>Previous</span>
+                  </button>
+                  <button class="btn btn-outline btn-xs" id="btnReviewNextPage" onclick="changeReviewPage(1)" disabled>
+                    <span>Next</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Area: Clean, Spacious Docked Email Window -->
+        <aside class="review-email-drawer hidden" id="reviewEmailDrawer">
+          <!-- Top Bar: Status, Auto-save & Close -->
+          <div class="drawer-top-bar">
+            <div class="drawer-top-left">
+              <span class="drawer-status-pill" id="drawerStatusPill">✓ Generated</span>
+              <span id="draftSaveStatus" class="draft-save-status status-saved">✓ Saved</span>
+            </div>
+            <div class="drawer-top-right">
+              <button type="button" class="btn btn-outline btn-xs btn-generate-mail-jd" id="btnGenerateMailFromJd" onclick="generateEmailForActiveDraft()" title="Re-generate outreach email with ChatGPT">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                <span>Gen (<span id="selectedDraftsGenCount">0</span>)</span>
+                <span id="btnGenerateMailLabel">Re-generate</span>
               </button>
-              <button id="btnSendBatchDrafts" class="btn btn-primary btn-xs hidden" onclick="sendBatchSelectedDrafts()" title="Send selected applications directly">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                <span>Send (<span id="selectedDraftsCount">0</span>)</span>
-              </button>
-              <button id="btnCancelBatchDrafts" class="btn btn-cancel-app btn-xs hidden" onclick="cancelBatchSelectedDrafts()" title="Cancel & Discard selected applications">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                <span>Cancel (<span id="selectedDraftsCancelCount">0</span>)</span>
+              <button type="button" class="btn-drawer-close" onclick="closeReviewEmailDrawer()" title="Close email window (Esc)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
           </div>
-          <div class="queue-list" id="reviewQueueList">
-            <!-- Populated dynamically -->
+
+          <!-- Recipient & Meta Bar -->
+          <div class="drawer-meta-bar">
+            <div class="drawer-to-group">
+              <span class="drawer-to-label">To:</span>
+              <span class="drawer-target-email" id="reviewTargetEmail" title="Recipient email">email@domain.com</span>
+              <button type="button" class="btn-copy-micro" onclick="copyTargetEmail()" title="Copy Email">Copy</button>
+            </div>
+            <div class="drawer-meta-right">
+              <span class="drawer-resume-chip" id="draftResumeBox" title="Attached Resume">
+                📎 <span id="draftResumeFilename">rinshadp.pdf</span>
+              </span>
+            </div>
           </div>
-          <!-- Pinned Queue Pagination Footer -->
-          <div class="queue-pagination-bar" id="queuePaginationBar">
-            <button class="btn btn-outline btn-xs" id="btnReviewPrevPage" onclick="changeReviewPage(-1)" title="Load previous 100 drafts" disabled>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-              <span>Prev 100</span>
+
+          <!-- Unready Alert Banner (Only shown if post is not generated) -->
+          <div class="drawer-unready-banner hidden" id="drawerUnreadyBanner">
+            <div class="unready-info">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>No AI email generated yet for this role.</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-xs" onclick="generateEmailForActiveDraft()" title="Generate cold outreach email via ChatGPT">
+              ✨ Generate from JD
             </button>
-            <span class="queue-page-info" id="reviewPageInfo" title="Current drafts displayed">1–100 of 0</span>
-            <button class="btn btn-outline btn-xs" id="btnReviewNextPage" onclick="changeReviewPage(1)" title="Load next 100 drafts" disabled>
-              <span>Next 100</span>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
+          </div>
+
+          <!-- Email Editor Area -->
+          <div class="drawer-editor-area">
+            <!-- Subject Field -->
+            <div class="drawer-field-group">
+              <div class="drawer-field-header">
+                <label for="draftSubject">Subject Line</label>
+                <button type="button" class="btn-copy-micro" onclick="copyDraftSubject()" title="Copy Subject">Copy</button>
+              </div>
+              <input type="text" id="draftSubject" class="input-clean input-subject-field" placeholder="Email subject..." />
+            </div>
+
+            <!-- Email Body Field -->
+            <div class="drawer-field-group field-body-group">
+              <div class="drawer-field-header">
+                <label for="draftBody">Email Body</label>
+                <div style="display: flex; gap: 0.35rem;">
+                  <button type="button" class="btn-copy-micro" onclick="cleanActiveDraftFields()" title="Clean and trim ChatGPT artifacts / signature extras">Clean</button>
+                  <button type="button" class="btn-copy-micro" onclick="copyEmailDraft()" title="Copy entire email draft">Copy Body</button>
+                </div>
+              </div>
+              <textarea id="draftBody" class="textarea-clean textarea-draft-field" placeholder="Generated email body..."></textarea>
+            </div>
+          </div>
+
+          <!-- Clean Actions Footer -->
+          <div class="drawer-footer-actions">
+            <div class="drawer-footer-left">
+              <button type="button" class="btn btn-primary btn-sm" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                <span>Send Directly</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                <span>Open Gmail</span>
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnSaveDraftBody" onclick="saveActiveDraftEdits()" title="Save changes (Ctrl+S)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span id="btnSaveDraftBodyLabel">Save</span>
+              </button>
+            </div>
+
+            <div class="drawer-footer-right">
+              <button type="button" class="btn btn-success btn-sm" onclick="markActivePostSent()" title="Mark as successfully sent">
+                <span>✓ Sent</span>
+              </button>
+              <button type="button" class="btn btn-cancel-app btn-sm" onclick="cancelActiveApplication()" title="Discard application">
+                <span>✕ Discard</span>
+              </button>
+            </div>
           </div>
         </aside>
-
-        <!-- Main Review Workspace -->
-        <section class="review-main" id="reviewMainWorkspace">
-          <div class="empty-state" id="emptyReviewState">
-            <div class="empty-icon">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-            </div>
-            <h3>No Draft Selected</h3>
-            <p>Select a generated post from the left queue to review, edit, and open in Gmail.</p>
-          </div>
-
-          <div class="workspace-panel hidden" id="workspacePanel">
-            <!-- Workspace Top Bar -->
-            <div class="workspace-bar">
-              <div class="candidate-header-block">
-                <h2 class="candidate-title" id="reviewAuthorName">Candidate Name</h2>
-                <span class="candidate-meta" id="reviewHeadline">Headline</span>
-              </div>
-
-              <div class="bar-actions">
-                <button class="btn btn-outline btn-sm" onclick="saveActiveDraftEdits()" title="Save changes to database">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                  <span>Save</span>
-                </button>
-                <button class="btn btn-primary btn-sm" onclick="sendActiveDraftDirectly()" title="Send email directly via Gmail without manual clicking">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                  <span>Send Directly</span>
-                </button>
-                <button class="btn btn-outline btn-sm" onclick="openActivePostInGmail()" title="Launch headed Firefox and populate draft with resume for manual inspection">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                  <span>Open Gmail</span>
-                </button>
-                <button class="btn btn-success btn-sm" onclick="markActivePostSent()" title="Mark as successfully sent">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                  <span>Mark Sent</span>
-                </button>
-                <button class="btn btn-outline btn-sm btn-spam-action" onclick="markActivePostSpam()" title="Mark this JD as Spam / Scam and discard">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                  <span>Spam</span>
-                </button>
-                <button class="btn btn-cancel-app btn-sm" onclick="cancelActiveApplication()" title="Cancel & Discard this application">
-                  <span>✕ Cancel</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- Two-Column Grid: Original Post vs Draft -->
-            <div class="split-grid">
-              <!-- Left: Original Post -->
-              <div class="panel-box">
-                <div class="box-head">
-                  <span class="box-title">Job Post</span>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <button class="box-copy-btn" id="btnCopyJd" onclick="copyJobDescription()" title="Copy full Job Description text">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                      <span>Copy JD</span>
-                    </button>
-                    <a href="#" target="_blank" id="reviewPostLink" class="link-small">LinkedIn ↗</a>
-                  </div>
-                </div>
-                <div class="post-specs">
-                  <div><strong>Email:</strong> <span id="reviewTargetEmail"></span></div>
-                  <div><strong>Location:</strong> <span class="pill-badge badge-location" id="reviewTargetLocation"></span></div>
-                  <div><strong>Experience:</strong> <span class="pill-badge" id="reviewExpPill"></span></div>
-                </div>
-                <div class="post-scroll" id="reviewFullText"></div>
-              </div>
-
-              <!-- Right: Editable Draft -->
-              <div class="panel-box">
-                <div class="box-head">
-                  <span class="box-title">Outreach Email Draft</span>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <button class="box-copy-btn" id="btnCopyDraft" onclick="copyEmailDraft()" title="Copy email subject and body">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                      <span>Copy Email</span>
-                    </button>
-                    <span class="tag-success">✓ Ready for Gmail</span>
-                  </div>
-                </div>
-                <div class="editor-fields">
-                  <div class="field-item">
-                    <label>Subject Line</label>
-                    <input type="text" id="draftSubject" class="input-clean" />
-                  </div>
-                  <div class="field-item field-item-body">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; gap: 0.5rem; flex-wrap: wrap;">
-                      <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <label style="margin-bottom: 0;">Email Body</label>
-                        <span id="draftSaveStatus" class="draft-save-status status-saved">✓ Saved</span>
-                      </div>
-                      <div style="display: flex; align-items: center; gap: 0.4rem;">
-                        <button type="button" class="btn btn-outline btn-xs btn-save-draft" id="btnSaveDraftBody" onclick="saveActiveDraftEdits()" title="Save email body and subject (Ctrl+S)">
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                          <span id="btnSaveDraftBodyLabel">Save</span>
-                        </button>
-                        <button type="button" class="btn btn-outline btn-xs btn-generate-mail-jd" id="btnGenerateMailFromJd" onclick="generateEmailForActiveDraft()" title="Generate custom AI cold outreach email from this Job Description">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.25rem;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                          <span>Generate Mail from JD</span>
-                        </button>
-                      </div>
-                    </div>
-                    <textarea id="draftBody" rows="18" class="textarea-clean"></textarea>
-                  </div>
-                  <div class="resume-badge-box" id="draftResumeBox">
-                    <span>📎 Resume attached:</span>
-                    <strong id="draftResumeFilename">Resume.pdf</strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
       </div>
     </div>
 
@@ -1509,6 +2121,27 @@
         </div>
 
         <div class="table-card">
+          <!-- Top Table Header Bar / Pagination Controls (Applications) -->
+          <div class="table-header-bar" id="sentTableHeaderBar">
+            <div class="pagination-info" id="sentPaginationInfoTop">
+              Showing 0–0 of 0 applications
+            </div>
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectSentLimitTop" onchange="changeSentRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="page-buttons" id="sentPageButtonsTop">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+
           <table class="reach-table">
             <thead>
               <tr>
@@ -1607,6 +2240,26 @@
         </div>
 
         <div class="table-card">
+          <!-- Top Table Header Bar / Pagination Controls (Activity Logs) -->
+          <div class="table-header-bar" id="activityLogsTableHeaderBar">
+            <div class="pagination-info" id="activityLogsPaginationInfoTop">
+              Showing 0–0 of 0 activity runs
+            </div>
+            <div class="pagination-controls">
+              <div class="rows-per-page">
+                <span>Rows:</span>
+                <select id="selectActivityLogsLimitTop" onchange="changeActivityLogsRowsPerPage(this.value)">
+                  <option value="10">10</option>
+                  <option value="25" selected>25</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+              <div class="page-buttons" id="activityLogsPageButtonsTop">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+
           <table class="reach-table activity-logs-table">
             <thead>
               <tr>
@@ -1702,6 +2355,17 @@
           </span>
         </div>
         <div class="kpi-value" id="kpiEasyApplyApplied">0</div>
+      </div>
+
+      <!-- 2b. Indeed Applied -->
+      <div class="kpi-card kpi-indeed clickable-kpi" onclick="jumpToIndeedApply()" title="Click to open Indeed Apply Workspace">
+        <div class="kpi-header">
+          <span class="kpi-label">Indeed Applied</span>
+          <span class="kpi-header-action" title="Jump to Indeed Apply">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
+          </span>
+        </div>
+        <div class="kpi-value" id="kpiIndeedApplied">0</div>
       </div>
 
       <!-- 3. Questionnaires Pending -->
@@ -2216,6 +2880,169 @@
   </div>
 </div>
 
+      <!-- TAB: Dismissed Roles Registry Workspace -->
+<div class="tab-panel hidden" id="tabDismissedRoles">
+  <!-- Standard Reach Toolbar -->
+  <div class="toolbar" style="margin-bottom: 0.85rem;">
+    <!-- Filter Pills (Left) -->
+    <div class="filter-pills" id="dismissedSourcePills">
+      <button class="pill active" data-source="ALL" onclick="setDismissedRoleSourceFilter('ALL')">
+        <span>All Sources</span> <span class="badge-count" id="countDismissedAll">0</span>
+      </button>
+      <button class="pill" data-source="LinkedIn Posts" onclick="setDismissedRoleSourceFilter('LinkedIn Posts')">
+        <span>LinkedIn</span> <span class="badge-count" id="countDismissedLinkedIn">0</span>
+      </button>
+      <button class="pill" data-source="LinkedIn Easy Apply" onclick="setDismissedRoleSourceFilter('LinkedIn Easy Apply')">
+        <span>Easy Apply</span> <span class="badge-count" id="countDismissedEasyApply">0</span>
+      </button>
+      <button class="pill" data-source="Indeed Apply" onclick="setDismissedRoleSourceFilter('Indeed Apply')">
+        <span>Indeed</span> <span class="badge-count" id="countDismissedIndeed">0</span>
+      </button>
+      <button class="pill" data-source="Infopark" onclick="setDismissedRoleSourceFilter('Infopark')">
+        <span>Infopark</span> <span class="badge-count" id="countDismissedInfopark">0</span>
+      </button>
+      <button class="pill" data-source="Manual" onclick="setDismissedRoleSourceFilter('Manual')">
+        <span>Manual</span> <span class="badge-count" id="countDismissedManual">0</span>
+      </button>
+    </div>
+
+    <!-- Actions, Sort & Search (Right) -->
+    <div class="toolbar-right">
+      <button class="btn btn-primary btn-sm hidden" id="btnBatchDeleteDismissedRoles" onclick="deleteBatchDismissedRoles()" title="Restore selected roles so they will not be auto-dismissed">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span id="btnBatchDeleteDismissedRolesText">Restore Selected (0)</span>
+      </button>
+
+      <button class="btn btn-outline btn-sm" id="btnOpenAddDismissedRoleModal" onclick="openAddDismissedRoleModal()" title="Add a custom role title to the exclusion registry">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Add Role</span>
+      </button>
+
+      <button class="btn btn-outline btn-sm" id="btnSyncDismissedFromHistory" onclick="syncDismissedRolesFromHistory()" title="Scan historical rejected posts for new uncataloged roles">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+        </svg>
+        <span>Sync History</span>
+      </button>
+
+      <select id="selectDismissedRoleSort" class="select-clean" onchange="handleSortDismissedRoles(this.value)" title="Order by name, date, or occurrences">
+        <option value="name_asc" selected>Sort: Name (A-Z)</option>
+        <option value="name_desc">Sort: Name (Z-A)</option>
+        <option value="recent">Sort: Newest</option>
+        <option value="oldest">Sort: Oldest</option>
+        <option value="occurrences_desc">Sort: Occurrences</option>
+      </select>
+
+      <span class="filter-count-badge" id="badgeDismissedRolesResults">0 roles</span>
+
+      <div class="search-box">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="inputSearchDismissedRoles" placeholder="Search role title, reason..." oninput="handleSearchDismissedRoles(this.value)" />
+      </div>
+
+      <button class="btn-clear-filters hidden" id="btnClearDismissedFilters" onclick="clearDismissedFilters()" title="Reset search and filters back to All">
+        <span>✕ Clear</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dedicated Batch Actions Bar (Shown when multiple roles are selected) -->
+  <div class="batch-actions-bar hidden" id="dismissedBatchBanner">
+    <div class="batch-bar-left">
+      <span class="selected-count-badge" id="dismissedSelectedCount">0 roles selected</span>
+    </div>
+    <div class="batch-bar-actions">
+      <button class="btn btn-primary btn-sm" onclick="deleteBatchDismissedRoles()" title="Restore selected roles to un-dismiss them so scrapers discover them again">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+        <span>Restore / Un-dismiss (<span id="dismissedBatchCount">0</span>)</span>
+      </button>
+      <button class="btn btn-outline btn-sm" onclick="clearDismissedSelection()" title="Clear selection">
+        <span>✕ Clear Selection</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Table Section (Reach-Table inside Table-Card) -->
+  <div class="table-card">
+    <!-- Top Table Header Bar / Pagination Controls -->
+    <div class="table-header-bar" id="dismissedTableHeaderBar">
+      <div class="pagination-info" id="dismissedRolesPageInfoTop">
+        Showing 0–0 of 0 roles
+      </div>
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectDismissedLimitTop" onchange="changeDismissedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="page-buttons" id="dismissedPageButtonsTop">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <table class="reach-table" id="tableDismissedRoles">
+      <thead>
+        <tr>
+          <th width="35" style="text-align: center;">
+            <input type="checkbox" id="selectAllDismissedRoles" class="table-cb" onchange="toggleSelectAllDismissedRoles(this.checked)" title="Select all on this page" />
+          </th>
+          <th style="min-width: 220px;">Role Title</th>
+          <th width="150">Source Channel</th>
+          <th style="min-width: 200px;">Dismissal Reason</th>
+          <th width="105" style="text-align: center;">Occurrences</th>
+          <th width="135">Last Added</th>
+          <th width="100" style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyDismissedRoles">
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-dim);">
+            Loading dismissed roles registry...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Table Footer / Pagination Controls -->
+    <div class="table-footer" id="dismissedTableFooter">
+      <div class="pagination-info" id="dismissedRolesPageInfo">
+        Showing 0–0 of 0 roles
+      </div>
+
+      <div class="pagination-controls">
+        <div class="rows-per-page">
+          <span>Rows:</span>
+          <select id="selectDismissedLimit" onchange="changeDismissedRowsPerPage(this.value)">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+
+        <div class="page-buttons" id="dismissedPageButtons">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
     </main>
   </div>
 
@@ -2436,7 +3263,7 @@
     <div class="modal-box modal-md">
       <div class="modal-top">
         <div>
-          <h3 id="cancelModalTitle" style="font-size: 1.05rem; font-weight: 700; color: #f43f5e;">Cancel Application</h3>
+          <h3 id="cancelModalTitle" style="font-size: 1.05rem; font-weight: 700; color: #f43f5e;">Dismiss Post</h3>
           <span id="cancelModalCandidate" style="font-size: 0.78rem; color: var(--text-muted);"></span>
         </div>
         <button class="close-x" onclick="closeCancelReasonModal()">×</button>
@@ -2444,11 +3271,14 @@
 
       <div style="padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
         <p id="cancelModalDesc" style="font-size: 0.82rem; color: var(--text-muted); margin: 0;">
-          Select a ready suggestion below or type a custom comment. This will be saved to your <strong>Others</strong> history.
+          Select a reason below or type a custom comment. This will be saved to your <strong>Others</strong> history.
         </p>
 
         <!-- Quick Pre-made Suggestion Pills -->
         <div class="quick-reasons-grid">
+          <button type="button" class="reason-chip active" data-reason="Irrelevant tech stack" onclick="selectPreMadeReason('Irrelevant tech stack')">
+            Irrelevant tech stack
+          </button>
           <button type="button" class="reason-chip" data-reason="Not enough experience" onclick="selectPreMadeReason('Not enough experience')">
             Not enough experience
           </button>
@@ -2463,9 +3293,6 @@
           </button>
           <button type="button" class="reason-chip" data-reason="Female candidates only" onclick="selectPreMadeReason('Female candidates only')">
             Female candidates only
-          </button>
-          <button type="button" class="reason-chip" data-reason="Irrelevant tech stack" onclick="selectPreMadeReason('Irrelevant tech stack')">
-            Irrelevant tech stack
           </button>
           <button type="button" class="reason-chip" data-reason="Low budget / Unrealistic salary" onclick="selectPreMadeReason('Low budget / Unrealistic salary')">
             Low budget / Unrealistic salary
@@ -2482,14 +3309,26 @@
           <label style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem; display: block;">Reason / Comment</label>
           <input type="text" id="inputCancelReason" class="input-clean" placeholder="Select a chip above or type custom comment..." onkeydown="if (event.key === 'Enter') { event.preventDefault(); confirmCancelWithReason(); }" />
         </div>
+
+        <label style="display: flex; align-items: center; gap: 0.55rem; padding: 0.5rem 0.65rem; background: var(--bg-surface-elevated, rgba(255,255,255,0.03)); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="checkAddToDismissedRoles" style="width: 15px; height: 15px; cursor: pointer; accent-color: #f43f5e;" />
+          <span style="font-size: 0.8rem; font-weight: 500; color: var(--text);">
+            Also register role title in <strong style="color: #f43f5e;">Dismissed Roles</strong> (auto-skip matching roles in future crawls)
+          </span>
+        </label>
       </div>
 
-      <div class="modal-bottom" style="justify-content: flex-end; gap: 0.65rem;">
-        <button class="btn btn-outline btn-sm" onclick="closeCancelReasonModal()">Keep Application</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmCancelWithReason()" id="btnConfirmCancelModal" style="display: inline-flex; align-items: center; gap: 0.35rem;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          <span>Cancel & Discard</span>
-        </button>
+      <div class="modal-bottom" style="justify-content: space-between; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+        <button class="btn btn-outline btn-sm" onclick="closeCancelReasonModal()">Cancel</button>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="confirmCancelWithReason(false)" id="btnDismissPostOnly" title="Dismiss this post/job only without blacklisting the title globally">
+            Dismiss Only
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="confirmCancelWithReason(true)" id="btnDismissAndBlacklist" style="display: inline-flex; align-items: center; gap: 0.35rem;" title="Dismiss and permanently register role in Dismissed Roles registry to skip in future crawls">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+            <span>🚫 Dismiss & Add to Dismissed Roles</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3166,6 +4005,55 @@
     </div>
   </div>
 
+  <!-- Modal: Add Dismissed Role -->
+  <div class="modal-overlay hidden" id="modalAddDismissedRole">
+    <div class="modal-box modal-box-sm">
+      <div class="modal-top">
+        <div class="modal-title-wrap">
+          <div class="modal-icon-disc" style="background: rgba(244, 63, 94, 0.15); color: #f43f5e;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="modal-title">Add Dismissed Role</h3>
+            <p class="modal-subtitle">Automatically exclude and skip this job role during crawls.</p>
+          </div>
+        </div>
+        <button class="btn-modal-close" onclick="closeAddDismissedRoleModal()" title="Close">&times;</button>
+      </div>
+
+      <div class="modal-body-scroller">
+        <div class="form-block">
+          <label for="inputAddDismissedTitle">Role Title <span style="color: #f43f5e;">*</span></label>
+          <input type="text" id="inputAddDismissedTitle" class="input-clean" placeholder="e.g. DevOps Engineer, HR Manager, QA Tester..." />
+        </div>
+
+        <div class="form-block">
+          <label for="selectAddDismissedSource">Source Channel</label>
+          <select id="selectAddDismissedSource" class="select-clean" style="width: 100%;">
+            <option value="LinkedIn Posts" selected>LinkedIn Posts</option>
+            <option value="LinkedIn Easy Apply">LinkedIn Easy Apply</option>
+            <option value="Indeed Apply">Indeed Apply</option>
+            <option value="Infopark">Infopark</option>
+            <option value="Manual">Manual Entry</option>
+          </select>
+        </div>
+
+        <div class="form-block">
+          <label for="inputAddDismissedReason">Dismissal Reason (Optional)</label>
+          <input type="text" id="inputAddDismissedReason" class="input-clean" placeholder="e.g. Irrelevant tech stack, US onsite role, Non-engineering..." />
+        </div>
+      </div>
+
+      <div class="modal-bottom">
+        <button class="btn btn-outline" onclick="closeAddDismissedRoleModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitAddDismissedRole()">Add to Registry</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Non-Native Custom Confirm / Alert Dialog Component -->
   <div class="dialog-overlay hidden" id="customDialogOverlay">
     <div class="dialog-box" id="customDialogBox">
@@ -3200,7 +4088,9 @@
   <script src="/static/js/api.js?v=5.0"></script>
   <script src="/static/js/discovered.js?v=5.0"></script>
   <script src="/static/js/easy_apply.js?v=5.0"></script>
+  <script src="/static/js/indeed_apply.js?v=5.2"></script>
   <script src="/static/js/question_bank.js?v=5.0"></script>
+  <script src="/static/js/dismissed_roles.js?v=5.0"></script>
   <script src="/static/js/review.js?v=5.0"></script>
   <script src="/static/js/history.js?v=5.0"></script>
   <script src="/static/js/crawler.js?v=5.0"></script>
